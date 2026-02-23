@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enterprise Risk Quantifier — UAE & ADX Group</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:#0D1117; --ink2:#141C26; --surf:#1C2A3A; --surf2:#243347;
+  --gold:#C9935A; --gold2:#E8B97A; --teal:#2AB5A8; --teal2:#1A8A80;
+  --red:#E05252; --amber:#E8A030; --green:#2ECC8A; --muted:#7A8898;
+  --white:#F2F4F8; --border:rgba(201,147,90,0.18); --glow:rgba(42,181,168,0.12);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--ink);color:var(--white);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;z-index:0;background:radial-gradient(ellipse 80% 60% at 15% 10%,rgba(42,181,168,0.06) 0%,transparent 60%),radial-gradient(ellipse 60% 40% at 85% 80%,rgba(201,147,90,0.07) 0%,transparent 60%);pointer-events:none;}
+.wrap{position:relative;z-index:1;max-width:980px;margin:0 auto;padding:48px 24px 80px;}
+
+/* HEADER */
+header{text-align:center;margin-bottom:52px;}
+.badge{display:inline-flex;align-items:center;gap:8px;background:rgba(201,147,90,0.1);border:1px solid var(--border);border-radius:40px;padding:7px 18px;margin-bottom:24px;}
+.badge span{font-size:11px;letter-spacing:.12em;color:var(--gold);font-weight:600;text-transform:uppercase;}
+h1{font-family:'Playfair Display',serif;font-size:clamp(30px,6vw,50px);font-weight:900;line-height:1.08;background:linear-gradient(135deg,var(--white) 0%,var(--gold2) 60%,var(--gold) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:14px;}
+.subtitle{color:var(--muted);font-size:15px;font-weight:300;max-width:500px;margin:0 auto;line-height:1.6;}
+
+/* STEPS */
+.steps{display:flex;align-items:center;justify-content:center;margin-bottom:44px;}
+.step{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;font-weight:500;transition:color .3s;}
+.step.active{color:var(--gold2);}.step.done{color:var(--teal);}
+.snum{width:26px;height:26px;border-radius:50%;border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:11px;flex-shrink:0;transition:all .3s;}
+.step.active .snum{background:var(--gold);border-color:var(--gold);color:var(--ink);}
+.step.done .snum{background:var(--teal);border-color:var(--teal);color:var(--ink);}
+.sep{width:44px;height:1px;background:var(--border);margin:0 8px;flex-shrink:0;}
+@media(max-width:500px){.step span:not(.snum){display:none;}.sep{width:20px;}}
+
+/* PANELS */
+.panel{background:rgba(28,42,58,.75);border:1px solid var(--border);border-radius:16px;padding:30px;margin-bottom:20px;backdrop-filter:blur(12px);display:none;}
+.panel.active{display:block;animation:up .4s ease;}
+@keyframes up{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+.ptitle{font-family:'Playfair Display',serif;font-size:21px;font-weight:700;color:var(--white);margin-bottom:6px;}
+.psub{color:var(--muted);font-size:13px;margin-bottom:26px;line-height:1.5;}
+
+/* RISK GRID */
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:11px;}
+.rcard{background:rgba(255,255,255,.03);border:1.5px solid rgba(255,255,255,.07);border-radius:12px;padding:16px;cursor:pointer;transition:all .22s;display:flex;flex-direction:column;gap:8px;}
+.rcard:hover{background:rgba(201,147,90,.06);border-color:rgba(201,147,90,.3);transform:translateY(-2px);}
+.rcard.sel{background:rgba(201,147,90,.12);border-color:var(--gold);}
+.rico{font-size:26px;}.rname{font-size:12px;font-weight:600;color:var(--white);line-height:1.3;}
+.rsub{font-size:11px;color:var(--muted);line-height:1.4;}
+.rtag{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;padding:2px 7px;border-radius:20px;display:inline-block;width:fit-content;}
+.tbis{background:rgba(224,82,82,.15);color:var(--red);}
+.tuae{background:rgba(42,181,168,.15);color:var(--teal);}
+.tglob{background:rgba(201,147,90,.15);color:var(--gold);}
+
+/* FORM */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+@media(max-width:600px){.fgrid{grid-template-columns:1fr;}}
+.field{display:flex;flex-direction:column;gap:5px;}
+.field label{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;}
+.fhint{font-size:11px;color:rgba(122,136,152,.65);line-height:1.4;margin-top:1px;}
+.field input,.field select{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:var(--white);font-family:'DM Sans',sans-serif;font-size:14px;padding:10px 13px;outline:none;transition:border-color .2s;width:100%;}
+.field input:focus,.field select:focus{border-color:var(--gold);background:rgba(201,147,90,.05);}
+.field select option{background:var(--surf2);}
+.srow{display:flex;align-items:center;gap:10px;}
+.srow input[type=range]{flex:1;padding:0;background:transparent;-webkit-appearance:none;border:none;height:20px;}
+.srow input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,var(--teal) var(--p,50%),rgba(255,255,255,.1) var(--p,50%));}
+.srow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--gold);margin-top:-6px;cursor:pointer;border:2px solid var(--ink2);}
+.sval{font-family:'DM Mono',monospace;font-size:12px;color:var(--gold2);min-width:38px;text-align:right;}
+
+/* BUTTONS */
+.brow{display:flex;gap:10px;justify-content:flex-end;margin-top:24px;}
+.btn{padding:11px 26px;border-radius:8px;border:none;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;letter-spacing:.02em;}
+.bghost{background:rgba(255,255,255,.05);color:var(--muted);border:1px solid rgba(255,255,255,.1);}
+.bghost:hover{background:rgba(255,255,255,.09);color:var(--white);}
+.bprim{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);box-shadow:0 4px 18px rgba(201,147,90,.3);}
+.bprim:hover{transform:translateY(-1px);box-shadow:0 6px 26px rgba(201,147,90,.45);}
+.bprim:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+.bteal{background:linear-gradient(135deg,var(--teal2),var(--teal));color:var(--ink);box-shadow:0 4px 18px rgba(42,181,168,.25);}
+.bteal:hover{transform:translateY(-1px);}
+
+/* OUTPUT */
+.out{background:rgba(18,26,36,.95);border:1px solid var(--border);border-radius:18px;overflow:hidden;display:none;}
+.out.active{display:block;animation:up .5s ease;}
+.ohdr{background:linear-gradient(135deg,rgba(201,147,90,.13),rgba(42,181,168,.07));border-bottom:1px solid var(--border);padding:30px;}
+.olbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:6px;}
+.otitle{font-family:'Playfair Display',serif;font-size:19px;color:var(--white);margin-bottom:3px;}
+.oregime{font-size:11px;color:var(--gold);margin-bottom:22px;line-height:1.5;}
+.rng{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+@media(max-width:540px){.rng{grid-template-columns:1fr;}}
+.rb{background:rgba(255,255,255,.04);border-radius:11px;padding:18px;text-align:center;border:1px solid rgba(255,255,255,.06);}
+.rb.mid{background:rgba(201,147,90,.08);border-color:rgba(201,147,90,.25);}
+.rb.hi{background:rgba(224,82,82,.06);border-color:rgba(224,82,82,.2);}
+.rlbl{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;font-weight:600;}
+.ramt{font-family:'DM Mono',monospace;font-size:clamp(16px,3.5vw,24px);font-weight:500;color:var(--white);line-height:1;}
+.rb.mid .ramt{color:var(--gold2);}.rb.hi .ramt{color:var(--red);}
+.rsublbl{font-size:10px;color:var(--muted);margin-top:5px;line-height:1.3;}
+.flags{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px;}
+.flag{font-size:10px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;padding:3px 9px;border-radius:20px;}
+.flag.bis{background:rgba(224,82,82,.15);color:var(--red);border:1px solid rgba(224,82,82,.3);}
+.flag.uae{background:rgba(42,181,168,.15);color:var(--teal);border:1px solid rgba(42,181,168,.3);}
+.flag.adx{background:rgba(201,147,90,.15);color:var(--gold);border:1px solid rgba(201,147,90,.3);}
+.flag.sca{background:rgba(122,136,152,.15);color:var(--muted);border:1px solid rgba(122,136,152,.3);}
+.flag.ofac{background:rgba(224,82,82,.1);color:#E0A0A0;border:1px solid rgba(224,82,82,.2);}
+.flag.pdpl{background:rgba(42,181,168,.1);color:#90D0CC;border:1px solid rgba(42,181,168,.2);}
+.flag.mohre{background:rgba(46,204,138,.1);color:var(--green);border:1px solid rgba(46,204,138,.2);}
+.flag.nist{background:rgba(232,160,48,.1);color:var(--amber);border:1px solid rgba(232,160,48,.2);}
+.flag.wipo{background:rgba(201,147,90,.1);color:var(--gold);border:1px solid rgba(201,147,90,.2);}
+.flag.cbuae{background:rgba(42,181,168,.1);color:var(--teal);border:1px solid rgba(42,181,168,.2);}
+.obody{padding:28px;}
+.bktitle{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:14px;}
+.bkrows{display:flex;flex-direction:column;gap:7px;margin-bottom:24px;}
+.bkrow{display:flex;justify-content:space-between;align-items:flex-start;background:rgba(255,255,255,.025);border-radius:8px;padding:11px 14px;border-left:3px solid transparent;gap:12px;}
+.bkrow.penalty{border-left-color:var(--red);}.bkrow.suspend{border-left-color:var(--amber);}
+.bkrow.remediat{border-left-color:var(--teal);}.bkrow.repute{border-left-color:var(--muted);}
+.bkrow.other{border-left-color:var(--gold);}
+.bkl{flex:1;}.bkln{font-size:13px;color:var(--white);font-weight:500;}
+.bkls{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4;}
+.bkv{font-family:'DM Mono',monospace;font-size:13px;color:var(--gold2);font-weight:500;white-space:nowrap;flex-shrink:0;}
+.div{height:1px;background:var(--border);margin:22px 0;}
+.pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:22px;}
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:20px;padding:5px 11px;font-size:12px;line-height:1;}
+.pill.red{background:rgba(224,82,82,.09);border:1px solid rgba(224,82,82,.2);color:var(--red);}
+.pill.amber{background:rgba(232,160,48,.09);border:1px solid rgba(232,160,48,.2);color:var(--amber);}
+.pill.teal{background:rgba(42,181,168,.09);border:1px solid rgba(42,181,168,.2);color:var(--teal);}
+.actbox{background:rgba(42,181,168,.05);border:1px solid rgba(42,181,168,.15);border-radius:12px;padding:18px;}
+.acttitle{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);font-weight:600;margin-bottom:12px;}
+.actrow{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);}
+.actrow:last-child{border:none;padding-bottom:0;}
+.actn{font-family:'DM Mono',monospace;font-size:10px;color:var(--teal);font-weight:500;min-width:18px;padding-top:2px;}
+.actt{font-size:13px;color:var(--white);line-height:1.5;}
+.resetrow{text-align:center;margin-top:24px;}
+.resetbtn{background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--muted);padding:9px 22px;font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .2s;}
+.resetbtn:hover{border-color:var(--gold);color:var(--gold);}
+.disclaimer{text-align:center;font-size:11px;color:rgba(122,136,152,.55);margin-top:36px;line-height:1.6;max-width:600px;margin-inline:auto;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="badge"><span>🇦🇪</span><span>UAE · ADX Group Risk Intelligence</span></div>
+  <h1>Enterprise Risk Quantifier</h1>
+  <p class="subtitle">Calculate financial exposure across BIS export controls, UAE regulatory obligations, and all enterprise risk domains — in minutes.</p>
+</header>
+
+<div class="steps" id="steps">
+  <div class="step active" id="s1"><span class="snum">1</span><span>Risk Type</span></div>
+  <div class="sep"></div>
+  <div class="step" id="s2"><span class="snum">2</span><span>Details</span></div>
+  <div class="sep"></div>
+  <div class="step" id="s3"><span class="snum">3</span><span>Result</span></div>
+</div>
+
+<!-- STEP 1 -->
+<div class="panel active" id="p1">
+  <div class="ptitle">What risk do you want to quantify?</div>
+  <div class="psub">Select the domain. BIS/export control risks use US federal penalty formulas. UAE risks apply local law. Enterprise risks use international frameworks calibrated to UAE jurisdiction.</div>
+  <div class="rgrid" id="rg"></div>
+  <div class="brow"><button class="btn bprim" id="cont1" onclick="toStep2()" disabled>Continue to Details &rarr;</button></div>
+</div>
+
+<!-- STEP 2 -->
+<div class="panel" id="p2">
+  <div class="ptitle" id="p2title"></div>
+  <div class="psub" id="p2sub"></div>
+  <div class="fgrid" id="ffields"></div>
+  <div class="brow">
+    <button class="btn bghost" onclick="toStep1()">&larr; Back</button>
+    <button class="btn bteal" onclick="calc()">Calculate Exposure &rarr;</button>
+  </div>
+</div>
+
+<!-- OUTPUT -->
+<div class="out" id="out">
+  <div class="ohdr">
+    <div class="olbl">Risk Quantification Result</div>
+    <div class="otitle" id="otitle"></div>
+    <div class="oregime" id="oregime"></div>
+    <div class="rng">
+      <div class="rb"><div class="rlbl">Minimum Exposure</div><div class="ramt" id="rmin"></div><div class="rsublbl">Best case: full cooperation, timely VSD, no prior violations</div></div>
+      <div class="rb mid"><div class="rlbl">Expected Exposure</div><div class="ramt" id="rmid"></div><div class="rsublbl">Central estimate from comparable enforcement cases</div></div>
+      <div class="rb hi"><div class="rlbl">Maximum Exposure</div><div class="ramt" id="rmax"></div><div class="rsublbl">Statutory ceiling — no mitigation, aggravated case</div></div>
+    </div>
+    <div class="flags" id="flags"></div>
+  </div>
+  <div class="obody">
+    <div class="bktitle">How This Exposure Is Built Up</div>
+    <div class="bkrows" id="bkrows"></div>
+    <div class="div"></div>
+    <div class="bktitle">Key Risk Drivers</div>
+    <div class="pills" id="pills"></div>
+    <div class="actbox">
+      <div class="acttitle">&#9889; Priority Actions to Reduce This Exposure</div>
+      <div id="acts"></div>
+    </div>
+    <div class="resetrow"><button class="resetbtn" onclick="reset()">&larr; Quantify Another Risk</button></div>
+  </div>
+</div>
+
+<p class="disclaimer">Indicative ranges for internal risk management only. Not legal or financial advice. Engage UAE-licensed legal counsel and US BIS export control specialists for compliance determinations. Penalty calculations use publicly available statutory formulas and real BIS enforcement benchmarks (Seagate 2023, AMAT 2024, Haas 2024).</p>
+</div>
+
+<script>
+const RISKS = {
+  bis_screen:{label:"Export Control — Screening Failure",regime:"US BIS / EAR 15 CFR §764.3 · UAE Dual-Use Goods Control · OFAC",flags:["BIS","OFAC","UAE"],
+    fields:[
+      {id:"txn",label:"Asset / Transaction Value (AED M)",hint:"Value of compute, goods, or technology accessed by restricted party",type:"money",def:50},
+      {id:"n",label:"Number of Violation Events",hint:"Each separate access or transaction may be a separate violation",type:"num",def:3,min:1,max:500},
+      {id:"agg",label:"Aggravating Circumstances",hint:"Higher = repeated red flags ignored, national security harm, wilful",type:"slide",def:1.3,min:1.0,max:2.0,step:0.1},
+      {id:"vsd",label:"Voluntary Self-Disclosure Filed?",type:"sel",opts:[["yes","Yes — timely and complete VSD filed"],["partial","Partial or late VSD"],["no","No VSD filed"]]},
+      {id:"rev",label:"Monthly Revenue at Risk (AED M)",hint:"Compute revenue lost if BIS suspends export licence",type:"money",def:15},
+      {id:"susp",label:"Suspension Duration (months)",type:"slide",def:6,min:1,max:24,step:1},
+      {id:"legal",label:"Legal & Remediation Budget (AED M)",hint:"US BIS counsel, forensics, compliance overhaul",type:"money",def:15},
+    ],
+    calc(v){
+      const AED=3.67,FLOOR=0.365*AED;
+      const txn=+v.txn,n=+v.n,agg=+v.agg,rev=+v.rev,susp=+v.susp,legal=+v.legal;
+      const vsdM=v.vsd==="yes"?.5:v.vsd==="partial"?.75:1.0;
+      const base=Math.max(FLOOR*n,txn*2);
+      const gross=base*agg;
+      const p_max=gross; const p_exp=gross*vsdM*.22; const p_min=gross*vsdM*.15;
+      const rev_loss=rev*susp;
+      return{min:p_min+legal*.5,mid:p_exp+rev_loss*.4+legal,max:p_max+rev_loss+legal*1.5,
+        bk:[
+          {cls:"penalty",n:"BIS Civil Penalty",s:`Stat. max: ${fmtM(p_max)} | Expected settlement: ${fmtM(p_exp)}`,v:`${fmtM(p_exp)}–${fmtM(p_max)}`},
+          {cls:"suspend",n:"Revenue During Suspension",s:`${susp} months × AED ${rev}M/month`,v:fmtM(rev_loss)},
+          {cls:"remediat",n:"Legal, Forensics & Remediation",s:"US BIS counsel, internal investigation, compliance rebuild",v:fmtM(legal)},
+          {cls:"repute",n:"Reputational & ADX Impact",s:"Market cap impact, government client trust, financing cost uplift",v:"Unquantified"},
+        ],
+        drivers:[
+          {t:`2× transaction value rule: AED ${fmtM(txn*2)} penalty base at this scale`,c:"red"},
+          {t:v.vsd==="no"?"No VSD: forfeits ~50% penalty reduction — non-disclosure now an aggravating factor (BIS Sep 2024)":"VSD filed: preserves ~50% penalty reduction",c:v.vsd==="no"?"red":"teal"},
+          {t:"ADX-listed entities: violation triggers mandatory material disclosure — cascading listed entity impact",c:"amber"},
+        ],
+        acts:["File Voluntary Self-Disclosure immediately if violation discovered — worth ~50% penalty reduction (tens of millions)",
+          "Engage US BIS export control counsel before any response to BIS inquiry or investigation",
+          "Freeze all access for restricted party; document every remediation step taken",
+          "Notify ADX/SCA legal team if any listed entity is touched by the violation",
+          "Commission independent export control audit to demonstrate systematic remediation to BIS"]};
+    }
+  },
+  bis_nist:{label:"Export Control — NIST Control Gap",regime:"US BIS License Condition · NIST 800-53 High Baseline · EAR Deemed Re-export",flags:["BIS","NIST","UAE"],
+    fields:[
+      {id:"compute",label:"GPU Compute Estate Value (AED M)",hint:"Total value of EAR-controlled NVIDIA or equivalent hardware",type:"money",def:500},
+      {id:"ac",label:"Access Control (AC) Completion %",hint:"AC family gaps = direct unauthorised access = deemed re-export",type:"slide",def:45,min:0,max:100,step:5},
+      {id:"ia",label:"Identity & Auth (IA) Completion %",hint:"MFA, identity federation, credential management",type:"slide",def:40,min:0,max:100,step:5},
+      {id:"ir",label:"Incident Response (IR) Capability %",hint:"IR retainer + VSD protocol enables 50% penalty reduction",type:"slide",def:30,min:0,max:100,step:5},
+      {id:"rev",label:"Monthly Compute Revenue (AED M)",type:"money",def:15},
+      {id:"legal",label:"Remediation Investment Available (AED M)",type:"money",def:10},
+    ],
+    calc(v){
+      const AED=3.67;
+      const compute=+v.compute,ac=+v.ac/100,ia=+v.ia/100,ir=+v.ir/100,rev=+v.rev,legal=+v.legal;
+      const gap=(1-ac)*.6+(1-ia)*.25+(1-ir)*.15;
+      const vuln=gap*.9;
+      const hasVSD=ir>=0.5;
+      const p_gross=compute/AED*2*AED*(hasVSD?.5:1.0);
+      const p_exp=p_gross*.22;
+      const susp=rev*6;
+      return{min:p_exp*.3+legal*.5,mid:p_exp+susp*.4+legal,max:p_gross+susp+legal*2,
+        bk:[
+          {cls:"penalty",n:"BIS Civil Penalty (NIST breach pathway)",s:`AC ${Math.round(ac*100)}% / IA ${Math.round(ia*100)}% gap = ${Math.round(vuln*100)}% vulnerability to unauthorized access event`,v:`${fmtM(p_exp)}–${fmtM(p_gross)}`},
+          {cls:"suspend",n:"Revenue During Licence Suspension",s:"6-month suspension risk if ongoing control gap constitutes continuing violation",v:fmtM(susp)},
+          {cls:"remediat",n:"NIST Remediation Cost",s:"AC, IA, IR families first — estimated close-out investment",v:fmtM(legal)},
+          {cls:"other",n:"Annual Expected Loss (FAIR ALE)",s:`Frequency 0.30/yr × ${Math.round(vuln*100)}% vulnerability × compute exposure`,v:`${fmtM(0.30*vuln*compute*.08)}/yr`},
+        ],
+        drivers:[
+          {t:`AC at ${Math.round(ac*100)}%: every gap is a direct re-export pathway under EAR`,c:ac<.6?"red":"amber"},
+          {t:ir<.5?"No IR capability: VSD option lost — forfeits 50% penalty reduction worth tens of millions":"IR capability in place: VSD option preserved — highest-value single control",c:ir<.5?"red":"teal"},
+          {t:"NIST gap = license condition breach, not just a security issue — BIS can revoke licence",c:"amber"},
+        ],
+        acts:[
+          ir<.5?"Establish IR retainer IMMEDIATELY — preserves VSD option worth ~50% of any BIS penalty":"VSD protocol in place — document and test annually; ensure BIS counsel is on speed-dial",
+          "Prioritise AC then IA remediation — these are legal exposure pathways first, security risks second",
+          "Commission external NIST 800-53 High Baseline assessment to document current state",
+          "Deploy MFA and PAM on all GPU compute access — highest ROI control at this exposure scale",
+          "Implement SIEM and access logging — creates audit trail essential for BIS compliance defence"]};
+    }
+  },
+  bis_sub:{label:"Export Control — ADX Subsidiary Governance",regime:"US BIS EAR · ADX Listing Rules · SCA Corporate Governance Code",flags:["BIS","ADX","SCA"],
+    fields:[
+      {id:"txn",label:"Asset / Transaction Value at Risk (AED M)",type:"money",def:200},
+      {id:"ctrl",label:"Group Control Over Subsidiary (%)",hint:"100% = wholly owned. Below 50% = group cannot mandate compliance.",type:"slide",def:38,min:5,max:100,step:5},
+      {id:"n",label:"Estimated Violation Events",type:"num",def:3,min:1,max:100},
+      {id:"listed",label:"Is the Subsidiary ADX-Listed?",type:"sel",opts:[["yes","Yes — listed on ADX"],["no","No — private subsidiary"]]},
+      {id:"mktcap",label:"ADX Entity Market Cap (AED M)",hint:"0 if not listed",type:"money",def:500},
+      {id:"vsd",label:"Group VSD Capability in Place?",type:"sel",opts:[["yes","Yes"],["no","No"]]},
+    ],
+    calc(v){
+      const AED=3.67,FLOOR=0.365*AED;
+      const txn=+v.txn,ctrl=+v.ctrl/100,n=+v.n,mkt=+v.mktcap;
+      const listed=v.listed==="yes",hasVSD=v.vsd==="yes";
+      const base=Math.max(FLOOR*n,txn*2);
+      const p_max=base*1.5; const p_exp=p_max*(hasVSD?.5:1.0)*.22;
+      const residual=p_exp*(1-ctrl);
+      const mkt_impact=listed?mkt*.10:0;
+      return{min:p_exp*.15+(listed?mkt*.04:0),mid:residual+mkt_impact*.5+2,max:p_max+(listed?mkt*.20:0)+txn*.05,
+        bk:[
+          {cls:"penalty",n:"BIS Civil Penalty (group co-liability)",s:"BIS does not distinguish group vs subsidiary — group is jointly exposed",v:`${fmtM(p_exp)}–${fmtM(p_max)}`},
+          {cls:"repute",n:"Governance Residual Risk",s:`${Math.round((1-ctrl)*100)}% of exposure is outside group's direct control at ${Math.round(ctrl*100)}% ownership`,v:fmtM(residual)},
+          listed?{cls:"suspend",n:"ADX Market Cap Impact",s:"Trading halt + re-rating: historically 5–20% market cap drop on material regulatory news",v:fmtM(mkt_impact)}:null,
+          {cls:"remediat",n:"Group Governance Remediation",s:"Board-adopted compliance policies, audit rights, legal implementation",v:"AED 5–15M"},
+        ].filter(Boolean),
+        drivers:[
+          {t:`Group control ${Math.round(ctrl*100)}%: ${Math.round((1-ctrl)*100)}% of risk cannot be directly remediated by group`,c:ctrl<.5?"red":"amber"},
+          listed?{t:"ADX listing: violation triggers mandatory material disclosure obligation — share price impact imminent",c:"red"}:null,
+          {t:"BIS holds the licensed entity and controlling group jointly and severally liable",c:"amber"},
+        ].filter(Boolean),
+        acts:[
+          "Require board-level adoption of group BIS policy at each subsidiary — cannot be imposed top-down at <50% ownership",
+          "Negotiate contractual audit rights in shareholder agreements for BIS compliance verification",
+          listed?"Engage ADX/SCA legal team immediately — material disclosure assessment within 24 hours of any violation":"Update group governance framework: minimum BIS compliance standards in all entity constitutions",
+          "Deploy shared automated screening platform across all group entities — eliminates screening inconsistency",
+          hasVSD?"Ensure VSD protocol covers subsidiary-level violations with clear group escalation path":"Establish VSD protocol at group AND subsidiary level — the 72-hour clock starts from when anyone in the group learns of the issue"]};
+    }
+  },
+  bis_flow:{label:"Export Control — End User / Flow-Down",regime:"US BIS EAR · End-User Certificates · License Flow-Down Conditions",flags:["BIS","OFAC"],
+    fields:[
+      {id:"txn",label:"Technology / Compute Value Accessed (AED M)",type:"money",def:100},
+      {id:"n",label:"Violation Events",type:"num",def:5,min:1,max:1000},
+      {id:"knew",label:"Knowledge Level",hint:"Did you know or have reason to know the end user was violating obligations?",type:"sel",opts:[["no","No — no indication existed"],["reason","Reason to know existed (red flags ignored)"],["yes","Yes — knowingly allowed"]]},
+      {id:"vsd",label:"VSD Filed?",type:"sel",opts:[["yes","Yes"],["no","No"]]},
+      {id:"rev",label:"Monthly Revenue at Risk (AED M)",type:"money",def:15},
+    ],
+    calc(v){
+      const AED=3.67,FLOOR=0.365*AED;
+      const txn=+v.txn,n=+v.n,rev=+v.rev;
+      const agg=v.knew==="yes"?2.0:v.knew==="reason"?1.5:1.1;
+      const vsdM=v.vsd==="yes"?.5:1.0;
+      const base=Math.max(FLOOR*n,txn*2);
+      const gross=base*agg; const p_exp=gross*vsdM*.22;
+      return{min:gross*vsdM*.15+3,mid:p_exp+rev*4+5,max:gross+rev*9+10,
+        bk:[
+          {cls:"penalty",n:"BIS Civil Penalty",s:`Aggravation ${agg}× (knowledge: ${v.knew}) | VSD multiplier: ${vsdM}×`,v:`${fmtM(p_exp)}–${fmtM(gross)}`},
+          {cls:"suspend",n:"Revenue at Risk",s:"Licence suspension: 4–9 months of compute revenue",v:`${fmtM(rev*4)}–${fmtM(rev*9)}`},
+          {cls:"remediat",n:"Investigation & Legal",s:"End-user audit, BIS counsel, supply chain review",v:"AED 8–20M"},
+        ],
+        drivers:[
+          {t:v.knew==="yes"?"Wilful conduct: 2.0× aggravation — near-maximum BIS exposure":"Knowledge level determines aggravation factor — red flags increase exposure significantly",c:v.knew==="yes"?"red":"amber"},
+          {t:"You are liable for end-user violations even if the end user contractually agreed not to violate",c:"amber"},
+          {t:v.vsd==="no"?"No VSD: 2024 BIS Final Rule makes non-disclosure an explicit aggravating factor":"VSD filed: ~50% reduction preserved",c:v.vsd==="no"?"red":"teal"},
+        ],
+        acts:["Audit all active end-user certificates and re-confirm compliance status immediately",
+          "Implement automated re-screening of all customers at every renewal and material corporate event",
+          v.vsd==="no"?"Evaluate VSD filing NOW — BIS 2024 rule makes non-disclosure an aggravating factor; engage counsel within 72 hours":"Ensure VSD covers all known events and is comprehensive — partial VSDs attract partial reductions only",
+          "Strengthen flow-down contractual provisions: audit rights, compliance certificates, termination triggers",
+          "Commission external supply chain BIS compliance audit — key evidence of remediation good faith"]};
+    }
+  },
+  esg_env:{label:"ESG — Environmental Breach",regime:"UAE Net Zero 2050 · Federal Law 24/1999 · Dubai/Abu Dhabi Green Economy Rules · SCA ESG",flags:["UAE","ADX"],
+    fields:[
+      {id:"rev",label:"Annual Revenue (AED M)",type:"money",def:500},
+      {id:"breach",label:"Breach Type",type:"sel",opts:[["reporting","Reporting / disclosure failure"],["limit","Emission limit exceeded"],["incident","Major environmental incident"]]},
+      {id:"sector",label:"Sector",type:"sel",opts:[["energy","Energy / Oil & Gas"],["tech","Technology / Data Centres"],["construction","Construction & Real Estate"],["finance","Financial Services"],["other","Other"]]},
+      {id:"listed",label:"ADX-Listed?",type:"sel",opts:[["yes","Yes"],["no","No"]]},
+    ],
+    calc(v){
+      const rev=+v.rev,listed=v.listed==="yes";
+      const fines={"reporting":[0.5,5],"limit":[2,20],"incident":[10,100]};
+      const [flo,fhi]=fines[v.breach];
+      const fmid=(flo+fhi)/2;
+      const carbon=rev*.005;
+      const reput=listed?rev*.03:rev*.01;
+      const rem=flo*.4+2;
+      return{min:flo+rem,mid:fmid+carbon+rem,max:fhi+reput+carbon*3+rem*2,
+        bk:[
+          {cls:"penalty",n:"UAE Regulatory Fine",s:"Federal Law 24/1999 + Sector Authority (ADNOC / Modon / DM / EAD)",v:`AED ${flo}M–${fhi}M`},
+          {cls:"other",n:"Carbon Credit / Offset Liability",s:"Mandatory offset at UAE voluntary carbon market rates",v:fmtM(carbon)},
+          {cls:"repute",n:"ESG Rating & Financing Impact",s:`ESG downgrade → financing cost increase${listed?" + ADX mandatory disclosure":""}`,v:fmtM(reput)},
+          {cls:"remediat",n:"Remediation & Compliance",s:"Environmental consultant, technology upgrades, reporting systems",v:fmtM(rem)},
+        ],
+        drivers:[
+          {t:"UAE Net Zero 2050: regulatory intensity increasing every year — enforcement will tighten",c:"amber"},
+          listed?{t:"ADX: environmental breaches are ESG-disclosable events — investor and analyst scrutiny immediate",c:"red"}:null,
+          {t:v.sector==="energy"?"Energy sector: highest regulatory scrutiny from ADNOC and federal authorities":"Data centres: UAE targeting energy efficiency — incoming carbon reporting requirements",c:"amber"},
+        ].filter(Boolean),
+        acts:["Commission full Scope 1+2+3 carbon inventory audit immediately",
+          listed?"File ESG update with ADX — material environmental events are disclosable under SCA rules":"Align reporting with UAE National Climate Change Plan 2017–2050",
+          "Engage UAE Ministry of Climate Change proactively — voluntary early engagement reduces penalty risk significantly",
+          "Establish Science-Based Targets (SBTs) aligned with UAE Net Zero 2050 — demonstrates credible roadmap to regulators",
+          "Implement ISO 50001 energy management system — creates audit trail and evidence of systematic improvement"]};
+    }
+  },
+  esg_gov:{label:"ESG — Corporate Governance Failure",regime:"SCA Corporate Governance Code · ADX Listing Rules · UAE Companies Law No. 32/2021",flags:["ADX","SCA","UAE"],
+    fields:[
+      {id:"breach",label:"Governance Issue",type:"sel",opts:[["board","Board composition / independence failure"],["disclosure","Material non-disclosure"],["related","Related party transaction without approval"],["audit","Audit committee / internal controls failure"]]},
+      {id:"mktcap",label:"Market Capitalisation (AED M)",type:"money",def:1000},
+      {id:"rev",label:"Annual Revenue (AED M)",type:"money",def:500},
+      {id:"sev",label:"Severity",hint:"1.0 = minor procedural; 3.0 = deliberate, repeated, material",type:"slide",def:1.3,min:1.0,max:3.0,step:0.1},
+    ],
+    calc(v){
+      const mkt=+v.mktcap,rev=+v.rev,sev=+v.sev;
+      const bases={"board":0.5,"disclosure":2,"related":5,"audit":1};
+      const fine=bases[v.breach]*sev;
+      const mkt_drop=mkt*.08*Math.min(sev*.5,1);
+      const rem=fine*.3+1;
+      return{min:fine*.5+rem,mid:fine+mkt_drop*.4+rem,max:fine*2+mkt_drop+rem*2,
+        bk:[
+          {cls:"penalty",n:"SCA / ADX Regulatory Fine",s:"Securities and Commodities Authority administrative penalty",v:fmtM(fine)},
+          {cls:"suspend",n:"Market Cap Impact",s:`Trading halt + investor exit + re-rating: ~${Math.round(mkt_drop/mkt*100)}% market cap at risk`,v:fmtM(mkt_drop)},
+          {cls:"remediat",n:"Governance Remediation",s:"Board restructuring, external governance review, legal fees",v:fmtM(rem)},
+          {cls:"repute",n:"Financing Cost Increase",s:"Credit rating impact, bond covenants, refinancing risk",v:"Unquantified"},
+        ],
+        drivers:[
+          {t:"SCA enforcement has intensified since 2022 — zero tolerance posture on disclosure violations",c:"amber"},
+          {t:"ADX listing = public shareholders can pursue civil remedies in addition to SCA administrative fines",c:"red"},
+          v.breach==="related"?{t:"Related party transactions: directors face personal liability under Companies Law Art. 84",c:"red"}:null,
+        ].filter(Boolean),
+        acts:["Engage SCA-registered legal counsel immediately for compliance gap assessment",
+          "File required disclosures with ADX as a matter of urgency — every day of delay multiplies the penalty",
+          "Commission independent governance review by accredited UAE governance expert",
+          "Formally brief Board and Audit Committee — board minutes must document the issue and management response",
+          "Update Related Party Transaction policy to ensure full SCA pre-approval compliance"]};
+    }
+  },
+  fin_fraud:{label:"Financial — Fraud & Misstatement",regime:"UAE Penal Code · CBUAE · SCA · External Auditor Obligations · ADX",flags:["UAE","SCA","CBUAE"],
+    fields:[
+      {id:"amt",label:"Amount Involved (AED M)",hint:"Value of funds, misstatement, or loss",type:"money",def:50},
+      {id:"type",label:"Type of Issue",type:"sel",opts:[["fraud","Internal fraud / embezzlement"],["reporting","Financial misstatement / reporting error"],["bribery","Bribery or corruption"],["misc","Asset misappropriation"]]},
+      {id:"disc",label:"How Was It Discovered?",type:"sel",opts:[["internal","Self-discovered internally"],["audit","External auditor"],["regulator","Regulator or third party"]]},
+      {id:"listed",label:"ADX-Listed?",type:"sel",opts:[["yes","Yes"],["no","No"]]},
+      {id:"rev",label:"Annual Revenue (AED M)",type:"money",def:300},
+    ],
+    calc(v){
+      const amt=+v.amt,rev=+v.rev,listed=v.listed==="yes";
+      const mult={"fraud":1.5,"reporting":2,"bribery":3,"misc":1.5}[v.type];
+      const discM={"internal":.6,"audit":1.0,"regulator":1.8}[v.disc];
+      const fine=amt*mult*.15*discM;
+      const rec=amt*.25; const legal=fine*.3+2;
+      const adx=listed?rev*.05:0;
+      return{min:fine*.5+rec*.3+legal,mid:fine+rec+legal+adx*.5,max:fine*2+amt+legal*2+adx,
+        bk:[
+          {cls:"penalty",n:"Regulatory Fine / Criminal Penalty",s:`UAE Penal Code + CBUAE/SCA; ${v.type}; discovered by: ${v.disc}`,v:fmtM(fine)},
+          {cls:"other",n:"Recovery & Restitution",s:"Asset recovery, forensic accounting, civil litigation cost",v:fmtM(rec)},
+          {cls:"remediat",n:"Legal & Investigation",s:"UAE counsel, forensic accountants, audit review",v:fmtM(legal)},
+          listed?{cls:"suspend",n:"ADX Market Impact",s:"Trading halt, shareholder litigation, investor relations",v:fmtM(adx)}:null,
+        ].filter(Boolean),
+        drivers:[
+          {t:v.disc==="internal"?"Self-reported: strong mitigation — UAE courts significantly reduce penalties for voluntary disclosure":"Third-party discovery: no self-reporting benefit; regulator leads investigation",c:v.disc==="internal"?"teal":"red"},
+          v.type==="bribery"?{t:"Bribery: UAE Federal Anti-Corruption Law — criminal prosecution and asset seizure risk",c:"red"}:null,
+          listed?{t:"ADX: financial misstatements are immediately disclosable — late disclosure compounds the penalty",c:"red"}:null,
+        ].filter(Boolean),
+        acts:[
+          v.disc==="internal"?"Self-reporting to UAE regulators significantly reduces penalties — engage counsel on voluntary disclosure strategy immediately":"Engage UAE criminal defence counsel alongside regulatory counsel without delay",
+          "Commission independent forensic accounting review — fully scope and document the loss",
+          "Notify external auditors immediately and assess impact on audit opinion",
+          listed?"File material information disclosure with ADX — financial misstatement is a disclosable event":"Implement enhanced internal controls immediately to prevent recurrence",
+          "Review D&O insurance coverage — activate policy and notify insurer immediately"]};
+    }
+  },
+  fin_aml:{label:"Financial — AML / Sanctions",regime:"UAE AML Law No. 20/2018 · CBUAE CN 5/2021 · OFAC Sanctions · FATF UAE MER",flags:["UAE","CBUAE","OFAC"],
+    fields:[
+      {id:"txn",label:"Transaction Value (AED M)",hint:"Total value of transactions with AML / sanctions exposure",type:"money",def:100},
+      {id:"n",label:"Number of Transactions",type:"num",def:10,min:1,max:10000},
+      {id:"breach",label:"Breach Type",type:"sel",opts:[["screen","Sanctions screening failure"],["str","Failure to file Suspicious Transaction Report (STR)"],["kyc","KYC / CDD deficiency"],["layer","Layering / structuring"]]},
+      {id:"sector",label:"Your Sector",type:"sel",opts:[["bank","Banking / Financial Institution"],["dnfbp","DNFBP (Real estate, lawyers, accountants)"],["corp","Corporate / Non-financial"]]},
+      {id:"usnexus",label:"US Dollar / US Bank Nexus?",hint:"Transactions USD-denominated or cleared through US banks?",type:"sel",opts:[["yes","Yes — US nexus exists"],["no","No US nexus"]]},
+    ],
+    calc(v){
+      const txn=+v.txn,n=+v.n,AED=3.67,usnex=v.usnexus==="yes";
+      const pcts={"screen":0.05,"str":0.10,"kyc":0.08,"layer":0.20};
+      const omults={"screen":2.0,"str":1.5,"kyc":1.2,"layer":2.5};
+      const uae_fine=txn*pcts[v.breach]*Math.min(n,50);
+      const cbuae_max=v.sector==="bank"?Math.min(uae_fine*3,50):Math.min(uae_fine*2,20);
+      const ofac=usnex?txn/AED*omults[v.breach]*2*AED*.22:0;
+      const rem=uae_fine*.2+3;
+      return{min:Math.min(uae_fine*.3,2)+rem,mid:uae_fine+ofac*.5+rem,max:cbuae_max+ofac+rem*2,
+        bk:[
+          {cls:"penalty",n:"UAE AML Regulatory Fine",s:`CBUAE / Supervisory Authority — ${v.breach} breach`,v:`${fmtM(uae_fine)}–${fmtM(cbuae_max)}`},
+          usnex?{cls:"other",n:"OFAC Civil Penalty (US nexus)",s:"USD nexus = US jurisdiction; 2× transaction value rule applies",v:fmtM(ofac)}:null,
+          {cls:"remediat",n:"Remediation: AML Systems & Controls",s:"TM upgrade, KYC refresh, STR backlog review, staff training",v:fmtM(rem)},
+          {cls:"repute",n:"Banking Access & Counterparty Risk",s:"Correspondent banking restrictions, counterparty de-risking",v:"Significant"},
+        ].filter(Boolean),
+        drivers:[
+          {t:"FATF UAE MER 2020 identified AML gaps — heightened supervisory scrutiny across all UAE sectors",c:"amber"},
+          usnex?{t:"US dollar nexus = OFAC jurisdiction on top of UAE — two penalty regimes running simultaneously",c:"red"}:null,
+          {t:`Sector ${v.sector==="bank"?"banking":"DNFBP"}: ${v.sector==="bank"?"highest CBUAE supervisory intensity":"significant and increasing scrutiny post-FATF review"}`,c:"amber"},
+        ].filter(Boolean),
+        acts:["Conduct immediate internal AML audit — document all affected transactions before any regulator engagement",
+          "File outstanding Suspicious Transaction Reports proactively — STR filing is a strong mitigating factor",
+          "Engage UAE AML-specialist counsel and formally notify Chief Compliance Officer",
+          usnex?"Assess OFAC exposure separately — engage US sanctions counsel if any USD transactions identified":"Review all correspondent banking relationships for AML compliance risk",
+          "Implement or upgrade automated transaction monitoring and real-time sanctions screening"]};
+    }
+  },
+  procurement:{label:"Procurement — Supply Chain Risk",regime:"UAE Commercial Transactions Law · Abu Dhabi Procurement Policy · ADGM / DIFC Regulations",flags:["UAE"],
+    fields:[
+      {id:"cv",label:"Contract / Procurement Value (AED M)",type:"money",def:100},
+      {id:"breach",label:"Risk Type",type:"sel",opts:[["fail","Supplier failure / default"],["counterfeit","Counterfeit or substandard goods"],["benfown","Beneficial ownership / conflict of interest"],["overrun","Cost overrun / scope breach"]]},
+      {id:"crit",label:"Supply Chain Criticality",hint:"1.0 = substitutable. 3.0 = single-source, critical path",type:"slide",def:1.5,min:1.0,max:3.0,step:0.1},
+      {id:"govt",label:"Government / Sovereign Client?",type:"sel",opts:[["yes","Yes — government or sovereign entity"],["no","No — commercial only"]]},
+    ],
+    calc(v){
+      const cv=+v.cv,crit=+v.crit,govt=v.govt==="yes";
+      const loss_pcts={"fail":.20,"counterfeit":.35,"benfown":.10,"overrun":.25};
+      const fine_pcts={"fail":.05,"counterfeit":.15,"benfown":.25,"overrun":.08};
+      const dl=cv*loss_pcts[v.breach]*crit;
+      const fine=cv*fine_pcts[v.breach]*(govt?1.5:1.0);
+      const legal=fine*.2+2; const reput=govt?cv*.05:cv*.02;
+      return{min:fine*.4+legal+dl*.3,mid:fine+legal+dl*.6+reput*.5,max:fine*2+legal*2+dl+reput,
+        bk:[
+          {cls:"other",n:"Direct Contract Loss",s:`${v.breach} impact × criticality ${crit}×`,v:fmtM(dl)},
+          {cls:"penalty",n:"Regulatory / Contractual Fine",s:govt?"Government procurement penalty + blacklisting risk":"Liquidated damages + contractual penalties",v:fmtM(fine)},
+          {cls:"remediat",n:"Legal & Recovery Cost",s:"Dispute resolution, replacement supplier, legal fees",v:fmtM(legal)},
+          {cls:"repute",n:"Relationship Impact",s:govt?"Abu Dhabi government blacklisting = disqualification from future contracts":"Counterparty trust and future pipeline impact",v:fmtM(reput)},
+        ],
+        drivers:[
+          govt?{t:"Government client: Abu Dhabi procurement blacklisting = disqualification from all public tenders",c:"red"}:null,
+          {t:`Criticality ${crit}×: ${crit>=2?"critical path — delays cascade to other contracts and clients":"moderate operational impact"}`,c:crit>=2?"red":"amber"},
+          v.breach==="benfown"?{t:"Beneficial ownership conflict: personal director liability under UAE Commercial Companies Law",c:"red"}:null,
+        ].filter(Boolean),
+        acts:[
+          "Conduct immediate supply chain due diligence audit — document current supplier compliance status",
+          govt?"Proactively engage government procurement office — transparency reduces blacklisting risk significantly":"Invoke contractual protection mechanisms: performance bonds, step-in rights, guarantees",
+          v.breach==="benfown"?"Disclose conflict of interest to board audit committee immediately — delay makes it worse":"Identify and pre-qualify alternative suppliers as contingency",
+          "Review procurement insurance and performance bond coverage — activate if applicable",
+          "Implement enhanced supplier onboarding and continuous monitoring for all future contracts"]};
+    }
+  },
+  hr:{label:"HR — Labour & Emiratisation",regime:"UAE Labour Law No. 33/2021 · Emiratisation (Nitaqat) · MOHRE · Wages Protection System",flags:["UAE","MOHRE"],
+    fields:[
+      {id:"emp",label:"Total Employees in UAE",type:"num",def:500,min:1,max:100000},
+      {id:"emiratis",label:"Current UAE National Employees",type:"num",def:15,min:0,max:10000},
+      {id:"target",label:"Your Emiratisation Target (%)",hint:"MOHRE mandated target based on sector and headcount",type:"slide",def:10,min:1,max:30,step:1},
+      {id:"breach",label:"Primary HR Issue",type:"sel",opts:[["emir","Emiratisation quota shortfall"],["wps","WPS / wage payment violation"],["term","Wrongful termination claim"],["safety","Workplace safety breach"]]},
+      {id:"sal",label:"Average Monthly Salary (AED)",type:"num",def:15000,min:1000,max:500000},
+    ],
+    calc(v){
+      const emp=+v.emp,emirs=+v.emiratis,target=+v.target/100,sal=+v.sal;
+      const target_n=Math.ceil(emp*target),gap=Math.max(0,target_n-emirs);
+      let fine,rem;
+      if(v.breach==="emir"){fine=gap*6000*12/1e6;rem=0.5;}
+      else if(v.breach==="wps"){fine=emp*.02*sal*3/1e6;rem=1;}
+      else if(v.breach==="term"){fine=sal*24*Math.min(emp*.01,50)/1e6;rem=2;}
+      else{fine=5;rem=3;}
+      const reput=emp>200?2:.5;
+      return{min:fine*.4+rem,mid:fine+rem+reput,max:fine*2+rem*2+reput*2,
+        bk:[
+          {cls:"penalty",n:v.breach==="emir"?"MOHRE Emiratisation Fine":"UAE Labour Law Fine",s:v.breach==="emir"?`Gap: ${gap} UAE nationals short of ${Math.round(target*100)}% target; AED 6,000/head/month`:"UAE Labour Law No. 33/2021 penalty",v:fmtM(fine)},
+          {cls:"remediat",n:"Legal & MOHRE Proceedings",s:"MOHRE hearings, employment tribunal, legal representation",v:fmtM(rem)},
+          {cls:"repute",n:"Workforce & Reputational Impact",s:"Nitaqat status → government contract eligibility; Emirati recruitment difficulty",v:fmtM(reput)},
+        ],
+        drivers:[
+          v.breach==="emir"?{t:gap>0?`${gap} Emirati employees short — AED ${fmtM(gap*6000*12/1e6)} annual penalty if not remediated`:"On track for Emiratisation target — maintain monitoring",c:gap>0?"red":"teal"}:null,
+          {t:"MOHRE enforcement intensifying — Labour Ban risk for persistent violators affects all UAE operations",c:"amber"},
+          {t:"Green/Platinum Nitaqat status required for ADNOC and most government contracts",c:"amber"},
+        ].filter(Boolean),
+        acts:[
+          v.breach==="emir"?`Develop Emiratisation action plan to close ${gap}-person gap — MOHRE accepts credible written roadmaps as mitigation`:"File MOHRE response within prescribed deadline with full supporting documentation",
+          "Engage Tanmia (National Human Capital Development) for subsidised UAE national recruitment pipeline",
+          "Audit WPS compliance immediately — ensure all salaries paid through WPS on time every cycle",
+          "Brief HR Director and CEO — approve Emiratisation remediation budget before next MOHRE inspection",
+          "Commission full UAE HR compliance audit across all legal entities"]};
+    }
+  },
+  cyber:{label:"Cybersecurity — Data Breach",regime:"UAE PDPL No. 45/2021 · ADGM Data Protection Regs · UAE NESA · ADDA",flags:["UAE","PDPL"],
+    fields:[
+      {id:"recs",label:"Personal Data Records Affected",type:"num",def:10000,min:1,max:100000000},
+      {id:"sens",label:"Data Sensitivity",type:"sel",opts:[["basic","Basic personal data (name, contact, ID)"],["fin","Financial / payment data"],["health","Health or medical records"],["special","Special category (biometrics, political, religious)"]]},
+      {id:"notif",label:"Regulatory Notification Filed?",hint:"UAE PDPL: 72-hour notification requirement to UAE Data Office",type:"sel",opts:[["yes","Yes — notified within 72 hours"],["late","Notified but after 72 hours"],["no","Not notified yet"]]},
+      {id:"rev",label:"Annual Revenue (AED M)",type:"money",def:300},
+    ],
+    calc(v){
+      const recs=+v.recs,rev=+v.rev;
+      const maxes={"basic":5,"fin":10,"health":15,"special":20};
+      const fmax=maxes[v.sens];
+      const notifM={"yes":.4,"late":.7,"no":1.0}[v.notif];
+      const fine=Math.min(fmax*notifM,rev*.04);
+      const notif_cost=recs*0.00005;
+      const legal=fine*.2+2; const reput=rev*.02;
+      return{min:fine*.3+notif_cost+legal*.5,mid:fine+notif_cost+legal+reput*.5,max:fmax+notif_cost*2+legal*2+reput,
+        bk:[
+          {cls:"penalty",n:"UAE PDPL Fine",s:`Max AED ${fmax}M; notification timing factor ${Math.round(notifM*100)}%`,v:fmtM(fine)},
+          {cls:"other",n:"Breach Notification & Individual Remediation",s:`${recs.toLocaleString()} records × notification, credit monitoring, PR`,v:fmtM(notif_cost)},
+          {cls:"remediat",n:"Legal, Forensics & IT Recovery",s:"UAE data protection counsel, digital forensics, system hardening",v:fmtM(legal)},
+          {cls:"repute",n:"Customer & Reputational Impact",s:"Churn risk, civil claims, media coverage, regulator relationship",v:fmtM(reput)},
+        ],
+        drivers:[
+          {t:v.notif==="no"?"No 72-hour notification filed — UAE PDPL treats this as a separate offence; maximum fine risk":""+v.notif==="yes"?"Timely notification filed — significant penalty mitigation secured":"Late notification filed — mitigated but not eliminated",c:v.notif==="no"?"red":v.notif==="yes"?"teal":"amber"},
+          {t:`${v.sens} data: ${v.sens==="special"?"maximum fine category (AED 20M)":"standard fine category"} under UAE PDPL`,c:v.sens==="special"?"red":"amber"},
+          {t:"UAE PDPL aligns with GDPR — cross-border data subject rights and regulatory cooperation applies",c:"amber"},
+        ],
+        acts:[
+          v.notif==="no"?"File breach notification with UAE Data Office IMMEDIATELY — 72-hour clock is running; every hour increases exposure":"Notification filed — ensure it is complete and accurate; supplement if new information emerges",
+          "Engage UAE data protection counsel within 24 hours of discovery",
+          "Notify affected individuals — UAE PDPL requires individual notification for high-risk breaches",
+          "Commission forensic investigation to determine root cause, scope, containment status, and further risk",
+          "Review cybersecurity framework against UAE NESA standards and ISO 27001 — implement remediation roadmap"]};
+    }
+  },
+  contract:{label:"Legal — Contract Breach",regime:"UAE Civil Transactions Law (No. 5/1985) · ADGM / DIFC Contract Law · ICC / DIAC Arbitration",flags:["UAE"],
+    fields:[
+      {id:"cv",label:"Contract Value (AED M)",type:"money",def:200},
+      {id:"ld",label:"Liquidated Damages Clause (%)",hint:"% of contract value — what your contract says you owe on breach",type:"slide",def:10,min:0,max:50,step:1},
+      {id:"loss",label:"Counterparty's Documented Loss (AED M)",hint:"Costs they can evidence flowing from your breach",type:"money",def:30},
+      {id:"forum",label:"Dispute Forum",type:"sel",opts:[["uae","UAE Federal / Abu Dhabi Courts"],["adgm","ADGM Courts"],["difc","DIFC Courts"],["arb","ICC / DIAC Arbitration"]]},
+      {id:"govt",label:"Government Counterparty?",type:"sel",opts:[["yes","Yes — government or sovereign"],["no","No — commercial"]]},
+    ],
+    calc(v){
+      const cv=+v.cv,ld=cv*(+v.ld)/100,loss=+v.loss,govt=v.govt==="yes";
+      const mult=v.forum==="adgm"||v.forum==="difc"?1.1:1.0;
+      const damages=Math.max(ld,loss)*mult;
+      const legal=damages*.15+3; const reput=govt?cv*.05:cv*.02;
+      return{min:Math.min(ld,loss)*.5+legal,mid:damages+legal+reput*.5,max:damages*1.5+legal+reput+(govt?cv*.1:0),
+        bk:[
+          {cls:"penalty",n:"Damages / Liquidated Damages",s:`LD clause: ${fmtM(ld)} | Actual loss claimed: ${fmtM(loss)} | Forum: ${v.forum}`,v:fmtM(damages)},
+          {cls:"remediat",n:"Legal & Arbitration / Court Cost",s:`${v.forum} proceedings, expert witnesses, enforcement`,v:fmtM(legal)},
+          {cls:"repute",n:"Relationship & Future Business",s:govt?"Government blacklisting risk — Abu Dhabi procurement debarment":"Counterparty relationship breakdown, pipeline impact",v:fmtM(reput)},
+          govt?{cls:"suspend",n:"Government Debarment Risk",s:"Debarment from UAE public procurement for 1–5 years at discretion of authority",v:"Unquantified"}:null,
+        ].filter(Boolean),
+        drivers:[
+          {t:`Forum: ${v.forum==="adgm"||v.forum==="difc"?"ADGM/DIFC — English law, efficient and predictable enforcement":"UAE courts — may reduce excessive penalty clauses under Civil Code Art. 390 (beneficial for defendant)"}`,c:"amber"},
+          govt?{t:"Government counterparty: settlement usually preferred — debarment threat incentivises early resolution",c:"amber"}:null,
+          {t:"UAE courts actively encourage mediation — mandatory pre-litigation step in Abu Dhabi (ADCA)",c:"teal"},
+        ].filter(Boolean),
+        acts:["Obtain UAE contract dispute counsel immediately — limitation periods run from date of breach, not discovery",
+          "Attempt amicable settlement / mediation first — UAE courts reward pre-litigation resolution attempts",
+          govt?"Engage government relations and senior management for executive-level settlement conversation":"Send formal cure notice if contract allows — preserves your defences and demonstrates good faith",
+          "Issue litigation hold — preserve all documents, communications, and project records from the contract period",
+          "Review professional indemnity and contract frustration insurance — notify insurer and assess cover"]};
+    }
+  },
+  ip:{label:"IP — Technology Transfer Risk",regime:"US BIS EAR (dual-use) · UAE IP Law No. 37/2021 · WIPO · Criminal IP Theft",flags:["BIS","UAE","WIPO"],
+    fields:[
+      {id:"ipv",label:"IP / Technology Asset Value (AED M)",type:"money",def:100},
+      {id:"type",label:"Risk Type",type:"sel",opts:[["transfer","Unauthorised technology transfer abroad"],["theft","IP theft / misappropriation"],["dualuse","Dual-use transfer without BIS licence"],["infringe","IP infringement (using others' IP)"]]},
+      {id:"dest",label:"Destination or Country Involved",type:"sel",opts:[["china","China (PRC)"],["russia","Russia"],["iran","Iran"],["gcc","GCC / Middle East"],["other","Other"]]},
+      {id:"rev",label:"Annual Revenue from this IP (AED M)",type:"money",def:50},
+    ],
+    calc(v){
+      const ipv=+v.ipv,rev=+v.rev,AED=3.67;
+      const highRisk=["china","russia","iran"].includes(v.dest);
+      const bisApp=v.type==="dualuse"||v.type==="transfer";
+      let uae=ipv*.15*(highRisk?2:1)*(v.dest==="iran"?1.5:1);
+      if(v.type==="infringe")uae=ipv*.05;
+      const bis=bisApp?ipv/AED*2*AED*.22*(highRisk?1.5:1):0;
+      const legal=(uae+bis)*.2+5; const rev_loss=rev*2;
+      return{min:uae*.3+legal,mid:uae+bis*.5+legal+rev_loss*.3,max:uae*2+bis+legal*2+rev_loss,
+        bk:[
+          bisApp?{cls:"penalty",n:"BIS Export Control Penalty",s:`Dual-use transfer; ${v.dest} destination; 2× asset value rule`,v:fmtM(bis)}:null,
+          {cls:"other",n:"UAE IP / Criminal Penalty",s:`UAE IP Law No. 37/2021${highRisk?" — criminal referral likely":" — civil and administrative"}`,v:fmtM(uae)},
+          {cls:"suspend",n:"Lost Revenue from IP Compromise",s:"Licensing revenue at risk; competitive advantage permanently impaired",v:fmtM(rev_loss)},
+          {cls:"remediat",n:"Legal & Enforcement Cost",s:"UAE + US counsel, IP litigation, trade secret recovery",v:fmtM(legal)},
+        ].filter(Boolean),
+        drivers:[
+          bisApp&&highRisk?{t:`BIS dual-use to ${v.dest}: highest enforcement priority — criminal referral risk for individuals`,c:"red"}:null,
+          bisApp?{t:"Technology transfer without BIS licence violates EAR regardless of where the technology originated",c:"red"}:null,
+          {t:"UAE Criminal IP law: imprisonment possible for deliberate misappropriation or trade secret theft",c:"amber"},
+        ].filter(Boolean),
+        acts:[
+          bisApp?"Engage US BIS export control counsel IMMEDIATELY — dual-use transfer to restricted country carries criminal exposure":"Engage UAE IP counsel immediately to assess civil and criminal liability",
+          bisApp&&highRisk?"Preserve all records — do not destroy anything; criminal investigation likely to follow":"File IP registrations in all relevant jurisdictions to strengthen enforcement position",
+          bisApp?"Evaluate VSD to BIS — 50% penalty reduction for timely, complete self-disclosure":"Document all licensing arrangements to demonstrate authorised use of third-party IP",
+          "Review and update IP classification programme — identify all dual-use assets and implement access controls",
+          "Commission external IP audit of all technology transfer and licensing arrangements"]};
+    }
+  },
+  adx_disc:{label:"Capital Markets — ADX Disclosure Failure",regime:"SCA Decision No. 7/R.M 2016 · ADX Listing Rules · UAE Decree Law 67/2023",flags:["ADX","SCA","UAE"],
+    fields:[
+      {id:"mktcap",label:"Market Capitalisation (AED M)",type:"money",def:1000},
+      {id:"breach",label:"Disclosure Issue",type:"sel",opts:[["material","Material information not disclosed"],["insider","Insider trading suspicion"],["delay","Late disclosure (information was filed but late)"],["mislead","Misleading or inaccurate disclosure"]]},
+      {id:"days",label:"Duration of Non-Disclosure (days)",type:"num",def:30,min:1,max:365},
+      {id:"rev",label:"Annual Revenue (AED M)",type:"money",def:500},
+    ],
+    calc(v){
+      const mkt=+v.mktcap,rev=+v.rev,days=+v.days;
+      const dur=Math.min(days/30,5);
+      const bases={"material":3,"insider":10,"delay":1,"mislead":5};
+      const fine=bases[v.breach]*Math.min(dur,3);
+      const mkt_drop=mkt*.08*Math.min(dur*.3,1);
+      const legal=fine*.3+2;
+      return{min:fine*.5+legal,mid:fine+mkt_drop*.4+legal,max:fine*3+mkt_drop+legal*2,
+        bk:[
+          {cls:"penalty",n:"SCA Administrative Penalty",s:`${v.breach} breach; ${days} days duration; multiplier: ${Math.min(dur,3).toFixed(1)}×`,v:fmtM(fine)},
+          {cls:"suspend",n:"Market Cap Impact",s:`Trading suspension + investor exit + re-rating: ~${Math.round(mkt_drop/mkt*100)}% at risk`,v:fmtM(mkt_drop)},
+          {cls:"remediat",n:"Legal & Investor Relations Cost",s:"SCA counsel, shareholder communications, supplementary audit",v:fmtM(legal)},
+          v.breach==="insider"?{cls:"other",n:"Criminal Exposure",s:"Insider trading = criminal offence under UAE Securities Law — personal director imprisonment risk",v:"Unquantified"}:null,
+        ].filter(Boolean),
+        drivers:[
+          {t:`${days} days of non-disclosure — SCA penalty escalates with duration; beyond 60 days = maximum fine`,c:days>60?"red":"amber"},
+          v.breach==="insider"?{t:"Insider trading: criminal referral to Public Prosecution — personal imprisonment risk for individuals",c:"red"}:null,
+          {t:"SCA can suspend trading, impose permanent directors' bans, and refer for criminal prosecution",c:"amber"},
+        ].filter(Boolean),
+        acts:["File required ADX disclosure IMMEDIATELY — every additional day increases the SCA penalty",
+          "Engage SCA-specialist UAE legal counsel within 24 hours",
+          v.breach==="insider"?"Engage criminal defence counsel NOW — insider trading is a criminal offence":"Prepare complete disclosure with full context, corrective narrative, and forward-looking statement",
+          "Hold formal board meeting — pass resolution documenting the issue, management response, and prevention measures",
+          "Review and strengthen the company's disclosure controls and material information identification policy"]};
+    }
+  },
+};
+
+// ── RENDER RISK CARDS ─────────────────────────────────────
+const CARD_DEFS = [
+  {id:"bis_screen",icon:"🛡️",name:"Export Control — Screening Failure",sub:"Restricted party accesses infrastructure or supply chain",tag:"tbis",tl:"BIS / EAR"},
+  {id:"bis_nist",  icon:"🔐",name:"Export Control — NIST Control Gap",sub:"Unauthorised compute access = deemed re-export violation",tag:"tbis",tl:"BIS / EAR"},
+  {id:"bis_sub",   icon:"🏛️",name:"Export Control — Subsidiary Governance",sub:"ADX-listed entity acts outside group BIS policy",tag:"tbis",tl:"BIS + ADX"},
+  {id:"bis_flow",  icon:"🔗",name:"Export Control — End User Violation",sub:"Customer breaches license flow-down obligations",tag:"tbis",tl:"BIS / EAR"},
+  {id:"esg_env",   icon:"🌿",name:"ESG — Environmental Breach",sub:"UAE Net Zero 2050, carbon reporting, emission limits",tag:"tuae",tl:"UAE / SCA"},
+  {id:"esg_gov",   icon:"📋",name:"ESG — Corporate Governance",sub:"ADX listing, board composition, disclosure failures",tag:"tuae",tl:"ADX / SCA"},
+  {id:"fin_fraud", icon:"💰",name:"Financial — Fraud & Misstatement",sub:"Reporting inaccuracies, internal fraud, AML exposure",tag:"tuae",tl:"CBUAE / SCA"},
+  {id:"fin_aml",   icon:"🏦",name:"Financial — AML / Sanctions",sub:"Anti-money laundering and OFAC/UAE sanctions risk",tag:"tuae",tl:"CBUAE + OFAC"},
+  {id:"procurement",icon:"📦",name:"Procurement — Supply Chain Risk",sub:"Supplier failures, counterfeit goods, ownership gaps",tag:"tuae",tl:"UAE Law"},
+  {id:"hr",        icon:"👥",name:"HR — Labour & Emiratisation",sub:"Emiratisation quotas, labour law, Nitaqat compliance",tag:"tuae",tl:"MOHRE / UAE"},
+  {id:"cyber",     icon:"⚡",name:"Cybersecurity — Data Breach",sub:"Personal data exposure under UAE PDPL obligations",tag:"tuae",tl:"UAE PDPL"},
+  {id:"contract",  icon:"📜",name:"Legal — Contract Breach",sub:"Material contract failure, LDs, dispute resolution",tag:"tglob",tl:"Commercial"},
+  {id:"ip",        icon:"💡",name:"IP — Technology Transfer Risk",sub:"Dual-use transfer, IP theft, unauthorised licensing",tag:"tbis",tl:"BIS + UAE"},
+  {id:"adx_disc",  icon:"📊",name:"Capital Markets — ADX Disclosure",sub:"Material non-disclosure, insider trading, listing breach",tag:"tuae",tl:"ADX / SCA"},
+];
+const rg=document.getElementById('rg');
+CARD_DEFS.forEach(d=>{
+  rg.innerHTML+=`<div class="rcard" data-id="${d.id}" onclick="selRisk(this)">
+    <div class="rico">${d.icon}</div>
+    <div class="rname">${d.name}</div>
+    <div class="rsub">${d.sub}</div>
+    <span class="rtag ${d.tag}">${d.tl}</span>
+  </div>`;
+});
+
+// ── STATE ─────────────────────────────────────────────────
+let selId=null;
+function selRisk(el){
+  document.querySelectorAll('.rcard').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel'); selId=el.dataset.id;
+  const b=document.getElementById('cont1'); b.disabled=false; b.style.opacity='1';
+}
+
+function setStep(n){
+  [1,2,3].forEach(i=>{
+    const el=document.getElementById('s'+i);
+    el.classList.remove('active','done');
+    if(i<n)el.classList.add('done');
+    else if(i===n)el.classList.add('active');
+  });
+}
+
+function fmtM(n){
+  if(!isFinite(n)||isNaN(n)||n<0)return'AED 0M';
+  if(n>=1000)return`AED ${(n/1000).toFixed(2)}B`;
+  if(n>=100) return`AED ${n.toFixed(0)}M`;
+  return`AED ${n.toFixed(1)}M`;
+}
+
+// ── STEP 1 → 2 ────────────────────────────────────────────
+function toStep2(){
+  if(!selId)return;
+  const r=RISKS[selId];
+  document.getElementById('p2title').textContent=r.label;
+  document.getElementById('p2sub').textContent='Regulated under: '+r.regime;
+  const fg=document.getElementById('ffields'); fg.innerHTML='';
+  r.fields.forEach(f=>{
+    const d=document.createElement('div'); d.className='field';
+    if(f.type==='slide'){
+      d.innerHTML=`<label for="f_${f.id}">${f.label}</label>
+        ${f.hint?`<span class="fhint">${f.hint}</span>`:''}
+        <div class="srow">
+          <input type="range" id="f_${f.id}" min="${f.min}" max="${f.max}" step="${f.step}" value="${f.def}"
+            oninput="updSlide(this)" style="--p:${((f.def-f.min)/(f.max-f.min)*100)}%">
+          <span class="sval" id="sv_${f.id}">${f.def}</span>
+        </div>`;
+    } else if(f.type==='sel'){
+      d.innerHTML=`<label for="f_${f.id}">${f.label}</label>
+        ${f.hint?`<span class="fhint">${f.hint}</span>`:''}
+        <select id="f_${f.id}">${f.opts.map(o=>`<option value="${o[0]}">${o[1]}</option>`).join('')}</select>`;
+    } else if(f.type==='money'||f.type==='num'){
+      d.innerHTML=`<label for="f_${f.id}">${f.label}</label>
+        ${f.hint?`<span class="fhint">${f.hint}</span>`:''}
+        <input type="number" id="f_${f.id}" value="${f.def||0}" min="${f.min||0}" step="${f.type==='money'?1:1}">`;
+    }
+    fg.appendChild(d);
+  });
+  document.getElementById('p1').classList.remove('active');
+  document.getElementById('p2').classList.add('active');
+  document.getElementById('out').classList.remove('active');
+  setStep(2);
+}
+
+function updSlide(el){
+  const min=parseFloat(el.min),max=parseFloat(el.max),val=parseFloat(el.value);
+  el.style.setProperty('--p',((val-min)/(max-min)*100)+'%');
+  const sv=document.getElementById('sv_'+el.id.replace('f_',''));
+  if(sv)sv.textContent=val;
+}
+
+function toStep1(){
+  document.getElementById('p1').classList.add('active');
+  document.getElementById('p2').classList.remove('active');
+  document.getElementById('out').classList.remove('active');
+  setStep(1);
+}
+
+// ── CALCULATE ─────────────────────────────────────────────
+function calc(){
+  const r=RISKS[selId]; if(!r)return;
+  const v={};
+  r.fields.forEach(f=>{
+    const el=document.getElementById('f_'+f.id);
+    v[f.id]=el?el.value:f.def;
+  });
+  try{
+    const res=r.calc(v);
+    renderOutput(r,res);
+    document.getElementById('p2').classList.remove('active');
+    document.getElementById('out').classList.add('active');
+    document.getElementById('out').scrollIntoView({behavior:'smooth',block:'start'});
+    setStep(3);
+  }catch(e){console.error(e);alert('Calculation error — please check your inputs.');}
+}
+
+function renderOutput(r,res){
+  document.getElementById('otitle').textContent=r.label;
+  document.getElementById('oregime').textContent='Regulatory framework: '+r.regime;
+  document.getElementById('rmin').textContent=fmtM(res.min);
+  document.getElementById('rmid').textContent=fmtM(res.mid);
+  document.getElementById('rmax').textContent=fmtM(res.max);
+
+  // Flags
+  const fc=document.getElementById('flags'); fc.innerHTML='';
+  r.flags.forEach(f=>{ const d=document.createElement('span'); d.className='flag '+f.toLowerCase(); d.textContent=f; fc.appendChild(d); });
+
+  // Breakdown
+  const bk=document.getElementById('bkrows'); bk.innerHTML='';
+  (res.bk||[]).forEach(row=>{
+    bk.innerHTML+=`<div class="bkrow ${row.cls}">
+      <div class="bkl"><div class="bkln">${row.n}</div><div class="bkls">${row.s}</div></div>
+      <div class="bkv">${row.v}</div>
+    </div>`;
+  });
+
+  // Drivers
+  const pl=document.getElementById('pills'); pl.innerHTML='';
+  (res.drivers||[]).forEach(d=>{
+    pl.innerHTML+=`<span class="pill ${d.c}">&#9679; ${d.t}</span>`;
+  });
+
+  // Actions
+  const ac=document.getElementById('acts'); ac.innerHTML='';
+  (res.acts||[]).forEach((a,i)=>{
+    ac.innerHTML+=`<div class="actrow"><span class="actn">0${i+1}</span><span class="actt">${a}</span></div>`;
+  });
+}
+
+function reset(){
+  document.getElementById('p1').classList.add('active');
+  document.getElementById('p2').classList.remove('active');
+  document.getElementById('out').classList.remove('active');
+  document.querySelectorAll('.rcard').forEach(c=>c.classList.remove('sel'));
+  selId=null;
+  const b=document.getElementById('cont1'); b.disabled=true; b.style.opacity='.4';
+  setStep(1);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+</script>
+</body>
+</html>
