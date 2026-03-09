@@ -62,6 +62,24 @@ function deriveCandidateUrls(rootUrl, html) {
   return Array.from(new Set([...defaults, ...discovered])).slice(0, 8);
 }
 
+function buildFallbackProfile(canonicalUrl, pages) {
+  const combined = pages.map(page => page.content).join(' ').toLowerCase();
+  const signals = [];
+  if (/cloud|platform|software|digital|data/.test(combined)) signals.push('Material dependence on digital platforms, data flows, or cloud services.');
+  if (/customer|consumer|client|member|patient|user/.test(combined)) signals.push('Potential exposure to personal, customer, or regulated data handling obligations.');
+  if (/partner|supplier|vendor|ecosystem/.test(combined)) signals.push('Third-party and supplier dependence may be relevant to the operating model.');
+  if (/global|regional|international|middle east|uae|gcc/.test(combined)) signals.push('Cross-border operations or regional footprint may change regulatory and resilience expectations.');
+  return {
+    companySummary: `Public website context was gathered for ${canonicalUrl}, but the AI response could not be parsed cleanly. This fallback summary is based only on the website text that was fetched.`,
+    businessProfile: 'Review the fetched website context manually and refine the profile before saving. The site appears to describe a business with some combination of technology dependence, partner reliance, and customer-facing operations.',
+    riskSignals: signals.length ? signals : ['Public website content suggests a need to assess technology reliance, data handling, third-party dependencies, and resilience requirements.'],
+    regulatorySignals: [],
+    aiGuidance: 'Use the public website material as a starting point, then refine the business profile, likely regulations, and technology exposure manually before relying on it in assessments.',
+    suggestedGeography: '',
+    sources: pages.map(page => ({ url: page.url, note: 'Public website page fetched for context building.' }))
+  };
+}
+
 module.exports = async function handler(req, res) {
   const allowedOrigin = process.env.ALLOWED_ORIGIN || 'https://slackspac3.github.io';
   const compassApiUrl = process.env.COMPASS_API_URL || 'https://api.core42.ai/v1/chat/completions';
@@ -107,10 +125,10 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  let pages = [];
   try {
     const rootHtml = await fetchText(canonicalUrl);
     const candidateUrls = deriveCandidateUrls(canonicalUrl, rootHtml);
-    const pages = [];
 
     for (const url of candidateUrls) {
       try {
@@ -121,6 +139,10 @@ module.exports = async function handler(req, res) {
         }
       } catch {}
       if (pages.length >= 5) break;
+    }
+
+    if (!pages.length) {
+      throw new Error('No usable public website content could be extracted from the supplied URL.');
     }
 
     const systemPrompt = `You are a senior enterprise risk advisor. Given public company website material, produce a concise business-risk context profile.
@@ -172,9 +194,14 @@ Instructions:
 
     const payload = await upstream.json();
     const raw = payload.choices?.[0]?.message?.content || '';
-    const parsed = JSON.parse(String(raw).replace(/```json\n?|```/g, '').trim());
+    const cleaned = String(raw).replace(/```json\n?|```/g, '').trim();
+    const parsed = cleaned ? JSON.parse(cleaned) : buildFallbackProfile(canonicalUrl, pages);
     res.status(200).json(parsed);
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      res.status(200).json(buildFallbackProfile(canonicalUrl, pages));
+      return;
+    }
     res.status(502).json({
       error: 'Company context builder could not fetch or analyse the website.',
       detail: error instanceof Error ? error.message : String(error)
