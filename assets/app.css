@@ -952,6 +952,16 @@ canvas { display: block; width: 100%; }
   flex-wrap: wrap;
 }
 
+.guided-prompt-chip {
+  cursor: pointer;
+  border: none;
+  background: rgba(26,86,219,0.12);
+}
+
+.guided-prompt-chip:hover {
+  background: rgba(26,86,219,0.2);
+}
+
 /* ── Toast ───────────────────────────────────────────────────── */
 #toast-container {
   position: fixed;

@@ -66,7 +66,14 @@ function resetDraft() {
     linkedRisks: DEFAULT_ADMIN_SETTINGS.defaultLinkMode,
     applicableRegulations: [...DEFAULT_ADMIN_SETTINGS.applicableRegulations],
     intakeSummary: '',
-    linkAnalysis: ''
+    linkAnalysis: '',
+    guidedInput: {
+      event: '',
+      asset: '',
+      cause: '',
+      impact: '',
+      urgency: 'medium'
+    }
   };
   saveDraft();
 }
@@ -93,7 +100,14 @@ function ensureDraftShape() {
     linkedRisks: AppState.draft.linkedRisks != null ? !!AppState.draft.linkedRisks : DEFAULT_ADMIN_SETTINGS.defaultLinkMode,
     applicableRegulations: Array.isArray(AppState.draft.applicableRegulations) ? AppState.draft.applicableRegulations : [...DEFAULT_ADMIN_SETTINGS.applicableRegulations],
     intakeSummary: AppState.draft.intakeSummary || '',
-    linkAnalysis: AppState.draft.linkAnalysis || ''
+    linkAnalysis: AppState.draft.linkAnalysis || '',
+    guidedInput: {
+      event: AppState.draft.guidedInput?.event || '',
+      asset: AppState.draft.guidedInput?.asset || '',
+      cause: AppState.draft.guidedInput?.cause || '',
+      impact: AppState.draft.guidedInput?.impact || '',
+      urgency: AppState.draft.guidedInput?.urgency || 'medium'
+    }
   };
 }
 
@@ -305,6 +319,21 @@ function parseRegisterText(text) {
     .map(line => line.trim())
     .filter(line => line && !/^risk[\s,_-]*id/i.test(line) && line.length > 10)
     .slice(0, 25);
+}
+
+function composeGuidedNarrative(guidedInput = {}) {
+  const event = String(guidedInput.event || '').trim();
+  const asset = String(guidedInput.asset || '').trim();
+  const cause = String(guidedInput.cause || '').trim();
+  const impact = String(guidedInput.impact || '').trim();
+  const urgency = String(guidedInput.urgency || 'medium').trim();
+  const parts = [];
+  if (event) parts.push(`A risk scenario is being assessed where ${event.charAt(0).toLowerCase() + event.slice(1)}.`);
+  if (asset) parts.push(`The main asset, service, or team affected is ${asset}.`);
+  if (cause) parts.push(`The likely trigger or threat driver is ${cause}.`);
+  if (impact) parts.push(`The expected business, operational, or regulatory impact is ${impact}.`);
+  if (urgency) parts.push(`Current urgency is assessed as ${urgency}.`);
+  return parts.join(' ');
 }
 
 // ─── APP BAR ──────────────────────────────────────────────────
@@ -589,6 +618,60 @@ function renderWizard1() {
           </div>
 
           <div class="card anim-fade-in anim-delay-1">
+            <div class="admin-section-head" style="margin-bottom:var(--sp-5)">
+              <div>
+                <h3>Guided Input for Non-Specialists</h3>
+                <p>Answer the simple questions below. The platform will turn them into a structured risk statement for you.</p>
+              </div>
+            </div>
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label" for="guided-event">What happened or what could happen?</label>
+                <textarea class="form-textarea" id="guided-event" rows="3" placeholder="Example: a supplier with privileged access could be compromised">${draft.guidedInput?.event || ''}</textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="guided-asset">What is affected?</label>
+                <input class="form-input" id="guided-asset" type="text" placeholder="Example: payment platform, HR system, cloud data store" value="${draft.guidedInput?.asset || ''}">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="guided-cause">What is the likely cause or trigger?</label>
+                <input class="form-input" id="guided-cause" type="text" placeholder="Example: supplier breach, human error, phishing, control gap" value="${draft.guidedInput?.cause || ''}">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="guided-impact">What is the main impact you care about?</label>
+                <input class="form-input" id="guided-impact" type="text" placeholder="Example: outage, regulatory breach, customer loss, financial exposure" value="${draft.guidedInput?.impact || ''}">
+              </div>
+            </div>
+            <div class="grid-2 mt-4">
+              <div class="form-group">
+                <label class="form-label" for="guided-urgency">How urgent does it feel?</label>
+                <select class="form-select" id="guided-urgency">
+                  <option value="low" ${draft.guidedInput?.urgency === 'low' ? 'selected' : ''}>Low</option>
+                  <option value="medium" ${!draft.guidedInput?.urgency || draft.guidedInput?.urgency === 'medium' ? 'selected' : ''}>Medium</option>
+                  <option value="high" ${draft.guidedInput?.urgency === 'high' ? 'selected' : ''}>High</option>
+                  <option value="critical" ${draft.guidedInput?.urgency === 'critical' ? 'selected' : ''}>Critical</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Quick Start Prompts</label>
+                <div class="citation-chips">
+                  <button class="citation-chip guided-prompt-chip" data-prompt="Supplier compromise affecting a regulated platform">Supplier compromise</button>
+                  <button class="citation-chip guided-prompt-chip" data-prompt="Cloud misconfiguration exposing sensitive data">Cloud exposure</button>
+                  <button class="citation-chip guided-prompt-chip" data-prompt="Ransomware disrupting critical business services">Ransomware outage</button>
+                </div>
+              </div>
+            </div>
+            <div class="admin-inline-actions mt-4">
+              <button class="btn btn--secondary" id="btn-build-guided-narrative" type="button">Build Risk Statement from Answers</button>
+              <span class="form-help">You can still edit the generated statement manually afterwards.</span>
+            </div>
+            <div class="card mt-4" style="padding:var(--sp-4);background:var(--bg-elevated)">
+              <div class="context-panel-title">Generated Statement Preview</div>
+              <p class="context-panel-copy" id="guided-preview">${composeGuidedNarrative(draft.guidedInput) || 'Complete the guided questions and click “Build Risk Statement from Answers”.'}</p>
+            </div>
+          </div>
+
+          <div class="card anim-fade-in anim-delay-1">
             <div class="form-group">
               <label class="form-label" for="intake-risk-statement">Risk Statement</label>
               <textarea class="form-textarea" id="intake-risk-statement" rows="6" placeholder="Describe the risk in plain English. Include what could happen, the affected platform or service, likely triggers, and the business or regulatory impact.">${draft.narrative || ''}</textarea>
@@ -652,8 +735,36 @@ function renderWizard1() {
   document.getElementById('wizard-geo').addEventListener('input', function() {
     AppState.draft.geography = this.value.trim();
   });
+  ['event', 'asset', 'cause', 'impact'].forEach(key => {
+    document.getElementById(`guided-${key}`).addEventListener('input', function() {
+      AppState.draft.guidedInput[key] = this.value;
+      document.getElementById('guided-preview').textContent = composeGuidedNarrative(AppState.draft.guidedInput) || 'Complete the guided questions and click “Build Risk Statement from Answers”.';
+    });
+  });
+  document.getElementById('guided-urgency').addEventListener('change', function() {
+    AppState.draft.guidedInput.urgency = this.value;
+    document.getElementById('guided-preview').textContent = composeGuidedNarrative(AppState.draft.guidedInput) || 'Complete the guided questions and click “Build Risk Statement from Answers”.';
+  });
   document.getElementById('intake-risk-statement').addEventListener('input', function() {
     AppState.draft.narrative = this.value;
+  });
+  document.getElementById('btn-build-guided-narrative').addEventListener('click', () => {
+    const composed = composeGuidedNarrative(AppState.draft.guidedInput);
+    if (!composed) {
+      UI.toast('Answer at least one guided question first.', 'warning');
+      return;
+    }
+    AppState.draft.narrative = composed;
+    document.getElementById('intake-risk-statement').value = composed;
+    saveDraft();
+    UI.toast('Risk statement created from guided answers.', 'success');
+  });
+  document.querySelectorAll('.guided-prompt-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      AppState.draft.guidedInput.event = btn.dataset.prompt;
+      document.getElementById('guided-event').value = btn.dataset.prompt;
+      document.getElementById('guided-preview').textContent = composeGuidedNarrative(AppState.draft.guidedInput);
+    });
   });
   document.getElementById('linked-risks-toggle').addEventListener('change', function() {
     AppState.draft.linkedRisks = this.checked;
@@ -676,10 +787,17 @@ function renderWizard1() {
     const narrative = document.getElementById('intake-risk-statement').value.trim();
     const selected = getSelectedRisks();
     if (!buId) { UI.toast('Please select a business unit.', 'warning'); return; }
-    if (!narrative && !selected.length) { UI.toast('Please enter a risk statement or select at least one risk.', 'warning'); return; }
+    if (!narrative) {
+      const composed = composeGuidedNarrative(AppState.draft.guidedInput);
+      if (composed) {
+        AppState.draft.narrative = composed;
+        document.getElementById('intake-risk-statement').value = composed;
+      }
+    }
+    if (!AppState.draft.narrative.trim() && !selected.length) { UI.toast('Please complete the guided questions, enter a risk statement, or select at least one risk.', 'warning'); return; }
     AppState.draft.geography = document.getElementById('wizard-geo').value.trim() || settings.geography;
-    AppState.draft.narrative = narrative;
-    AppState.draft.enhancedNarrative = AppState.draft.enhancedNarrative || narrative;
+    AppState.draft.narrative = AppState.draft.narrative.trim();
+    AppState.draft.enhancedNarrative = AppState.draft.enhancedNarrative || AppState.draft.narrative;
     AppState.draft.applicableRegulations = deriveApplicableRegulations(buList.find(b => b.id === buId), selected);
     if (!AppState.draft.scenarioTitle) {
       AppState.draft.scenarioTitle = selected.length === 1 ? selected[0].title : `${selected.length || 1}-risk scenario for ${AppState.draft.buName}`;
@@ -806,6 +924,23 @@ function renderWizard2() {
           <p class="wizard-step-desc">Review the AI-built context, refine the narrative, and confirm how the selected risks should be quantified together.</p>
         </div>
         <div class="wizard-body">
+          <div class="card card--elevated anim-fade-in">
+            <div class="context-panel-title">What to do on this step</div>
+            <div class="context-grid">
+              <div class="context-chip-panel">
+                <div class="context-panel-title">1. Read the draft</div>
+                <p class="context-panel-copy">Check that the scenario describes the event, the affected asset, the likely cause, and the impact you care about.</p>
+              </div>
+              <div class="context-chip-panel">
+                <div class="context-panel-title">2. Improve if needed</div>
+                <p class="context-panel-copy">Edit the wording in plain English. You do not need formal risk language.</p>
+              </div>
+              <div class="context-chip-panel">
+                <div class="context-panel-title">3. Use AI assist if useful</div>
+                <p class="context-panel-copy">AI assist will structure the scenario and prepare FAIR inputs for the next step.</p>
+              </div>
+            </div>
+          </div>
           ${selectedRisks.length ? `<div class="card card--elevated anim-fade-in"><div class="context-panel-title">Selected Risks</div><div class="citation-chips">${selectedRisks.map(r => `<span class="badge badge--neutral">${r.title}</span>`).join('')}</div><div class="context-panel-foot">${draft.linkedRisks && selectedRisks.length > 1 ? 'Linked scenario uplift will be applied in the simulation.' : 'Risks will be assessed as a combined scenario without linked uplift.'}</div></div>` : ''}
           <div class="card anim-fade-in">
             <div class="form-group">
