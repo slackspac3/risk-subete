@@ -11,6 +11,7 @@ const DEFAULT_ADMIN_SETTINGS = {
   geography: 'United Arab Emirates',
   companyWebsiteUrl: '',
   companyContextProfile: '',
+  companyContextSections: null,
   companyStructure: [],
   entityContextLayers: [],
   riskAppetiteStatement: 'Moderate. Escalate risks that threaten regulated operations, cross-border data movement, or strategic platforms.',
@@ -260,8 +261,8 @@ function getAdminSettings() {
     return {
       ...DEFAULT_ADMIN_SETTINGS,
       ...saved,
-      applicableRegulations: Array.isArray(saved.applicableRegulations) ? saved.applicableRegulations : [...DEFAULT_ADMIN_SETTINGS.applicableRegulations]
-    };
+    applicableRegulations: Array.isArray(saved.applicableRegulations) ? saved.applicableRegulations : [...DEFAULT_ADMIN_SETTINGS.applicableRegulations]
+  };
   } catch {
     return { ...DEFAULT_ADMIN_SETTINGS, applicableRegulations: [...DEFAULT_ADMIN_SETTINGS.applicableRegulations] };
   }
@@ -272,6 +273,7 @@ function saveAdminSettings(settings) {
     ...DEFAULT_ADMIN_SETTINGS,
     ...settings,
     applicableRegulations: Array.isArray(settings.applicableRegulations) ? settings.applicableRegulations : [...DEFAULT_ADMIN_SETTINGS.applicableRegulations],
+    companyContextSections: settings.companyContextSections && typeof settings.companyContextSections === 'object' ? settings.companyContextSections : null,
     companyStructure: Array.isArray(settings.companyStructure) ? settings.companyStructure : [],
     entityContextLayers: Array.isArray(settings.entityContextLayers) ? settings.entityContextLayers : []
   };
@@ -393,20 +395,32 @@ function buildOrganisationContextSummary(settings = getAdminSettings()) {
   return [structureText, layerText ? `Entity context layers:\n${layerText}` : ''].filter(Boolean).join('\n');
 }
 
-function formatCompanyContextProfile(result) {
-  const sourceNotes = (result.sources || [])
-    .slice(0, 8)
-    .map(source => source.note || source.url)
-    .filter(Boolean);
+function buildCompanyContextSections(result = {}) {
+  return {
+    companySummary: String(result.companySummary || '').trim(),
+    businessModel: String(result.businessProfile || '').trim(),
+    operatingModel: String(result.operatingModel || '').trim(),
+    publicCommitments: Array.isArray(result.publicCommitments) ? result.publicCommitments.map(String).join('\n') : String(result.publicCommitments || '').trim(),
+    keyRiskSignals: Array.isArray(result.riskSignals) ? result.riskSignals.map(String).join('\n') : String(result.riskSignals || '').trim(),
+    obligations: Array.isArray(result.likelyObligations) ? result.likelyObligations.map(String).join('\n') : String(result.likelyObligations || '').trim(),
+    sources: Array.isArray(result.sources) ? result.sources.map(source => source.note || source.url).filter(Boolean).join('\n') : String(result.sources || '').trim()
+  };
+}
+
+function serialiseCompanyContextSections(sections = {}) {
   return [
-    result.companySummary,
-    result.businessProfile,
-    result.operatingModel ? `Operating model:\n${result.operatingModel}` : '',
-    result.publicCommitments?.length ? `Public commitments:\n- ${result.publicCommitments.join('\n- ')}` : '',
-    result.riskSignals?.length ? `Key public risk signals:\n- ${result.riskSignals.join('\n- ')}` : '',
-    result.likelyObligations?.length ? `Likely obligations and exposures:\n- ${result.likelyObligations.join('\n- ')}` : '',
-    sourceNotes.length ? `Sources reviewed:\n- ${sourceNotes.join('\n- ')}` : ''
+    sections.companySummary ? `Company summary:\n${sections.companySummary}` : '',
+    sections.businessModel ? `Business model:\n${sections.businessModel}` : '',
+    sections.operatingModel ? `Operating model:\n${sections.operatingModel}` : '',
+    sections.publicCommitments ? `Public commitments:\n- ${sections.publicCommitments.split(/\r?\n/).filter(Boolean).join('\n- ')}` : '',
+    sections.keyRiskSignals ? `Key public risk signals:\n- ${sections.keyRiskSignals.split(/\r?\n/).filter(Boolean).join('\n- ')}` : '',
+    sections.obligations ? `Likely obligations and exposures:\n- ${sections.obligations.split(/\r?\n/).filter(Boolean).join('\n- ')}` : '',
+    sections.sources ? `Sources reviewed:\n- ${sections.sources.split(/\r?\n/).filter(Boolean).join('\n- ')}` : ''
   ].filter(Boolean).join('\n\n');
+}
+
+function formatCompanyContextProfile(result) {
+  return serialiseCompanyContextSections(buildCompanyContextSections(result));
 }
 
 function getRelationshipOptions(structure = [], type = '', excludeId = '') {
@@ -432,6 +446,7 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
   const defaultName = node.name || seed.name || '';
   const defaultWebsite = node.websiteUrl || seed.websiteUrl || '';
   const defaultProfile = node.profile || seed.profile || '';
+  const defaultSections = node.contextSections || seed.contextSections || null;
   const defaultDepartmentHint = node.departmentHint || seed.departmentHint || '';
   const body = `
     <div class="context-panel-copy" style="margin-bottom:12px">Capture how this entity fits into the wider group so later assessments inherit the right business, ownership, and department context.</div>
@@ -469,6 +484,38 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
       <textarea class="form-textarea" id="org-profile" rows="7" placeholder="Business profile, strategic role, technology dependence, ownership context, or department remit.">${defaultProfile}</textarea>
       <span class="form-help" id="org-profile-help">For company entities, this can be built from the public website and then refined by the admin user.</span>
     </div>
+    <div class="card mt-4" style="padding:var(--sp-4);background:var(--bg-elevated)" id="org-context-sections-wrap">
+      <div class="context-panel-title">Editable Company Brief Sections</div>
+      <p class="form-help">These named sections can be edited any time and will be retained for this entity.</p>
+      <div class="form-group mt-3">
+        <label class="form-label" for="org-section-summary">Company Summary</label>
+        <textarea class="form-textarea" id="org-section-summary" rows="3">${defaultSections?.companySummary || ''}</textarea>
+      </div>
+      <div class="form-group mt-3">
+        <label class="form-label" for="org-section-business-model">Business Model</label>
+        <textarea class="form-textarea" id="org-section-business-model" rows="3">${defaultSections?.businessModel || ''}</textarea>
+      </div>
+      <div class="form-group mt-3">
+        <label class="form-label" for="org-section-operating-model">Operating Model</label>
+        <textarea class="form-textarea" id="org-section-operating-model" rows="3">${defaultSections?.operatingModel || ''}</textarea>
+      </div>
+      <div class="form-group mt-3">
+        <label class="form-label" for="org-section-commitments">Public Commitments</label>
+        <textarea class="form-textarea" id="org-section-commitments" rows="4" placeholder="One commitment per line">${defaultSections?.publicCommitments || ''}</textarea>
+      </div>
+      <div class="form-group mt-3">
+        <label class="form-label" for="org-section-risks">Key Risk Signals</label>
+        <textarea class="form-textarea" id="org-section-risks" rows="4" placeholder="One risk signal per line">${defaultSections?.keyRiskSignals || ''}</textarea>
+      </div>
+      <div class="form-group mt-3">
+        <label class="form-label" for="org-section-obligations">Obligations and Exposures</label>
+        <textarea class="form-textarea" id="org-section-obligations" rows="4" placeholder="One obligation or exposure per line">${defaultSections?.obligations || ''}</textarea>
+      </div>
+      <div class="form-group mt-3">
+        <label class="form-label" for="org-section-sources">Sources Reviewed</label>
+        <textarea class="form-textarea" id="org-section-sources" rows="4" placeholder="One source note per line">${defaultSections?.sources || ''}</textarea>
+      </div>
+    </div>
     <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap" id="org-context-actions">
       <button class="btn btn--secondary" id="btn-org-build-context" type="button">Build Context from Website</button>
       <span class="form-help">Use AI to gather website and public-source context before saving.</span>
@@ -490,6 +537,7 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
   const departmentWrapEl = document.getElementById('org-department-wrap');
   const departmentTemplateEl = document.getElementById('org-department-template');
   const contextActionsEl = document.getElementById('org-context-actions');
+  const contextSectionsWrapEl = document.getElementById('org-context-sections-wrap');
 
   function refreshEntityEditorState() {
     const selectedType = typeEl.value;
@@ -506,6 +554,7 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
     departmentWrapEl.style.display = departmentMode ? '' : 'none';
     websiteWrapEl.style.display = departmentMode ? 'none' : '';
     contextActionsEl.style.display = departmentMode ? 'none' : '';
+    contextSectionsWrapEl.style.display = departmentMode ? 'none' : '';
     profileHelpEl.textContent = departmentMode
       ? 'Describe what this department owns, supports, or controls within the business.'
       : 'Capture public business profile, ownership context, strategic role, and major risk signals for this entity.';
@@ -538,6 +587,15 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
       parentId: parentId || null,
       websiteUrl: isDepartmentEntityType(selectedType) ? '' : websiteEl.value.trim(),
       profile: profileEl.value.trim(),
+      contextSections: isDepartmentEntityType(selectedType) ? null : {
+        companySummary: document.getElementById('org-section-summary').value.trim(),
+        businessModel: document.getElementById('org-section-business-model').value.trim(),
+        operatingModel: document.getElementById('org-section-operating-model').value.trim(),
+        publicCommitments: document.getElementById('org-section-commitments').value.trim(),
+        keyRiskSignals: document.getElementById('org-section-risks').value.trim(),
+        obligations: document.getElementById('org-section-obligations').value.trim(),
+        sources: document.getElementById('org-section-sources').value.trim()
+      },
       departmentHint: isDepartmentEntityType(selectedType) ? (departmentTemplateEl.value || name) : ''
     }, modal);
   });
@@ -545,6 +603,15 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
   return {
     close: modal.close,
     setProfile(value) { profileEl.value = value || ''; },
+    setSections(sections = {}) {
+      document.getElementById('org-section-summary').value = sections.companySummary || '';
+      document.getElementById('org-section-business-model').value = sections.businessModel || '';
+      document.getElementById('org-section-operating-model').value = sections.operatingModel || '';
+      document.getElementById('org-section-commitments').value = sections.publicCommitments || '';
+      document.getElementById('org-section-risks').value = sections.keyRiskSignals || '';
+      document.getElementById('org-section-obligations').value = sections.obligations || '';
+      document.getElementById('org-section-sources').value = sections.sources || '';
+    },
     setWebsite(value) { websiteEl.value = value || ''; },
     setName(value) { nameEl.value = value || ''; },
     setType(value) {
@@ -2417,6 +2484,10 @@ function renderAdminSettings() {
   const settings = getAdminSettings();
   const companyStructure = Array.isArray(settings.companyStructure) ? [...settings.companyStructure] : [];
   const entityContextLayers = Array.isArray(settings.entityContextLayers) ? [...settings.entityContextLayers] : [];
+  const companyContextSections = settings.companyContextSections || buildCompanyContextSections({
+    companySummary: settings.adminContextSummary || '',
+    businessProfile: settings.companyContextProfile || ''
+  });
   const sessionLLM = getSessionLLMConfig();
   const directCompass = !sessionLLM.apiUrl || sessionLLM.apiUrl.includes('api.core42.ai');
   const buCount = getBUList().length;
@@ -2550,6 +2621,37 @@ function renderAdminSettings() {
           <div class="form-group">
             <label class="form-label" for="admin-company-profile">Company Risk Context Profile</label>
             <textarea class="form-textarea" id="admin-company-profile" rows="6" placeholder="Public business profile, operating model, technology exposure, and likely risk signals.">${settings.companyContextProfile || ''}</textarea>
+          </div>
+        </div>
+        <div class="card mt-4" style="padding:var(--sp-4);background:var(--bg-canvas)">
+          <div class="context-panel-title">Editable Company Brief</div>
+          <div class="form-group mt-3">
+            <label class="form-label" for="admin-company-section-summary">Company Summary</label>
+            <textarea class="form-textarea" id="admin-company-section-summary" rows="3">${companyContextSections.companySummary || ''}</textarea>
+          </div>
+          <div class="form-group mt-3">
+            <label class="form-label" for="admin-company-section-business-model">Business Model</label>
+            <textarea class="form-textarea" id="admin-company-section-business-model" rows="3">${companyContextSections.businessModel || ''}</textarea>
+          </div>
+          <div class="form-group mt-3">
+            <label class="form-label" for="admin-company-section-operating-model">Operating Model</label>
+            <textarea class="form-textarea" id="admin-company-section-operating-model" rows="3">${companyContextSections.operatingModel || ''}</textarea>
+          </div>
+          <div class="form-group mt-3">
+            <label class="form-label" for="admin-company-section-commitments">Public Commitments</label>
+            <textarea class="form-textarea" id="admin-company-section-commitments" rows="4">${companyContextSections.publicCommitments || ''}</textarea>
+          </div>
+          <div class="form-group mt-3">
+            <label class="form-label" for="admin-company-section-risks">Key Risk Signals</label>
+            <textarea class="form-textarea" id="admin-company-section-risks" rows="4">${companyContextSections.keyRiskSignals || ''}</textarea>
+          </div>
+          <div class="form-group mt-3">
+            <label class="form-label" for="admin-company-section-obligations">Obligations and Exposures</label>
+            <textarea class="form-textarea" id="admin-company-section-obligations" rows="4">${companyContextSections.obligations || ''}</textarea>
+          </div>
+          <div class="form-group mt-3">
+            <label class="form-label" for="admin-company-section-sources">Sources Reviewed</label>
+            <textarea class="form-textarea" id="admin-company-section-sources" rows="4">${companyContextSections.sources || ''}</textarea>
           </div>
         </div>
         <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
@@ -2762,6 +2864,9 @@ function renderAdminSettings() {
       existingNode,
       seed,
       onSave: (node, modal) => {
+        if (node.contextSections) {
+          node.profile = serialiseCompanyContextSections(node.contextSections);
+        }
         upsertCompanyStructureNode(node);
         if (node.profile) profileEl.value = node.profile;
         if (node.websiteUrl) websiteEl.value = node.websiteUrl;
@@ -2787,8 +2892,10 @@ function renderAdminSettings() {
         try {
           LLMService.setCompassConfig(llmConfig);
           const result = await LLMService.buildCompanyContext(targetUrl);
-          const profileText = formatCompanyContextProfile(result);
+          const sections = buildCompanyContextSections(result);
+          const profileText = serialiseCompanyContextSections(sections);
           editor.setProfile(profileText);
+          editor.setSections(sections);
           if (!document.getElementById('org-entity-name').value.trim()) {
             editor.setName(inferCompanyNameFromUrl(targetUrl));
           }
@@ -2890,9 +2997,26 @@ function renderAdminSettings() {
       return;
     }
     saveAdminSettings({
+      companyContextSections: {
+        companySummary: document.getElementById('admin-company-section-summary').value.trim(),
+        businessModel: document.getElementById('admin-company-section-business-model').value.trim(),
+        operatingModel: document.getElementById('admin-company-section-operating-model').value.trim(),
+        publicCommitments: document.getElementById('admin-company-section-commitments').value.trim(),
+        keyRiskSignals: document.getElementById('admin-company-section-risks').value.trim(),
+        obligations: document.getElementById('admin-company-section-obligations').value.trim(),
+        sources: document.getElementById('admin-company-section-sources').value.trim()
+      },
       geography: document.getElementById('admin-geo').value.trim() || DEFAULT_ADMIN_SETTINGS.geography,
       companyWebsiteUrl: document.getElementById('admin-company-url').value.trim(),
-      companyContextProfile: document.getElementById('admin-company-profile').value.trim(),
+      companyContextProfile: serialiseCompanyContextSections({
+        companySummary: document.getElementById('admin-company-section-summary').value.trim(),
+        businessModel: document.getElementById('admin-company-section-business-model').value.trim(),
+        operatingModel: document.getElementById('admin-company-section-operating-model').value.trim(),
+        publicCommitments: document.getElementById('admin-company-section-commitments').value.trim(),
+        keyRiskSignals: document.getElementById('admin-company-section-risks').value.trim(),
+        obligations: document.getElementById('admin-company-section-obligations').value.trim(),
+        sources: document.getElementById('admin-company-section-sources').value.trim()
+      }),
       companyStructure,
       entityContextLayers,
       defaultLinkMode: document.getElementById('admin-link-mode').value === 'yes',
@@ -2927,8 +3051,16 @@ function renderAdminSettings() {
     try {
       LLMService.setCompassConfig(llmConfig);
       const result = await LLMService.buildCompanyContext(websiteUrl);
-      const profileText = formatCompanyContextProfile(result);
+      const sections = buildCompanyContextSections(result);
+      const profileText = serialiseCompanyContextSections(sections);
       profileEl.value = profileText;
+      document.getElementById('admin-company-section-summary').value = sections.companySummary || '';
+      document.getElementById('admin-company-section-business-model').value = sections.businessModel || '';
+      document.getElementById('admin-company-section-operating-model').value = sections.operatingModel || '';
+      document.getElementById('admin-company-section-commitments').value = sections.publicCommitments || '';
+      document.getElementById('admin-company-section-risks').value = sections.keyRiskSignals || '';
+      document.getElementById('admin-company-section-obligations').value = sections.obligations || '';
+      document.getElementById('admin-company-section-sources').value = sections.sources || '';
       if (!document.getElementById('admin-context-summary').value.trim()) {
         document.getElementById('admin-context-summary').value = result.companySummary || '';
       }
@@ -2945,6 +3077,7 @@ function renderAdminSettings() {
         name: inferCompanyNameFromUrl(websiteUrl),
         websiteUrl,
         profile: profileText,
+        contextSections: sections,
         type: 'Holding company'
       });
       UI.toast('Company context built from public sources. Review the entity and place it into the organisation tree.', 'success', 5000);
