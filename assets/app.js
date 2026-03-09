@@ -12,7 +12,12 @@ const DEFAULT_ADMIN_SETTINGS = {
   riskAppetiteStatement: 'Moderate. Escalate risks that threaten regulated operations, cross-border data movement, or strategic platforms.',
   applicableRegulations: ['UAE PDPL', 'BIS Export Controls', 'OFAC Sanctions', 'UAE Cybersecurity Council Guidance'],
   aiInstructions: 'Prioritise operational, regulatory, and strategic impact. Use British English.',
-  defaultLinkMode: true
+  defaultLinkMode: true,
+  toleranceThresholdUsd: TOLERANCE_THRESHOLD,
+  warningThresholdUsd: 3_000_000,
+  annualReviewThresholdUsd: 12_000_000,
+  adminContextSummary: 'Use this workspace to maintain geography, regulations, thresholds, and AI guidance for the platform.',
+  escalationGuidance: 'Escalate to leadership when the scenario is above tolerance, close to tolerance, or materially affects regulated services.'
 };
 
 const AppState = {
@@ -135,6 +140,21 @@ function saveAdminSettings(settings) {
     applicableRegulations: Array.isArray(settings.applicableRegulations) ? settings.applicableRegulations : [...DEFAULT_ADMIN_SETTINGS.applicableRegulations]
   };
   localStorage.setItem('rq_admin_settings', JSON.stringify(merged));
+}
+
+function getToleranceThreshold() {
+  const value = Number(getAdminSettings().toleranceThresholdUsd);
+  return Number.isFinite(value) && value > 0 ? value : TOLERANCE_THRESHOLD;
+}
+
+function getWarningThreshold() {
+  const value = Number(getAdminSettings().warningThresholdUsd);
+  return Number.isFinite(value) && value > 0 ? value : 3_000_000;
+}
+
+function getAnnualReviewThreshold() {
+  const value = Number(getAdminSettings().annualReviewThresholdUsd);
+  return Number.isFinite(value) && value > 0 ? value : 12_000_000;
 }
 
 function getSessionLLMConfig() {
@@ -339,7 +359,7 @@ function renderLanding() {
                 ['1','Describe the issue','Start with a simple risk statement such as “A supplier with privileged access is compromised” or upload a risk register for AI review.'],
                 ['2','Let the platform structure it','The AI builder enhances the wording, identifies candidate risks, and suggests which risks may be linked.'],
                 ['3','Check the assumptions','Review the FAIR inputs. If you are unsure, stay in Basic mode and use the AI-preloaded values as your starting point.'],
-                ['4','Run and interpret results','The simulation shows likely loss ranges, annual exposure, and whether the scenario breaches the fixed tolerance threshold.']
+                ['4','Run and interpret results','The simulation shows likely loss ranges, annual exposure, and whether the scenario breaches the configured tolerance threshold.']
               ].map(([n,title,desc]) => `
                 <div style="display:flex;gap:var(--sp-4)">
                   <div style="width:32px;height:32px;background:rgba(26,86,219,.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;color:var(--color-primary-300);flex-shrink:0">${n}</div>
@@ -412,7 +432,7 @@ function renderLanding() {
           <div class="feature-card anim-fade-in anim-delay-3">
             <div class="feature-icon">🎯</div>
             <div class="feature-title">Tolerance Flagging</div>
-            <p class="feature-desc">The platform shows a clear red or green signal against the fixed tolerance threshold to support escalation decisions.</p>
+            <p class="feature-desc">The platform shows clear threshold signals so users know when a scenario is within appetite, approaching concern, or above tolerance.</p>
           </div>
           <div class="feature-card anim-fade-in anim-delay-4">
             <div class="feature-icon">🔗</div>
@@ -557,7 +577,7 @@ function renderWizard1() {
               <div class="context-chip-panel">
                 <div class="context-panel-title">Risk Appetite</div>
                 <p class="context-panel-copy">${settings.riskAppetiteStatement}</p>
-                <div class="context-panel-foot">Simulation tolerance remains fixed at ${fmtCurrency(TOLERANCE_THRESHOLD)} P90 per event.</div>
+                <div class="context-panel-foot">Current P90 per-event tolerance: ${fmtCurrency(getToleranceThreshold())}. Warning trigger: ${fmtCurrency(getWarningThreshold())}.</div>
               </div>
               <div class="context-chip-panel">
                 <div class="context-panel-title">Applicable Regulations</div>
@@ -1149,7 +1169,7 @@ function renderWizard4() {
               <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Business Int.</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${fmtCurrency(p.biMin)}–${fmtCurrency(p.biMax)}</div></div>
               <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Reg & Legal</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${fmtCurrency(p.rlMin)}–${fmtCurrency(p.rlMax)}</div></div>
             </div>
-            <div class="mt-4" style="font-size:.78rem;color:var(--text-muted)">Iterations: <strong>${p.iterations||10000}</strong> · Distribution: <strong>${p.distType||'triangular'}</strong> · Threshold: <strong>${fmtCurrency(TOLERANCE_THRESHOLD)}</strong> · Geography: <strong>${draft.geography || '—'}</strong></div>
+            <div class="mt-4" style="font-size:.78rem;color:var(--text-muted)">Iterations: <strong>${p.iterations||10000}</strong> · Distribution: <strong>${p.distType||'triangular'}</strong> · Threshold: <strong>${fmtCurrency(getToleranceThreshold())}</strong> · Geography: <strong>${draft.geography || '—'}</strong></div>
             ${draft.applicableRegulations?.length ? `<div class="citation-chips mt-3">${draft.applicableRegulations.map(tag => `<span class="badge badge--gold">${tag}</span>`).join('')}</div>` : ''}
           </div>
           <div class="banner banner--poc anim-fade-in anim-delay-2"><span class="banner-icon">⚠</span><span class="banner-text">PoC tool. FAIR input ranges should be validated through expert elicitation for production risk decisions.</span></div>
@@ -1182,6 +1202,9 @@ async function runSimulation() {
   try {
     const p = AppState.draft.fairParams;
     const scenario = getScenarioMultipliers();
+    const toleranceThreshold = getToleranceThreshold();
+    const warningThreshold = getWarningThreshold();
+    const annualReviewThreshold = getAnnualReviewThreshold();
     const fxMul = AppState.currency === 'AED' ? (1 / AppState.fxRate) : 1;
     const toUSD = v => (v||0) * fxMul;
     const ep = {
@@ -1201,12 +1224,16 @@ async function runSimulation() {
       secondaryEnabled: p.secondaryEnabled||false,
       secProbMin: Math.min(1, (p.secProbMin || 0) * scenario.secondaryMultiplier), secProbLikely: Math.min(1, (p.secProbLikely || 0) * scenario.secondaryMultiplier), secProbMax: Math.min(1, (p.secProbMax || 0) * scenario.secondaryMultiplier),
       secMagMin: toUSD(p.secMagMin) * scenario.lossMultiplier, secMagLikely: toUSD(p.secMagLikely) * scenario.lossMultiplier, secMagMax: toUSD(p.secMagMax) * scenario.lossMultiplier,
-      threshold: TOLERANCE_THRESHOLD
+      threshold: toleranceThreshold
     };
     const results = RiskEngine.run(ep);
     results.portfolioMeta = scenario;
     results.selectedRiskCount = scenario.riskCount;
     results.applicableRegulations = [...(AppState.draft.applicableRegulations || [])];
+    results.warningThreshold = warningThreshold;
+    results.annualReviewThreshold = annualReviewThreshold;
+    results.nearTolerance = results.lm.p90 >= warningThreshold && results.lm.p90 < toleranceThreshold;
+    results.annualReviewTriggered = results.ale.p90 >= annualReviewThreshold;
     if (!AppState.draft.id) AppState.draft.id = 'a_' + Date.now();
     const assessment = { ...AppState.draft, results, completedAt: Date.now() };
     saveAssessment(assessment);
@@ -1241,6 +1268,14 @@ function renderResults(id, isShared) {
       <span class="banner-text"><strong>Shared view.</strong> This assessment was shared with you. <a href="#/" style="color:var(--color-accent-300)">Start your own →</a></span>
     </div>` : '';
   const r = assessment.results;
+  const statusClass = r.toleranceBreached ? 'above' : r.nearTolerance ? 'warning' : 'within';
+  const statusIcon = r.toleranceBreached ? '🔴' : r.nearTolerance ? '🟠' : '🟢';
+  const statusTitle = r.toleranceBreached ? 'Above Tolerance Threshold' : r.nearTolerance ? 'Approaching Tolerance Threshold' : 'Within Tolerance Threshold';
+  const statusDetail = r.toleranceBreached
+    ? `Per-event P90: <strong>${fmtCurrency(r.lm.p90)}</strong> > threshold: <strong>${fmtCurrency(r.threshold)}</strong>`
+    : r.nearTolerance
+      ? `Per-event P90: <strong>${fmtCurrency(r.lm.p90)}</strong> is above warning trigger <strong>${fmtCurrency(r.warningThreshold)}</strong> but below tolerance <strong>${fmtCurrency(r.threshold)}</strong>`
+      : `Per-event P90: <strong>${fmtCurrency(r.lm.p90)}</strong> is below the warning trigger <strong>${fmtCurrency(r.warningThreshold)}</strong>`;
   setPage(`
     <main class="page">
       <div class="container container--wide" style="padding:var(--sp-8) var(--sp-6)">
@@ -1259,12 +1294,18 @@ function renderResults(id, isShared) {
           </div>
         </div>
 
-        <div class="tolerance-banner ${r.toleranceBreached?'above':'within'} mb-6 anim-fade-in">
-          <span class="tolerance-icon">${r.toleranceBreached?'🔴':'🟢'}</span>
+        <div class="tolerance-banner ${statusClass} mb-6 anim-fade-in">
+          <span class="tolerance-icon">${statusIcon}</span>
           <div>
-            <div class="tolerance-title">${r.toleranceBreached?'Above Tolerance Threshold':'Within Tolerance Threshold'}</div>
-            <div class="tolerance-detail">Per-event P90: <strong>${fmtCurrency(r.lm.p90)}</strong> ${r.toleranceBreached?'>':'<'} threshold: <strong>${fmtCurrency(r.threshold)}</strong> &nbsp;·&nbsp; Exceedance: <strong>${(r.toleranceDetail.lmExceedProb*100).toFixed(1)}%</strong></div>
+            <div class="tolerance-title">${statusTitle}</div>
+            <div class="tolerance-detail">${statusDetail} &nbsp;·&nbsp; Exceedance: <strong>${(r.toleranceDetail.lmExceedProb*100).toFixed(1)}%</strong></div>
           </div>
+        </div>
+
+        <div class="grid-3 mb-6 anim-fade-in">
+          <div class="metric-card"><div class="metric-label">Warning Trigger</div><div class="metric-value warning">${fmtCurrency(r.warningThreshold || getWarningThreshold())}</div><div class="metric-sub">Amber review trigger for P90 per-event loss</div></div>
+          <div class="metric-card"><div class="metric-label">Tolerance Threshold</div><div class="metric-value ${r.toleranceBreached?'danger':''}">${fmtCurrency(r.threshold)}</div><div class="metric-sub">Red escalation trigger for P90 per-event loss</div></div>
+          <div class="metric-card"><div class="metric-label">Annual Review Trigger</div><div class="metric-value">${fmtCurrency(r.annualReviewThreshold || getAnnualReviewThreshold())}</div><div class="metric-sub">${r.annualReviewTriggered ? 'Triggered by current ALE P90' : 'Not triggered by current ALE P90'}</div></div>
         </div>
 
         ${(assessment.selectedRisks?.length || r.selectedRiskCount) ? `
@@ -1424,15 +1465,77 @@ function renderAdminSettings() {
   if (!requireAdmin()) return;
   const settings = getAdminSettings();
   const sessionLLM = getSessionLLMConfig();
+  const directCompass = !sessionLLM.apiUrl || sessionLLM.apiUrl.includes('api.core42.ai');
+  const buCount = getBUList().length;
+  const docCount = getDocList().length;
   setPage(adminLayout('settings', `
     <div class="flex items-center justify-between mb-6">
       <div>
         <h2>Platform Settings</h2>
-        <p style="margin-top:6px">Configure default context for the AI-assisted risk builder. The simulation tolerance remains fixed at ${fmtCurrency(TOLERANCE_THRESHOLD)} P90 per event.</p>
+        <p style="margin-top:6px">${settings.adminContextSummary}</p>
       </div>
       <button class="btn btn--secondary" id="btn-reset-settings">Reset Defaults</button>
     </div>
+    <div class="admin-overview-grid mb-6">
+      <div class="admin-overview-card">
+        <div class="admin-overview-label">Business Units</div>
+        <div class="admin-overview-value">${buCount}</div>
+        <div class="admin-overview-foot">Editable in the Business Units section</div>
+      </div>
+      <div class="admin-overview-card">
+        <div class="admin-overview-label">Internal Documents</div>
+        <div class="admin-overview-value">${docCount}</div>
+        <div class="admin-overview-foot">Used for citations and AI context</div>
+      </div>
+      <div class="admin-overview-card">
+        <div class="admin-overview-label">Tolerance Threshold</div>
+        <div class="admin-overview-value">${fmtCurrency(settings.toleranceThresholdUsd)}</div>
+        <div class="admin-overview-foot">Per-event P90 red trigger</div>
+      </div>
+      <div class="admin-overview-card">
+        <div class="admin-overview-label">AI Route</div>
+        <div class="admin-overview-value" style="font-size:var(--text-base)">${directCompass ? 'Direct / Browser Session' : 'Proxy / Hosted'}</div>
+        <div class="admin-overview-foot">${sessionLLM.apiUrl || 'No session endpoint saved yet'}</div>
+      </div>
+    </div>
     <div class="card card--elevated">
+      <div class="admin-section-head">
+        <div>
+          <h3>Risk Governance</h3>
+          <p>Set the platform-level triggers used to flag scenarios and guide escalation.</p>
+        </div>
+      </div>
+      <div class="grid-3">
+        <div class="form-group">
+          <label class="form-label" for="admin-warning-threshold">Warning Trigger (USD)</label>
+          <input class="form-input" id="admin-warning-threshold" type="number" min="0" step="100000" value="${settings.warningThresholdUsd}">
+          <span class="form-help">Amber signal when per-event P90 reaches this value.</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="admin-tolerance-threshold">Tolerance Threshold (USD)</label>
+          <input class="form-input" id="admin-tolerance-threshold" type="number" min="0" step="100000" value="${settings.toleranceThresholdUsd}">
+          <span class="form-help">Red trigger when per-event P90 exceeds this value.</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="admin-annual-threshold">Annual Review Trigger (USD)</label>
+          <input class="form-input" id="admin-annual-threshold" type="number" min="0" step="100000" value="${settings.annualReviewThresholdUsd}">
+          <span class="form-help">Used to flag high annual exposure in the results view.</span>
+        </div>
+      </div>
+      <div class="form-group mt-4">
+        <label class="form-label" for="admin-escalation-guidance">Escalation Guidance</label>
+        <textarea class="form-textarea" id="admin-escalation-guidance" rows="3">${settings.escalationGuidance}</textarea>
+      </div>
+      <div class="form-group mt-4">
+        <label class="form-label" for="admin-appetite">Risk Appetite Statement</label>
+        <textarea class="form-textarea" id="admin-appetite" rows="4">${settings.riskAppetiteStatement}</textarea>
+      </div>
+      <div class="admin-section-head mt-5">
+        <div>
+          <h3>Default Context</h3>
+          <p>These values pre-populate the AI-assisted risk builder for new and in-progress assessments.</p>
+        </div>
+      </div>
       <div class="grid-2">
         <div class="form-group">
           <label class="form-label" for="admin-geo">Default Geography</label>
@@ -1447,8 +1550,8 @@ function renderAdminSettings() {
         </div>
       </div>
       <div class="form-group mt-4">
-        <label class="form-label" for="admin-appetite">Risk Appetite Statement</label>
-        <textarea class="form-textarea" id="admin-appetite" rows="4">${settings.riskAppetiteStatement}</textarea>
+        <label class="form-label" for="admin-context-summary">Admin Context Summary</label>
+        <textarea class="form-textarea" id="admin-context-summary" rows="2">${settings.adminContextSummary}</textarea>
       </div>
       <div class="form-group mt-4">
         <label class="form-label">Applicable Regulations</label>
@@ -1458,13 +1561,18 @@ function renderAdminSettings() {
         <label class="form-label" for="admin-ai-instructions">AI Guidance</label>
         <textarea class="form-textarea" id="admin-ai-instructions" rows="3">${settings.aiInstructions}</textarea>
       </div>
+      <div class="admin-inline-actions mt-4">
+        <a class="btn btn--secondary" href="#/admin/bu">Manage Business Units</a>
+        <a class="btn btn--secondary" href="#/admin/docs">Manage Documents</a>
+      </div>
       <div class="card mt-5" style="padding:var(--sp-5);background:var(--bg-elevated)">
         <div class="context-panel-title">Compass Session Access</div>
-        <p class="context-panel-copy">For testing only. This key is stored in <code>sessionStorage</code> for the current browser session and is still visible to anyone with browser access.</p>
+        <p class="context-panel-copy">${directCompass ? 'Use direct Compass access for temporary testing only. For production, prefer a hosted proxy URL such as the Vercel endpoint.' : 'A hosted proxy URL is configured. Leave the browser key blank and test through the proxy.'}</p>
         <div class="grid-2 mt-4">
           <div class="form-group">
             <label class="form-label" for="admin-compass-url">Compass URL</label>
             <input class="form-input" id="admin-compass-url" value="${sessionLLM.apiUrl || 'https://api.core42.ai/v1/chat/completions'}">
+            <span class="form-help">Use <code>https://risk-calculator-eight.vercel.app/api/compass</code> for the hosted proxy path.</span>
           </div>
           <div class="form-group">
             <label class="form-label" for="admin-compass-model">Model</label>
@@ -1474,6 +1582,7 @@ function renderAdminSettings() {
         <div class="form-group mt-4">
           <label class="form-label" for="admin-compass-key">Compass API Key</label>
           <input class="form-input" id="admin-compass-key" type="password" value="${sessionLLM.apiKey || ''}" placeholder="Paste key for this browser session">
+          <span class="form-help">Leave blank when using the hosted proxy. Only use a browser key for temporary direct testing.</span>
         </div>
         <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
           <button class="btn btn--secondary" id="btn-save-session-llm">Save Session Key</button>
@@ -1491,12 +1600,28 @@ function renderAdminSettings() {
   document.getElementById('btn-admin-logout').addEventListener('click', () => { AuthService.adminLogout(); Router.navigate('/admin'); });
   const regsInput = UI.tagInput('ti-admin-regulations', settings.applicableRegulations);
   document.getElementById('btn-save-settings').addEventListener('click', () => {
+    const warningThresholdUsd = Math.max(0, parseFloat(document.getElementById('admin-warning-threshold').value) || DEFAULT_ADMIN_SETTINGS.warningThresholdUsd);
+    const toleranceThresholdUsd = Math.max(0, parseFloat(document.getElementById('admin-tolerance-threshold').value) || TOLERANCE_THRESHOLD);
+    const annualReviewThresholdUsd = Math.max(0, parseFloat(document.getElementById('admin-annual-threshold').value) || DEFAULT_ADMIN_SETTINGS.annualReviewThresholdUsd);
+    if (warningThresholdUsd > toleranceThresholdUsd) {
+      UI.toast('Warning trigger must be less than or equal to the tolerance threshold.', 'warning');
+      return;
+    }
+    if (annualReviewThresholdUsd < toleranceThresholdUsd) {
+      UI.toast('Annual review trigger should be greater than or equal to the tolerance threshold.', 'warning');
+      return;
+    }
     saveAdminSettings({
       geography: document.getElementById('admin-geo').value.trim() || DEFAULT_ADMIN_SETTINGS.geography,
       defaultLinkMode: document.getElementById('admin-link-mode').value === 'yes',
+      toleranceThresholdUsd,
+      warningThresholdUsd,
+      annualReviewThresholdUsd,
       riskAppetiteStatement: document.getElementById('admin-appetite').value.trim() || DEFAULT_ADMIN_SETTINGS.riskAppetiteStatement,
       applicableRegulations: regsInput.getTags(),
-      aiInstructions: document.getElementById('admin-ai-instructions').value.trim()
+      aiInstructions: document.getElementById('admin-ai-instructions').value.trim(),
+      adminContextSummary: document.getElementById('admin-context-summary').value.trim() || DEFAULT_ADMIN_SETTINGS.adminContextSummary,
+      escalationGuidance: document.getElementById('admin-escalation-guidance').value.trim() || DEFAULT_ADMIN_SETTINGS.escalationGuidance
     });
     if (!AppState.draft.geography) AppState.draft.geography = getAdminSettings().geography;
     saveDraft();
@@ -1552,10 +1677,25 @@ function renderAdminBU() {
   const buList = getBUList();
   setPage(adminLayout('bu', `
     <div class="flex items-center justify-between mb-6">
-      <h2>Business Units</h2>
+      <div>
+        <h2>Business Units</h2>
+        <p style="margin-top:6px">Maintain the business context used by the risk builder and FAIR defaults. Keep services, systems, and regulatory tags current so AI suggestions stay relevant.</p>
+      </div>
       <div class="flex gap-3">
         <button class="btn btn--ghost btn--sm" id="btn-reset-bu">Reset Defaults</button>
         <button class="btn btn--primary" id="btn-add-bu">+ Add BU</button>
+      </div>
+    </div>
+    <div class="admin-overview-grid mb-6">
+      <div class="admin-overview-card">
+        <div class="admin-overview-label">Total BUs</div>
+        <div class="admin-overview-value">${buList.length}</div>
+        <div class="admin-overview-foot">Used to pre-fill the first step of the assessment</div>
+      </div>
+      <div class="admin-overview-card">
+        <div class="admin-overview-label">Average Regulatory Tags</div>
+        <div class="admin-overview-value">${buList.length ? (buList.reduce((sum, bu) => sum + (bu.regulatoryTags?.length || 0), 0) / buList.length).toFixed(1) : '0.0'}</div>
+        <div class="admin-overview-foot">Signals how much context each BU carries</div>
       </div>
     </div>
     <div style="overflow-x:auto">
@@ -1633,11 +1773,26 @@ function renderAdminDocs() {
   const docList = getDocList();
   setPage(adminLayout('docs', `
     <div class="flex items-center justify-between mb-6">
-      <h2>Internal Documents</h2>
+      <div>
+        <h2>Internal Documents</h2>
+        <p style="margin-top:6px">Maintain the internal sources used for AI retrieval, citation chips, and richer scenario context.</p>
+      </div>
       <div class="flex gap-3">
         <button class="btn btn--ghost btn--sm" id="btn-reset-docs">Reset Defaults</button>
         <button class="btn btn--secondary btn--sm" id="btn-reindex">⟳ Re-index</button>
         <button class="btn btn--primary" id="btn-add-doc">+ Add Doc</button>
+      </div>
+    </div>
+    <div class="admin-overview-grid mb-6">
+      <div class="admin-overview-card">
+        <div class="admin-overview-label">Indexed Documents</div>
+        <div class="admin-overview-value">${docList.length}</div>
+        <div class="admin-overview-foot">Available for citation and context retrieval</div>
+      </div>
+      <div class="admin-overview-card">
+        <div class="admin-overview-label">Documents Updated This Year</div>
+        <div class="admin-overview-value">${docList.filter(doc => String(doc.lastUpdated || '').startsWith(String(new Date().getFullYear()))).length}</div>
+        <div class="admin-overview-foot">Useful for judging freshness of context sources</div>
       </div>
     </div>
     <div style="overflow-x:auto">

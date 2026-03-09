@@ -681,10 +681,15 @@ input[type="range"]::-webkit-slider-thumb {
   background: rgba(16,185,129,0.08);
   border-color: rgba(16,185,129,0.35);
 }
+.tolerance-banner.warning {
+  background: rgba(245,158,11,0.08);
+  border-color: rgba(245,158,11,0.35);
+}
 .tolerance-icon { font-size: 32px; }
 .tolerance-title { font-size: var(--text-xl); font-weight: var(--font-bold); font-family: var(--font-display); }
 .tolerance-banner.above .tolerance-title { color: var(--color-danger-400); }
 .tolerance-banner.within .tolerance-title { color: var(--color-success-400); }
+.tolerance-banner.warning .tolerance-title { color: var(--color-warning-400); }
 .tolerance-detail { font-size: var(--text-sm); color: var(--text-muted); margin-top: var(--sp-1); }
 
 /* ── LLM Assist Button Loading ───────────────────────────────── */
@@ -887,6 +892,65 @@ canvas { display: block; width: 100%; }
 }
 .admin-nav-link:hover { background: var(--bg-overlay-hover); color: var(--text-primary); }
 .admin-nav-link.active { background: rgba(26,86,219,0.15); color: var(--color-primary-300); }
+
+.admin-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-4);
+}
+
+.admin-overview-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: var(--sp-5);
+}
+
+.admin-overview-label {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: var(--sp-2);
+}
+
+.admin-overview-value {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.admin-overview-foot {
+  margin-top: var(--sp-3);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.admin-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+
+.admin-section-head h3 {
+  font-size: var(--text-xl);
+  margin-bottom: 6px;
+}
+
+.admin-section-head p {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.admin-inline-actions {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
 
 /* ── Toast ───────────────────────────────────────────────────── */
 #toast-container {
