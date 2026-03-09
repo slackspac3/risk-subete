@@ -317,16 +317,16 @@ function renderLanding() {
 
         <!-- Hero -->
         <section class="landing-hero">
-          <div class="landing-badge">🔐 Internal Tool — AI-Assisted Technology, Cyber &amp; Regulatory Risk</div>
+          <div class="landing-badge">🔐 Internal Tool — Start Here</div>
           <h1>Risk Intelligence Platform</h1>
-          <p class="landing-subtitle">An AI-assisted FAIR Monte Carlo workbench for building context, extracting risks from registers, linking related scenarios, and quantifying leadership-level exposure in minutes.</p>
+          <p class="landing-subtitle">Use this guide to turn a plain-English risk idea, issue, or register into a quantified FAIR analysis. You do not need to know FAIR in advance; the platform guides you step by step.</p>
           <div class="flex items-center gap-4" style="flex-wrap:wrap">
-            <button class="btn btn--primary btn--lg" id="btn-start-new">Start New Assessment</button>
-            <button class="btn btn--secondary" id="btn-show-templates">⚡ Use a Scenario Template</button>
+            <button class="btn btn--primary btn--lg" id="btn-start-new">Start Guided Assessment</button>
+            <button class="btn btn--secondary" id="btn-show-templates">⚡ Start from a Template</button>
           </div>
           <div class="flex items-center gap-4 mt-4" style="flex-wrap:wrap">
-            <span style="font-size:.78rem;color:var(--text-muted)">New here?</span>
-            <button class="btn btn--ghost btn--sm" id="btn-how-it-works">How it works →</button>
+            <span style="font-size:.78rem;color:var(--text-muted)">First time using the tool?</span>
+            <button class="btn btn--ghost btn--sm" id="btn-how-it-works">Open quick guide →</button>
           </div>
         </section>
 
@@ -336,10 +336,10 @@ function renderLanding() {
             <h3 style="font-size:var(--text-lg);margin-bottom:var(--sp-5)">How it works</h3>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--sp-5)">
               ${[
-                ['1','Build context','Choose the business unit, geography, and regulatory frame. Paste a risk statement or upload a risk register.'],
-                ['2','Refine the scenario','Use AI to enhance the risk statement, extract candidate risks, and assemble a linked multi-risk scenario.'],
-                ['3','Review FAIR inputs','Adjust the Threat Event Frequency, Vulnerability, and loss component ranges. Toggle between Basic and Advanced mode.'],
-                ['4','Run the simulation','Monte Carlo simulation produces per-event loss, annual exposure, and a tolerance view against the fixed $5M P90 benchmark.']
+                ['1','Describe the issue','Start with a simple risk statement such as “A supplier with privileged access is compromised” or upload a risk register for AI review.'],
+                ['2','Let the platform structure it','The AI builder enhances the wording, identifies candidate risks, and suggests which risks may be linked.'],
+                ['3','Check the assumptions','Review the FAIR inputs. If you are unsure, stay in Basic mode and use the AI-preloaded values as your starting point.'],
+                ['4','Run and interpret results','The simulation shows likely loss ranges, annual exposure, and whether the scenario breaches the fixed tolerance threshold.']
               ].map(([n,title,desc]) => `
                 <div style="display:flex;gap:var(--sp-4)">
                   <div style="width:32px;height:32px;background:rgba(26,86,219,.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;color:var(--color-primary-300);flex-shrink:0">${n}</div>
@@ -348,10 +348,32 @@ function renderLanding() {
             </div>
             <div class="banner banner--info mt-6" style="font-size:.82rem">
               <span class="banner-icon">ℹ</span>
-              <span class="banner-text">This is a <strong>Proof of Concept</strong> tool. FAIR input ranges are illustrative — for production risk decisions, validate inputs through expert elicitation. Results are saved locally in your browser only. Use the share link to send results to colleagues.</span>
+              <span class="banner-text"><strong>Beginner tip:</strong> if you are unsure what to enter, choose a template first or write the scenario in plain English. The tool will help translate it into FAIR-style inputs. Results are saved in your browser only.</span>
             </div>
           </div>
         </div>
+
+        <section style="margin-bottom:var(--sp-8)">
+          <div class="card card--elevated anim-fade-in">
+            <div class="flex items-center justify-between mb-4" style="flex-wrap:wrap;gap:var(--sp-3)">
+              <h3 style="font-size:var(--text-xl)">Quick Start Guide</h3>
+              <span class="badge badge--neutral">For novice users</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--sp-4)">
+              ${[
+                ['What to prepare','A short risk statement, affected business unit, and any known business or regulatory impact.'],
+                ['When to use templates','Use a template when the scenario is similar to ransomware, BEC, insider threat, cloud exposure, or supply chain compromise.'],
+                ['When to upload a register','Upload a register when you want AI to extract multiple risks and let you assess several together.'],
+                ['How to read the result','Focus first on P90 per-event loss, annual exposure, and whether the scenario sits above or within tolerance.']
+              ].map(([title, desc]) => `
+                <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:var(--sp-4)">
+                  <div style="font-weight:600;color:var(--text-primary);margin-bottom:6px">${title}</div>
+                  <p style="font-size:.84rem;line-height:1.6">${desc}</p>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </section>
 
         <!-- Scenario Templates -->
         <div id="templates-panel" class="hidden" style="margin-bottom:var(--sp-8)">
@@ -380,22 +402,22 @@ function renderLanding() {
           <div class="feature-card anim-fade-in anim-delay-1">
             <div class="feature-icon">🤖</div>
             <div class="feature-title">AI Risk Builder</div>
-            <p class="feature-desc">Paste a risk statement or upload a register. AI enhances the narrative, extracts risks, and prepares them for quantification.</p>
+            <p class="feature-desc">Paste a simple description of the risk. The platform helps convert it into a structured assessment.</p>
           </div>
           <div class="feature-card anim-fade-in anim-delay-2">
             <div class="feature-icon">📊</div>
             <div class="feature-title">Monte Carlo Simulation</div>
-            <p class="feature-desc">10,000+ iterations produce per-event loss distributions, annual exposure, and a loss exceedance curve.</p>
+            <p class="feature-desc">The model runs thousands of simulations so you can see a range of possible outcomes instead of a single guessed number.</p>
           </div>
           <div class="feature-card anim-fade-in anim-delay-3">
             <div class="feature-icon">🎯</div>
             <div class="feature-title">Tolerance Flagging</div>
-            <p class="feature-desc">Automatic red/green flag against the $5M per-event threshold. Clear, unambiguous signal for leadership.</p>
+            <p class="feature-desc">The platform shows a clear red or green signal against the fixed tolerance threshold to support escalation decisions.</p>
           </div>
           <div class="feature-card anim-fade-in anim-delay-4">
             <div class="feature-icon">🔗</div>
             <div class="feature-title">Linked Risk Scenarios</div>
-            <p class="feature-desc">Select multiple related risks in one pass and apply linked-scenario uplift when the drivers can cascade across the platform.</p>
+            <p class="feature-desc">Choose several related risks together when one issue can trigger another, such as a cyber event causing regulatory and operational impact.</p>
           </div>
         </div>
 
