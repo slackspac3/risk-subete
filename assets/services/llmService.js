@@ -35,6 +35,11 @@ const LLMService = (() => {
   function _getCompanyContextUrl() {
     if (_isDirectCompassUrl(_compassApiUrl)) return '';
     try {
+      const url = new URL(_compassApiUrl);
+      if (url.pathname.endsWith('/api/compass')) {
+        url.pathname = url.pathname.replace(/\/api\/compass$/, '/api/company-context');
+        return url.toString();
+      }
       return new URL('/api/company-context', _compassApiUrl).toString();
     } catch {
       return '';
