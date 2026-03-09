@@ -350,6 +350,8 @@ Critical services: ${(buContext?.criticalServices || []).join(', ')}
 Geography: ${buContext?.geography || 'Unknown'}
 Benchmark strategy: ${buContext?.benchmarkStrategy || 'Prefer GCC and UAE references, then fall back to best global data with clear explanation.'}
 Company context profile: ${buContext?.companyContextProfile || '(none)'}
+Organisation structure context:
+${buContext?.companyStructureContext || '(none)'}
 
 Risk narrative: ${narrative}
 
@@ -394,6 +396,8 @@ AI guidance: ${input.adminSettings?.aiInstructions || ''}
 Benchmark strategy: ${input.adminSettings?.benchmarkStrategy || ''}
 Admin context summary: ${input.adminSettings?.adminContextSummary || ''}
 Company context profile: ${input.adminSettings?.companyContextProfile || ''}
+Organisation structure context:
+${input.adminSettings?.companyStructureContext || '(none)'}
 Register metadata: ${input.registerMeta ? JSON.stringify(input.registerMeta) : '(none)'}
 
 Risk statement:
@@ -442,6 +446,8 @@ Register metadata: ${input.registerMeta ? JSON.stringify(input.registerMeta) : '
 Benchmark strategy: ${input.adminSettings?.benchmarkStrategy || 'Prefer GCC and UAE references where possible, then use best global data with clear explanation.'}
 Admin context summary: ${input.adminSettings?.adminContextSummary || ''}
 Company context profile: ${input.adminSettings?.companyContextProfile || ''}
+Organisation structure context:
+${input.adminSettings?.companyStructureContext || '(none)'}
 
 Risk register content:
 ${input.registerText || '(none)'}

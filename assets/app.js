@@ -45,6 +45,32 @@ const LEARNING_PARAM_KEYS = [
   'rcLikely'
 ];
 
+const ORG_ENTITY_TYPES = [
+  'Holding company',
+  'Wholly owned subsidiary',
+  'Majority-owned operating company',
+  'Joint venture',
+  'Listed portfolio company (majority stake)',
+  'Listed portfolio company (minority stake)',
+  "Arm's-length business partner",
+  'Department / function'
+];
+
+const TYPICAL_DEPARTMENTS = [
+  'Information Security',
+  'Technology',
+  'Operations',
+  'Finance',
+  'Procurement',
+  'Legal',
+  'Risk & Compliance',
+  'Human Resources',
+  'Internal Audit',
+  'Data & AI',
+  'Commercial',
+  'Shared Services'
+];
+
 function getAssessments() {
   try { return JSON.parse(localStorage.getItem('rq_assessments') || '[]'); } catch { return []; }
 }
@@ -281,7 +307,7 @@ function inferCompanyNameFromUrl(url) {
 
 function renderCompanyStructureSummary(structure = []) {
   if (!structure.length) {
-    return `<div class="form-help">No company structure saved yet. Use the AI company context builder to add a holding company, operating company, or department.</div>`;
+    return `<div class="form-help">No organisation structure saved yet. Add a top-level entity such as a holding company or operating company, then attach subsidiaries, portfolio companies, partners, and departments beneath it.</div>`;
   }
   const byParent = new Map();
   structure.forEach(node => {
@@ -296,11 +322,196 @@ function renderCompanyStructureSummary(structure = []) {
           <span class="badge badge--gold">${node.type}</span>
           <strong style="color:var(--text-primary)">${node.name}</strong>
           ${node.websiteUrl ? `<span class="form-help" style="margin-top:0">${node.websiteUrl}</span>` : ''}
+          <button class="btn btn--ghost btn--sm org-entity-edit" data-org-id="${node.id}" type="button">Edit</button>
+          <button class="btn btn--ghost btn--sm org-entity-delete" data-org-id="${node.id}" type="button">Remove</button>
         </div>
         ${renderNodes(node.id, depth + 1)}
       </div>`).join('');
   }
   return `<div>${renderNodes('root')}</div>`;
+}
+
+function isDepartmentEntityType(type = '') {
+  return String(type).toLowerCase() === 'department / function';
+}
+
+function isCompanyEntityType(type = '') {
+  return !!type && !isDepartmentEntityType(type);
+}
+
+function requiresParentEntity(type = '') {
+  return [
+    'Wholly owned subsidiary',
+    'Majority-owned operating company',
+    'Joint venture',
+    'Listed portfolio company (majority stake)',
+    'Listed portfolio company (minority stake)',
+    "Arm's-length business partner",
+    'Department / function'
+  ].includes(type);
+}
+
+function buildCompanyStructureContext(structure = []) {
+  if (!structure.length) return '';
+  const idToNode = new Map(structure.map(node => [node.id, node]));
+  return structure.map(node => {
+    const parent = node.parentId ? idToNode.get(node.parentId) : null;
+    const parts = [
+      `${node.name} (${node.type})`,
+      parent ? `sits under ${parent.name}` : 'top-level entity'
+    ];
+    if (node.websiteUrl) parts.push(`website: ${node.websiteUrl}`);
+    if (node.departmentHint) parts.push(`department family: ${node.departmentHint}`);
+    if (node.profile) parts.push(`context: ${truncateText(node.profile, 220)}`);
+    return `- ${parts.join(' | ')}`;
+  }).join('\n');
+}
+
+function getRelationshipOptions(structure = [], type = '', excludeId = '') {
+  const nodes = structure.filter(node => node.id !== excludeId);
+  if (isDepartmentEntityType(type)) {
+    return nodes.filter(node => isCompanyEntityType(node.type));
+  }
+  return nodes.filter(node => isCompanyEntityType(node.type));
+}
+
+function buildOrgParentOptions(structure = [], type = '', excludeId = '') {
+  const options = getRelationshipOptions(structure, type, excludeId)
+    .map(node => ({ id: node.id, name: `${node.name} (${node.type})` }));
+  if (!requiresParentEntity(type)) {
+    options.unshift({ id: '', name: 'No parent / top level' });
+  }
+  return options;
+}
+
+function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, onSave }) {
+  const node = existingNode || {};
+  const defaultType = node.type || seed.type || 'Holding company';
+  const defaultName = node.name || seed.name || '';
+  const defaultWebsite = node.websiteUrl || seed.websiteUrl || '';
+  const defaultProfile = node.profile || seed.profile || '';
+  const defaultDepartmentHint = node.departmentHint || seed.departmentHint || '';
+  const body = `
+    <div class="context-panel-copy" style="margin-bottom:12px">Capture how this entity fits into the wider group so later assessments inherit the right business, ownership, and department context.</div>
+    <div class="grid-2" style="gap:12px">
+      <div class="form-group">
+        <label class="form-label" for="org-entity-type">Relationship Type</label>
+        <select class="form-select" id="org-entity-type">
+          ${ORG_ENTITY_TYPES.map(type => `<option value="${type}" ${type === defaultType ? 'selected' : ''}>${type}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="org-entity-name">Entity or Department Name</label>
+        <input class="form-input" id="org-entity-name" value="${defaultName}" placeholder="e.g. Group Holding, Abu Dhabi Operations, Information Security">
+      </div>
+      <div class="form-group" id="org-parent-wrap">
+        <label class="form-label" for="org-parent-id">Parent Business</label>
+        <select class="form-select" id="org-parent-id"></select>
+        <span class="form-help" id="org-parent-help"></span>
+      </div>
+      <div class="form-group" id="org-website-wrap">
+        <label class="form-label" for="org-website-url">Website</label>
+        <input class="form-input" id="org-website-url" value="${defaultWebsite}" placeholder="https://example.com">
+      </div>
+      <div class="form-group" id="org-department-wrap" style="display:none">
+        <label class="form-label" for="org-department-template">Typical Department</label>
+        <select class="form-select" id="org-department-template">
+          <option value="">Choose a typical department or keep a custom name</option>
+          ${TYPICAL_DEPARTMENTS.map(name => `<option value="${name}" ${name === defaultDepartmentHint ? 'selected' : ''}>${name}</option>`).join('')}
+        </select>
+        <span class="form-help">This helps standardise department naming, but you can still use your own wording.</span>
+      </div>
+    </div>
+    <div class="form-group mt-4">
+      <label class="form-label" for="org-profile">Context Summary</label>
+      <textarea class="form-textarea" id="org-profile" rows="7" placeholder="Business profile, strategic role, technology dependence, ownership context, or department remit.">${defaultProfile}</textarea>
+      <span class="form-help" id="org-profile-help">For company entities, this can be built from the public website and then refined by the admin user.</span>
+    </div>
+    <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap" id="org-context-actions">
+      <button class="btn btn--secondary" id="btn-org-build-context" type="button">Build Context from Website</button>
+      <span class="form-help">Use AI to gather website and public-source context before saving.</span>
+    </div>`;
+  const modal = UI.modal({
+    title: existingNode ? 'Edit Organisation Entity' : 'Add Organisation Entity',
+    body,
+    footer: `<button class="btn btn--ghost" id="org-cancel">Cancel</button><button class="btn btn--primary" id="org-save">Save Entity</button>`
+  });
+
+  const typeEl = document.getElementById('org-entity-type');
+  const nameEl = document.getElementById('org-entity-name');
+  const parentEl = document.getElementById('org-parent-id');
+  const parentHelpEl = document.getElementById('org-parent-help');
+  const websiteWrapEl = document.getElementById('org-website-wrap');
+  const websiteEl = document.getElementById('org-website-url');
+  const profileEl = document.getElementById('org-profile');
+  const profileHelpEl = document.getElementById('org-profile-help');
+  const departmentWrapEl = document.getElementById('org-department-wrap');
+  const departmentTemplateEl = document.getElementById('org-department-template');
+  const contextActionsEl = document.getElementById('org-context-actions');
+
+  function refreshEntityEditorState() {
+    const selectedType = typeEl.value;
+    const parentOptions = buildOrgParentOptions(structure, selectedType, node.id);
+    const currentParentId = node.parentId || seed.parentId || '';
+    parentEl.innerHTML = parentOptions.map(option => `<option value="${option.id}" ${option.id === currentParentId ? 'selected' : ''}>${option.name}</option>`).join('');
+    parentEl.disabled = !parentOptions.length;
+    parentHelpEl.textContent = isDepartmentEntityType(selectedType)
+      ? 'Departments and functions must be attached to a business entity.'
+      : requiresParentEntity(selectedType)
+        ? 'This relationship should sit under an existing business or holding entity.'
+        : 'Use a parent when this entity sits within a wider group. Leave top level for the main holding business.';
+    const departmentMode = isDepartmentEntityType(selectedType);
+    departmentWrapEl.style.display = departmentMode ? '' : 'none';
+    websiteWrapEl.style.display = departmentMode ? 'none' : '';
+    contextActionsEl.style.display = departmentMode ? 'none' : '';
+    profileHelpEl.textContent = departmentMode
+      ? 'Describe what this department owns, supports, or controls within the business.'
+      : 'Capture public business profile, ownership context, strategic role, and major risk signals for this entity.';
+  }
+
+  typeEl.addEventListener('change', refreshEntityEditorState);
+  departmentTemplateEl.addEventListener('change', () => {
+    if (departmentTemplateEl.value && (!nameEl.value.trim() || TYPICAL_DEPARTMENTS.includes(nameEl.value.trim()))) {
+      nameEl.value = departmentTemplateEl.value;
+    }
+  });
+  document.getElementById('org-cancel').addEventListener('click', () => modal.close());
+  document.getElementById('org-save').addEventListener('click', () => {
+    const selectedType = typeEl.value;
+    const parentId = parentEl.value;
+    if (requiresParentEntity(selectedType) && !parentId) {
+      UI.toast(isDepartmentEntityType(selectedType) ? 'Choose the business this department sits under.' : 'Choose the parent business for this entity.', 'warning');
+      return;
+    }
+    const name = nameEl.value.trim();
+    if (!name) {
+      UI.toast(isDepartmentEntityType(selectedType) ? 'Enter the department or function name.' : 'Enter the entity name.', 'warning');
+      return;
+    }
+    onSave?.({
+      ...node,
+      id: node.id || `org_${Date.now()}`,
+      type: selectedType,
+      name,
+      parentId: parentId || null,
+      websiteUrl: isDepartmentEntityType(selectedType) ? '' : websiteEl.value.trim(),
+      profile: profileEl.value.trim(),
+      departmentHint: isDepartmentEntityType(selectedType) ? (departmentTemplateEl.value || name) : ''
+    }, modal);
+  });
+  refreshEntityEditorState();
+  return {
+    close: modal.close,
+    setProfile(value) { profileEl.value = value || ''; },
+    setWebsite(value) { websiteEl.value = value || ''; },
+    setName(value) { nameEl.value = value || ''; },
+    setType(value) {
+      if (ORG_ENTITY_TYPES.includes(value)) {
+        typeEl.value = value;
+        refreshEntityEditorState();
+      }
+    }
+  };
 }
 
 function getSessionLLMConfig() {
@@ -1284,7 +1495,10 @@ async function runIntakeAssist() {
       geography: document.getElementById('wizard-geo')?.value.trim() || AppState.draft.geography,
       applicableRegulations: deriveApplicableRegulations(bu, getSelectedRisks()),
       citations,
-      adminSettings: getAdminSettings()
+      adminSettings: {
+        ...getAdminSettings(),
+        companyStructureContext: buildCompanyStructureContext(getAdminSettings().companyStructure)
+      }
     });
     AppState.draft.llmAssisted = true;
     AppState.draft.enhancedNarrative = result.enhancedStatement || narrative;
@@ -1322,7 +1536,10 @@ async function analyseUploadedRegister() {
       businessUnit: bu,
       geography: AppState.draft.geography,
       applicableRegulations: AppState.draft.applicableRegulations || [],
-      adminSettings: getAdminSettings()
+      adminSettings: {
+        ...getAdminSettings(),
+        companyStructureContext: buildCompanyStructureContext(getAdminSettings().companyStructure)
+      }
     });
     const parsedFallback = parseRegisterText(AppState.draft.registerFindings).map(title => ({ title, source: 'register' }));
     const extractedRisks = result.risks || parsedFallback;
@@ -1449,7 +1666,8 @@ async function runLLMAssist() {
       regulatoryTags: deriveApplicableRegulations(bu, getSelectedRisks()),
       geography: AppState.draft.geography,
       benchmarkStrategy: getAdminSettings().benchmarkStrategy,
-      companyContextProfile: getAdminSettings().companyContextProfile
+      companyContextProfile: getAdminSettings().companyContextProfile,
+      companyStructureContext: buildCompanyStructureContext(getAdminSettings().companyStructure)
     }, citations);
     AppState.draft.scenarioTitle = result.scenarioTitle;
     AppState.draft.structuredScenario = result.structuredScenario;
@@ -2189,9 +2407,48 @@ function renderAdminSettings() {
         <div class="admin-overview-value" style="font-size:var(--text-base)">${directCompass ? 'Direct / Browser Session' : 'Proxy / Hosted'}</div>
         <div class="admin-overview-foot">${sessionLLM.apiUrl || 'No session endpoint saved yet'}</div>
       </div>
+      <div class="admin-overview-card">
+        <div class="admin-overview-label">Organisation Entities</div>
+        <div class="admin-overview-value">${companyStructure.length}</div>
+        <div class="admin-overview-foot">Used to shape company context and later risk evaluations</div>
+      </div>
     </div>
     <div class="card card--elevated">
       <div class="admin-section-head">
+        <div>
+          <h3>Organisation Tree</h3>
+          <p>Start here. Build the group structure that later AI-assisted assessments should understand and reuse.</p>
+        </div>
+      </div>
+      <div class="card" style="padding:var(--sp-5);background:var(--bg-elevated)">
+        <div class="context-panel-title">Add Businesses, Portfolio Entities, Partners, and Departments</div>
+        <p class="context-panel-copy">Use industry-standard relationship types for the wider group. Departments must always sit under a business entity. Company entities can be enriched from public website context before saving.</p>
+        <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
+          <button class="btn btn--secondary" id="btn-add-org-entity">Add Entity</button>
+          <span class="form-help">Context is stored locally in this browser and reused by the AI-assisted intake, register analysis, and scenario drafting steps.</span>
+        </div>
+        <div id="admin-company-structure-summary" class="mt-4">${renderCompanyStructureSummary(companyStructure)}</div>
+      </div>
+      <div class="card mt-4" style="padding:var(--sp-5);background:var(--bg-elevated)">
+        <div class="context-panel-title">AI Company Context Builder</div>
+        <p class="context-panel-copy">Build public context for a company website, then place it into the organisation tree as a holding company, subsidiary, portfolio company, partner, or operating business.</p>
+        <div class="grid-2 mt-4">
+          <div class="form-group">
+            <label class="form-label" for="admin-company-url">Company Website URL</label>
+            <input class="form-input" id="admin-company-url" value="${settings.companyWebsiteUrl || ''}" placeholder="https://example.com">
+            <span class="form-help">Works through the hosted proxy. Direct browser-to-Compass mode cannot build website context.</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="admin-company-profile">Company Risk Context Profile</label>
+            <textarea class="form-textarea" id="admin-company-profile" rows="6" placeholder="Public business profile, operating model, technology exposure, and likely risk signals.">${settings.companyContextProfile || ''}</textarea>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
+          <button class="btn btn--secondary" id="btn-build-company-context">Build from Website</button>
+          <span class="form-help">This opens a review step so you can decide where the entity sits in the group.</span>
+        </div>
+      </div>
+      <div class="admin-section-head mt-5">
         <div>
           <h3>Risk Governance</h3>
           <p>Set the platform-level triggers used to flag scenarios and guide escalation.</p>
@@ -2245,30 +2502,6 @@ function renderAdminSettings() {
         <label class="form-label" for="admin-context-summary">Admin Context Summary</label>
         <textarea class="form-textarea" id="admin-context-summary" rows="2">${settings.adminContextSummary}</textarea>
       </div>
-      <div class="card mt-5" style="padding:var(--sp-5);background:var(--bg-elevated)">
-        <div class="context-panel-title">AI Company Context Builder</div>
-        <p class="context-panel-copy">Enter a company website and let the hosted AI builder gather public context from the site to shape the business profile, likely regulations, and AI guidance. This is based on public web material only.</p>
-        <div class="grid-2 mt-4">
-          <div class="form-group">
-            <label class="form-label" for="admin-company-url">Company Website URL</label>
-            <input class="form-input" id="admin-company-url" value="${settings.companyWebsiteUrl || ''}" placeholder="https://example.com">
-            <span class="form-help">Works through the hosted proxy. Direct browser-to-Compass mode cannot build website context.</span>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="admin-company-profile">Company Risk Context Profile</label>
-            <textarea class="form-textarea" id="admin-company-profile" rows="6" placeholder="Public business profile, operating model, technology exposure, and likely risk signals.">${settings.companyContextProfile || ''}</textarea>
-          </div>
-        </div>
-        <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
-          <button class="btn btn--secondary" id="btn-build-company-context">Build from Website</button>
-          <span class="form-help">The result can be reviewed and edited before you save settings.</span>
-        </div>
-      </div>
-      <div class="card mt-4" style="padding:var(--sp-5);background:var(--bg-elevated)">
-        <div class="context-panel-title">Company Structure Map</div>
-        <p class="context-panel-copy">Built entities can be classified into your organisation structure and reused later.</p>
-        <div id="admin-company-structure-summary" class="mt-3">${renderCompanyStructureSummary(companyStructure)}</div>
-      </div>
       <div class="form-group mt-4">
         <label class="form-label">Applicable Regulations</label>
         <div class="tag-input-wrap" id="ti-admin-regulations"></div>
@@ -2320,6 +2553,118 @@ function renderAdminSettings() {
 
   document.getElementById('btn-admin-logout').addEventListener('click', () => { AuthService.adminLogout(); Router.navigate('/admin'); });
   const regsInput = UI.tagInput('ti-admin-regulations', settings.applicableRegulations);
+  const structureSummaryEl = document.getElementById('admin-company-structure-summary');
+  const profileEl = document.getElementById('admin-company-profile');
+  const websiteEl = document.getElementById('admin-company-url');
+
+  function refreshStructureSummary() {
+    structureSummaryEl.innerHTML = renderCompanyStructureSummary(companyStructure);
+    bindStructureActionHandlers();
+  }
+
+  function upsertCompanyStructureNode(node) {
+    const index = companyStructure.findIndex(item => item.id === node.id);
+    if (index > -1) companyStructure[index] = node;
+    else companyStructure.push(node);
+    refreshStructureSummary();
+  }
+
+  function openEntityEditor(existingNode = null, seed = {}) {
+    const editor = openOrgEntityEditor({
+      structure: companyStructure,
+      existingNode,
+      seed,
+      onSave: (node, modal) => {
+        upsertCompanyStructureNode(node);
+        if (node.profile) profileEl.value = node.profile;
+        if (node.websiteUrl) websiteEl.value = node.websiteUrl;
+        modal.close();
+        UI.toast(`${node.name} saved to the organisation tree.`, 'success', 5000);
+      }
+    });
+    const buildContextBtn = document.getElementById('btn-org-build-context');
+    if (buildContextBtn) {
+      buildContextBtn.addEventListener('click', async () => {
+        const llmConfig = {
+          apiUrl: document.getElementById('admin-compass-url').value.trim() || 'https://api.core42.ai/v1/chat/completions',
+          model: document.getElementById('admin-compass-model').value.trim() || 'gpt-5.1',
+          apiKey: document.getElementById('admin-compass-key').value.trim()
+        };
+        const targetUrl = document.getElementById('org-website-url').value.trim();
+        if (!targetUrl) {
+          UI.toast('Enter a company website URL first.', 'warning');
+          return;
+        }
+        buildContextBtn.disabled = true;
+        buildContextBtn.textContent = 'Building context…';
+        try {
+          LLMService.setCompassConfig(llmConfig);
+          const result = await LLMService.buildCompanyContext(targetUrl);
+          const profileText = [
+            result.companySummary,
+            result.businessProfile,
+            result.riskSignals?.length ? `Key public risk signals: ${result.riskSignals.join('; ')}` : '',
+            result.sources?.length ? `Sources reviewed: ${result.sources.map(source => source.url).join(', ')}` : ''
+          ].filter(Boolean).join('\n\n');
+          editor.setProfile(profileText);
+          if (!document.getElementById('org-entity-name').value.trim()) {
+            editor.setName(inferCompanyNameFromUrl(targetUrl));
+          }
+          if (Array.isArray(result.regulatorySignals) && result.regulatorySignals.length) {
+            regsInput.setTags(Array.from(new Set([...regsInput.getTags(), ...result.regulatorySignals])));
+          }
+          if (result.aiGuidance) {
+            document.getElementById('admin-ai-instructions').value = result.aiGuidance;
+          }
+          if (result.suggestedGeography && !document.getElementById('admin-geo').value.trim()) {
+            document.getElementById('admin-geo').value = result.suggestedGeography;
+          }
+          UI.toast('Company context built. Review the entity details and save it into the organisation tree.', 'success', 5000);
+        } catch (error) {
+          UI.toast('Company context build failed: ' + error.message, 'danger', 6000);
+        } finally {
+          buildContextBtn.disabled = false;
+          buildContextBtn.textContent = 'Build Context from Website';
+        }
+      });
+    }
+  }
+
+  function bindStructureActionHandlers() {
+    structureSummaryEl.querySelectorAll('.org-entity-edit').forEach(button => {
+      button.addEventListener('click', () => {
+        const target = companyStructure.find(node => node.id === button.dataset.orgId);
+        if (target) openEntityEditor(target);
+      });
+    });
+    structureSummaryEl.querySelectorAll('.org-entity-delete').forEach(button => {
+      button.addEventListener('click', async () => {
+        const targetId = button.dataset.orgId;
+        const target = companyStructure.find(node => node.id === targetId);
+        if (!target) return;
+        if (!await UI.confirm(`Remove ${target.name} and anything nested beneath it from the organisation tree?`)) return;
+        const removeIds = new Set([targetId]);
+        let changed = true;
+        while (changed) {
+          changed = false;
+          companyStructure.forEach(node => {
+            if (node.parentId && removeIds.has(node.parentId) && !removeIds.has(node.id)) {
+              removeIds.add(node.id);
+              changed = true;
+            }
+          });
+        }
+        for (let i = companyStructure.length - 1; i >= 0; i -= 1) {
+          if (removeIds.has(companyStructure[i].id)) companyStructure.splice(i, 1);
+        }
+        refreshStructureSummary();
+        UI.toast(`${target.name} removed from the organisation tree.`, 'success');
+      });
+    });
+  }
+
+  document.getElementById('btn-add-org-entity').addEventListener('click', () => openEntityEditor());
+  bindStructureActionHandlers();
   document.getElementById('btn-save-settings').addEventListener('click', () => {
     const warningThresholdUsd = Math.max(0, parseFloat(document.getElementById('admin-warning-threshold').value) || DEFAULT_ADMIN_SETTINGS.warningThresholdUsd);
     const toleranceThresholdUsd = Math.max(0, parseFloat(document.getElementById('admin-tolerance-threshold').value) || TOLERANCE_THRESHOLD);
@@ -2354,7 +2699,7 @@ function renderAdminSettings() {
   });
   document.getElementById('btn-build-company-context').addEventListener('click', async () => {
     const btn = document.getElementById('btn-build-company-context');
-    const websiteUrl = document.getElementById('admin-company-url').value.trim();
+    const websiteUrl = websiteEl.value.trim();
     const llmConfig = {
       apiUrl: document.getElementById('admin-compass-url').value.trim() || 'https://api.core42.ai/v1/chat/completions',
       model: document.getElementById('admin-compass-model').value.trim() || 'gpt-5.1',
@@ -2375,7 +2720,7 @@ function renderAdminSettings() {
         result.riskSignals?.length ? `Key public risk signals: ${result.riskSignals.join('; ')}` : '',
         result.sources?.length ? `Sources reviewed: ${result.sources.map(source => source.url).join(', ')}` : ''
       ].filter(Boolean).join('\n\n');
-      document.getElementById('admin-company-profile').value = profileText;
+      profileEl.value = profileText;
       if (!document.getElementById('admin-context-summary').value.trim()) {
         document.getElementById('admin-context-summary').value = result.companySummary || '';
       }
@@ -2388,62 +2733,13 @@ function renderAdminSettings() {
       if (Array.isArray(result.regulatorySignals) && result.regulatorySignals.length) {
         regsInput.setTags(Array.from(new Set([...regsInput.getTags(), ...result.regulatorySignals])));
       }
-      const suggestedName = inferCompanyNameFromUrl(websiteUrl);
-      const parentOptions = [{ id: '', name: 'No parent / top level' }, ...companyStructure.map(node => ({ id: node.id, name: `${node.name} (${node.type})` }))];
-      const modal = UI.modal({
-        title: 'Review Company Context',
-        body: `
-          <div class="context-panel-copy" style="margin-bottom:12px">${result.companySummary || 'AI built a public company context profile.'}</div>
-          <div class="grid-2" style="gap:12px">
-            <div class="form-group">
-              <label class="form-label" for="ctx-entity-name">Entity Name</label>
-              <input class="form-input" id="ctx-entity-name" value="${suggestedName}">
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="ctx-entity-type">Entity Type</label>
-              <select class="form-select" id="ctx-entity-type">
-                <option value="Holding Company">Holding Company</option>
-                <option value="Operating Company">Operating Company</option>
-                <option value="Department">Department</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="ctx-parent">Parent Entity</label>
-              <select class="form-select" id="ctx-parent">
-                ${parentOptions.map(option => `<option value="${option.id}">${option.name}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="ctx-url">Website</label>
-              <input class="form-input" id="ctx-url" value="${websiteUrl}">
-            </div>
-          </div>
-          <div class="form-group mt-4">
-            <label class="form-label" for="ctx-profile-preview">AI Context Summary</label>
-            <textarea class="form-textarea" id="ctx-profile-preview" rows="8">${profileText}</textarea>
-          </div>`,
-        footer: `<button class="btn btn--ghost" id="ctx-cancel">Cancel</button><button class="btn btn--primary" id="ctx-save">Save Entity Context</button>`
+      openEntityEditor(null, {
+        name: inferCompanyNameFromUrl(websiteUrl),
+        websiteUrl,
+        profile: profileText,
+        type: 'Holding company'
       });
-      document.getElementById('ctx-cancel').addEventListener('click', () => modal.close());
-      document.getElementById('ctx-save').addEventListener('click', () => {
-        const entityName = document.getElementById('ctx-entity-name').value.trim() || suggestedName || 'New Entity';
-        const entityType = document.getElementById('ctx-entity-type').value;
-        const parentId = document.getElementById('ctx-parent').value;
-        const profile = document.getElementById('ctx-profile-preview').value.trim();
-        companyStructure.push({
-          id: `org_${Date.now()}`,
-          name: entityName,
-          type: entityType,
-          parentId: parentId || null,
-          websiteUrl: document.getElementById('ctx-url').value.trim(),
-          profile
-        });
-        document.getElementById('admin-company-profile').value = profile;
-        document.getElementById('admin-company-structure-summary').innerHTML = renderCompanyStructureSummary(companyStructure);
-        modal.close();
-        UI.toast(`Saved ${entityType.toLowerCase()} context for ${entityName}.`, 'success', 5000);
-      });
-      UI.toast('Company context built from the public website. Review and classify it in the next step.', 'success', 5000);
+      UI.toast('Company context built from public sources. Review the entity and place it into the organisation tree.', 'success', 5000);
     } catch (error) {
       UI.toast('Company context build failed: ' + error.message, 'danger', 6000);
     } finally {
