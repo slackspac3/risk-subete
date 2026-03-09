@@ -46,14 +46,14 @@ const UI = (() => {
   // ─── Citation Modal ───────────────────────────────────────
   function citationModal(doc) {
     modal({
-      title: `?? ${doc.title}`,
+      title: `Source: ${doc.title}`,
       body: `
         <div style="margin-bottom:12px">
           <span class="badge badge--neutral">${doc.lastUpdated || 'Unknown date'}</span>
           ${(doc.tags || []).map(t => `<span class="badge badge--primary" style="margin-left:4px">${t}</span>`).join('')}
         </div>
         <p style="line-height:1.8; font-size:0.9rem; color: var(--text-secondary)">${doc.excerpt || doc.contentExcerpt || 'No excerpt available.'}</p>
-        ${doc.url && doc.url !== '#/admin/docs' ? `<div style="margin-top:16px"><a href="${doc.url}" target="_blank" class="btn btn--secondary btn--sm">?? Open document</a></div>` : ''}
+        ${doc.url && doc.url !== '#/admin/docs' ? `<div style="margin-top:16px"><a href="${doc.url}" target="_blank" class="btn btn--secondary btn--sm">Open document</a></div>` : ''}
       `
     });
   }
@@ -61,7 +61,7 @@ const UI = (() => {
   // ─── Stepper ──────────────────────────────────────────────
   function renderStepper(currentStep) {
     const steps = [
-      { n: 1, label: 'Business Unit' },
+      { n: 1, label: 'Risk Builder' },
       { n: 2, label: 'Scenario' },
       { n: 3, label: 'FAIR Inputs' },
       { n: 4, label: 'Review & Run' }

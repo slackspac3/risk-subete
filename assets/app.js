@@ -7,6 +7,13 @@
 
 const TOLERANCE_THRESHOLD = 5_000_000;
 const DEFAULT_FX_RATE = 3.6725;
+const DEFAULT_ADMIN_SETTINGS = {
+  geography: 'United Arab Emirates',
+  riskAppetiteStatement: 'Moderate. Escalate risks that threaten regulated operations, cross-border data movement, or strategic platforms.',
+  applicableRegulations: ['UAE PDPL', 'BIS Export Controls', 'OFAC Sanctions', 'UAE Cybersecurity Council Guidance'],
+  aiInstructions: 'Prioritise operational, regulatory, and strategic impact. Use British English.',
+  defaultLinkMode: true
+};
 
 const AppState = {
   currency: 'USD',
@@ -45,9 +52,44 @@ function resetDraft() {
     narrative: '', structuredScenario: null,
     scenarioTitle: '', llmAssisted: false,
     citations: [], recommendations: [],
-    fairParams: {}, results: null
+    fairParams: {}, results: null,
+    geography: DEFAULT_ADMIN_SETTINGS.geography,
+    selectedRisks: [],
+    enhancedNarrative: '',
+    uploadedRegisterName: '',
+    registerFindings: '',
+    linkedRisks: DEFAULT_ADMIN_SETTINGS.defaultLinkMode,
+    applicableRegulations: [...DEFAULT_ADMIN_SETTINGS.applicableRegulations],
+    intakeSummary: '',
+    linkAnalysis: ''
   };
   saveDraft();
+}
+
+function ensureDraftShape() {
+  AppState.draft = {
+    id: AppState.draft.id || 'a_' + Date.now(),
+    buId: AppState.draft.buId || null,
+    buName: AppState.draft.buName || null,
+    contextNotes: AppState.draft.contextNotes || '',
+    narrative: AppState.draft.narrative || '',
+    structuredScenario: AppState.draft.structuredScenario || null,
+    scenarioTitle: AppState.draft.scenarioTitle || '',
+    llmAssisted: !!AppState.draft.llmAssisted,
+    citations: Array.isArray(AppState.draft.citations) ? AppState.draft.citations : [],
+    recommendations: Array.isArray(AppState.draft.recommendations) ? AppState.draft.recommendations : [],
+    fairParams: AppState.draft.fairParams || {},
+    results: AppState.draft.results || null,
+    geography: AppState.draft.geography || DEFAULT_ADMIN_SETTINGS.geography,
+    selectedRisks: Array.isArray(AppState.draft.selectedRisks) ? AppState.draft.selectedRisks : [],
+    enhancedNarrative: AppState.draft.enhancedNarrative || '',
+    uploadedRegisterName: AppState.draft.uploadedRegisterName || '',
+    registerFindings: AppState.draft.registerFindings || '',
+    linkedRisks: AppState.draft.linkedRisks != null ? !!AppState.draft.linkedRisks : DEFAULT_ADMIN_SETTINGS.defaultLinkMode,
+    applicableRegulations: Array.isArray(AppState.draft.applicableRegulations) ? AppState.draft.applicableRegulations : [...DEFAULT_ADMIN_SETTINGS.applicableRegulations],
+    intakeSummary: AppState.draft.intakeSummary || '',
+    linkAnalysis: AppState.draft.linkAnalysis || ''
+  };
 }
 
 function getBUList() {
@@ -73,6 +115,28 @@ function saveDocList(list) {
   RAGService.init(list, getBUList());
 }
 
+function getAdminSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('rq_admin_settings') || 'null') || {};
+    return {
+      ...DEFAULT_ADMIN_SETTINGS,
+      ...saved,
+      applicableRegulations: Array.isArray(saved.applicableRegulations) ? saved.applicableRegulations : [...DEFAULT_ADMIN_SETTINGS.applicableRegulations]
+    };
+  } catch {
+    return { ...DEFAULT_ADMIN_SETTINGS, applicableRegulations: [...DEFAULT_ADMIN_SETTINGS.applicableRegulations] };
+  }
+}
+
+function saveAdminSettings(settings) {
+  const merged = {
+    ...DEFAULT_ADMIN_SETTINGS,
+    ...settings,
+    applicableRegulations: Array.isArray(settings.applicableRegulations) ? settings.applicableRegulations : [...DEFAULT_ADMIN_SETTINGS.applicableRegulations]
+  };
+  localStorage.setItem('rq_admin_settings', JSON.stringify(merged));
+}
+
 function fmtCurrency(usdValue) {
   if (AppState.currency === 'AED') {
     const v = usdValue * AppState.fxRate;
@@ -95,17 +159,133 @@ async function loadJSON(path) {
   return res.json();
 }
 
+function slugify(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50);
+}
+
+function normaliseRisk(risk, source = 'manual') {
+  const title = String(risk?.title || risk?.name || risk || '').trim();
+  if (!title) return null;
+  return {
+    id: risk?.id || ('risk-' + slugify(title) + '-' + Math.random().toString(36).slice(2, 7)),
+    title,
+    category: risk?.category || 'General',
+    description: risk?.description || '',
+    source: risk?.source || source,
+    regulations: Array.isArray(risk?.regulations) ? risk.regulations : [],
+    linkedTo: Array.isArray(risk?.linkedTo) ? risk.linkedTo : []
+  };
+}
+
+function mergeRisks(existing, incoming) {
+  const map = new Map();
+  [...existing, ...incoming]
+    .map(r => normaliseRisk(r))
+    .filter(Boolean)
+    .forEach(r => {
+      const key = r.title.toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, r);
+        return;
+      }
+      const prev = map.get(key);
+      map.set(key, {
+        ...prev,
+        ...r,
+        regulations: Array.from(new Set([...(prev.regulations || []), ...(r.regulations || [])])),
+        linkedTo: Array.from(new Set([...(prev.linkedTo || []), ...(r.linkedTo || [])]))
+      });
+    });
+  return Array.from(map.values());
+}
+
+function getSelectedRisks() {
+  return (AppState.draft.selectedRisks || []).filter(Boolean);
+}
+
+function getScenarioMultipliers() {
+  const riskCount = Math.max(1, getSelectedRisks().length);
+  const linked = !!AppState.draft.linkedRisks && riskCount > 1;
+  return {
+    riskCount,
+    linked,
+    tefMultiplier: 1 + (riskCount - 1) * (linked ? 0.35 : 0.18),
+    lossMultiplier: 1 + (riskCount - 1) * (linked ? 0.22 : 0.10),
+    secondaryMultiplier: 1 + (riskCount - 1) * (linked ? 0.25 : 0.08)
+  };
+}
+
+function deriveApplicableRegulations(bu, selectedRisks = []) {
+  const settings = getAdminSettings();
+  const tags = [
+    ...settings.applicableRegulations,
+    ...(AppState.draft.applicableRegulations || []),
+    ...(bu?.regulatoryTags || []),
+    ...selectedRisks.flatMap(r => r.regulations || [])
+  ].filter(Boolean);
+  return Array.from(new Set(tags));
+}
+
+function buildScenarioNarrative() {
+  const selected = getSelectedRisks();
+  const titles = selected.map(r => r.title);
+  const intro = AppState.draft.enhancedNarrative || AppState.draft.narrative || '';
+  if (!titles.length) return intro;
+  const linkage = AppState.draft.linkedRisks && titles.length > 1
+    ? 'These risks should be treated as linked and capable of cascading into one another.'
+    : 'These risks may be assessed together but should be treated as distinct drivers.';
+  return `${intro}\n\nSelected risks:\n- ${titles.join('\n- ')}\n\n${linkage}`.trim();
+}
+
+function guessRisksFromText(text) {
+  const source = String(text || '').toLowerCase();
+  const patterns = [
+    ['Ransomware attack on critical platforms', 'Cyber', ['UAE PDPL']],
+    ['Cloud misconfiguration exposing sensitive data', 'Cloud', ['UAE PDPL']],
+    ['Data breach involving regulated or personal data', 'Data Protection', ['UAE PDPL', 'GDPR']],
+    ['Insider misuse of privileged access', 'Insider Threat', ['UAE Cybersecurity Council Guidance']],
+    ['Third-party or supply chain compromise', 'Third Party', ['BIS Export Controls']],
+    ['Export control or sanctions breach', 'Regulatory', ['BIS Export Controls', 'OFAC Sanctions']],
+    ['Operational outage affecting core services', 'Operational Resilience', ['UAE NESA IAS']],
+    ['Fraud or payment manipulation event', 'Financial Crime', ['UAE AML/CFT']]
+  ];
+  const found = patterns.filter(([title]) => {
+    const key = title.toLowerCase();
+    return source.includes('ransom') && key.includes('ransom')
+      || source.includes('cloud') && key.includes('cloud')
+      || (source.includes('breach') || source.includes('privacy')) && key.includes('data breach')
+      || (source.includes('insider') || source.includes('privileged')) && key.includes('insider')
+      || (source.includes('vendor') || source.includes('supplier') || source.includes('third')) && key.includes('third-party')
+      || (source.includes('export') || source.includes('sanction') || source.includes('bis')) && key.includes('export control')
+      || (source.includes('outage') || source.includes('availability') || source.includes('disruption')) && key.includes('operational outage')
+      || (source.includes('fraud') || source.includes('payment') || source.includes('invoice')) && key.includes('fraud');
+  }).map(([title, category, regulations]) => ({ title, category, regulations, description: 'Extracted from the provided narrative or risk register.' }));
+  return found.length ? found : [{ title: 'Technology and cyber risk requiring further triage', category: 'General', regulations: [] }];
+}
+
+function parseRegisterText(text) {
+  return String(text || '')
+    .split(/\r?\n|;/)
+    .map(line => line.trim())
+    .filter(line => line && !/^risk[\s,_-]*id/i.test(line) && line.length > 10)
+    .slice(0, 25);
+}
+
 // ─── APP BAR ──────────────────────────────────────────────────
 function renderAppBar() {
   const bar = document.getElementById('app-bar');
   bar.innerHTML = `
     <div class="bar-inner">
-      <a href="#/" class="bar-logo">G42 <span>Risk</span>Q</a>
+      <a href="#/" class="bar-logo">Risk <span>Intelligence</span> Platform</a>
       <nav class="flex items-center gap-3">
         <a href="#/" class="bar-nav-link">Home</a>
-        <a href="#/admin" class="bar-nav-link">Admin</a>
       </nav>
       <div class="bar-spacer"></div>
+      <a href="#/admin" class="bar-nav-link bar-nav-link--admin">Admin</a>
       <div class="currency-toggle" role="group" aria-label="Currency">
         <button id="cur-usd" class="${AppState.currency==='USD'?'active':''}">USD</button>
         <button id="cur-aed" class="${AppState.currency==='AED'?'active':''}">AED</button>
@@ -125,9 +305,9 @@ function renderLanding() {
 
         <!-- Hero -->
         <section class="landing-hero">
-          <div class="landing-badge">🔐 Internal Tool — Technology &amp; Cyber Risk</div>
-          <h1>G42 Risk Quantifier</h1>
-          <p class="landing-subtitle">A FAIR-based Monte Carlo simulation tool for structured cyber and technology risk assessment. Describe a scenario in plain language, run the simulation, and get leadership-ready outputs in minutes.</p>
+          <div class="landing-badge">🔐 Internal Tool — AI-Assisted Technology, Cyber &amp; Regulatory Risk</div>
+          <h1>Risk Intelligence Platform</h1>
+          <p class="landing-subtitle">An AI-assisted FAIR Monte Carlo workbench for building context, extracting risks from registers, linking related scenarios, and quantifying leadership-level exposure in minutes.</p>
           <div class="flex items-center gap-4" style="flex-wrap:wrap">
             <button class="btn btn--primary btn--lg" id="btn-start-new">Start New Assessment</button>
             <button class="btn btn--secondary" id="btn-show-templates">⚡ Use a Scenario Template</button>
@@ -144,10 +324,10 @@ function renderLanding() {
             <h3 style="font-size:var(--text-lg);margin-bottom:var(--sp-5)">How it works</h3>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--sp-5)">
               ${[
-                ['1','Select your BU','Choose the business unit. The tool pre-loads inherited context: systems, data types, regulatory tags, and baseline FAIR assumptions.'],
-                ['2','Describe the risk','Write the scenario in plain English. Use LLM Assist to have AI structure it and suggest FAIR input ranges, with citations from internal policy documents.'],
+                ['1','Build context','Choose the business unit, geography, and regulatory frame. Paste a risk statement or upload a risk register.'],
+                ['2','Refine the scenario','Use AI to enhance the risk statement, extract candidate risks, and assemble a linked multi-risk scenario.'],
                 ['3','Review FAIR inputs','Adjust the Threat Event Frequency, Vulnerability, and loss component ranges. Toggle between Basic and Advanced mode.'],
-                ['4','Run the simulation','10,000 Monte Carlo iterations produce a per-event loss distribution, annual loss exposure curve, and a red/green tolerance flag against the $5M threshold.']
+                ['4','Run the simulation','Monte Carlo simulation produces per-event loss, annual exposure, and a tolerance view against the fixed $5M P90 benchmark.']
               ].map(([n,title,desc]) => `
                 <div style="display:flex;gap:var(--sp-4)">
                   <div style="width:32px;height:32px;background:rgba(26,86,219,.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;color:var(--color-primary-300);flex-shrink:0">${n}</div>
@@ -187,8 +367,8 @@ function renderLanding() {
         <div class="landing-grid">
           <div class="feature-card anim-fade-in anim-delay-1">
             <div class="feature-icon">🤖</div>
-            <div class="feature-title">AI-Assisted Inputs</div>
-            <p class="feature-desc">Describe a risk in plain language. AI structures it and suggests FAIR input ranges, with citations from internal policies.</p>
+            <div class="feature-title">AI Risk Builder</div>
+            <p class="feature-desc">Paste a risk statement or upload a register. AI enhances the narrative, extracts risks, and prepares them for quantification.</p>
           </div>
           <div class="feature-card anim-fade-in anim-delay-2">
             <div class="feature-icon">📊</div>
@@ -202,8 +382,8 @@ function renderLanding() {
           </div>
           <div class="feature-card anim-fade-in anim-delay-4">
             <div class="feature-icon">🔗</div>
-            <div class="feature-title">Share Results</div>
-            <p class="feature-desc">Generate a link that encodes results in the URL. Colleagues can open it directly — no login or account needed.</p>
+            <div class="feature-title">Linked Risk Scenarios</div>
+            <p class="feature-desc">Select multiple related risks in one pass and apply linked-scenario uplift when the drivers can cascade across the platform.</p>
           </div>
         </div>
 
@@ -307,22 +487,276 @@ function loadTemplate(tmpl) {
   UI.toast(`Template loaded: "${tmpl.label}". Review inputs and run the simulation.`, 'info', 4000);
 }
 
+// ─── WIZARD 1 ─────────────────────────────────────────────────
+function renderWizard1() {
+  ensureDraftShape();
+  const draft = AppState.draft;
+  const settings = getAdminSettings();
+  const buList = getBUList();
+  const selectedRisks = getSelectedRisks();
+  const regs = draft.applicableRegulations?.length ? draft.applicableRegulations : settings.applicableRegulations;
+
+  setPage(`
+    <main class="page">
+      <div class="wizard-layout container container--narrow">
+        <div class="wizard-header">
+          ${UI.renderStepper(1)}
+          <h2 class="wizard-step-title">AI-Assisted Risk &amp; Context Builder</h2>
+          <p class="wizard-step-desc">Start with a risk statement or upload a register. AI will enhance the context, extract candidate risks, and prepare a linked scenario for quantification.</p>
+        </div>
+        <div class="wizard-body">
+          <div class="card card--elevated anim-fade-in">
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label" for="wizard-bu">Business Unit <span class="required">*</span></label>
+                <select class="form-select" id="wizard-bu">
+                  <option value="">— Select —</option>
+                  ${buList.map(b => `<option value="${b.id}" ${draft.buId===b.id?'selected':''}>${b.name}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="wizard-geo">Geography</label>
+                <input class="form-input" id="wizard-geo" value="${draft.geography || settings.geography}" placeholder="e.g. United Arab Emirates">
+              </div>
+            </div>
+            <div class="context-grid mt-4">
+              <div class="context-chip-panel">
+                <div class="context-panel-title">Risk Appetite</div>
+                <p class="context-panel-copy">${settings.riskAppetiteStatement}</p>
+                <div class="context-panel-foot">Simulation tolerance remains fixed at ${fmtCurrency(TOLERANCE_THRESHOLD)} P90 per event.</div>
+              </div>
+              <div class="context-chip-panel">
+                <div class="context-panel-title">Applicable Regulations</div>
+                <div class="citation-chips">
+                  ${regs.map(tag => `<span class="badge badge--gold">${tag}</span>`).join('')}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card anim-fade-in anim-delay-1">
+            <div class="form-group">
+              <label class="form-label" for="intake-risk-statement">Risk Statement</label>
+              <textarea class="form-textarea" id="intake-risk-statement" rows="6" placeholder="Describe the risk in plain English. Include what could happen, the affected platform or service, likely triggers, and the business or regulatory impact.">${draft.narrative || ''}</textarea>
+            </div>
+            <div class="grid-2 mt-4">
+              <div class="form-group">
+                <label class="form-label" for="risk-register-file">Risk Register Upload</label>
+                <input class="form-input" id="risk-register-file" type="file" accept=".txt,.csv,.json,.md">
+                <div class="form-help">${draft.uploadedRegisterName ? `Current file: ${draft.uploadedRegisterName}` : 'Upload TXT, CSV, JSON, or Markdown. The file is processed in-browser only.'}</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="manual-risk-add">Add Risk Manually</label>
+                <div class="inline-action-row">
+                  <input class="form-input" id="manual-risk-add" type="text" placeholder="e.g. Export control screening failure">
+                  <button class="btn btn--secondary" id="btn-add-manual-risk" type="button">Add</button>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 mt-5" style="flex-wrap:wrap">
+              <button class="btn btn--primary" id="btn-intake-assist">🤖 Enhance &amp; Extract Risks</button>
+              <button class="btn btn--secondary" id="btn-register-analyse">📄 Analyse Uploaded Register</button>
+            </div>
+            <p class="form-help mt-3">Uses runtime AI if a key has been set with <code>LLMService.setOpenAIKey(...)</code>. Otherwise the local extraction stub is used.</p>
+          </div>
+
+          <div id="intake-output">
+            ${draft.intakeSummary ? `<div class="card card--glow anim-fade-in"><div class="context-panel-title">AI Intake Summary</div><p class="context-panel-copy">${draft.intakeSummary}</p>${draft.linkAnalysis ? `<div class="context-panel-foot">${draft.linkAnalysis}</div>` : ''}</div>` : ''}
+          </div>
+
+          <div class="card anim-fade-in anim-delay-2">
+            <div class="flex items-center justify-between mb-4" style="flex-wrap:wrap;gap:var(--sp-3)">
+              <div>
+                <div class="context-panel-title">Selected Risks</div>
+                <p class="context-panel-copy">Pick one or more risks to assess in a single pass.</p>
+              </div>
+              <label class="toggle-row">
+                <span class="toggle-label">Treat as linked scenario</span>
+                <label class="toggle"><input type="checkbox" id="linked-risks-toggle" ${draft.linkedRisks ? 'checked' : ''}><div class="toggle-track"></div></label>
+              </label>
+            </div>
+            <div id="selected-risks-wrap">
+              ${renderSelectedRiskCards(selectedRisks, regs)}
+            </div>
+          </div>
+        </div>
+        <div class="wizard-footer">
+          <a class="btn btn--ghost" href="#/">← Home</a>
+          <button class="btn btn--primary" id="btn-next-1">Next: Refine Scenario →</button>
+        </div>
+      </div>
+    </main>`);
+
+  document.getElementById('wizard-bu').addEventListener('change', function() {
+    const bu = buList.find(b => b.id === this.value) || null;
+    AppState.draft.buId = bu?.id || null;
+    AppState.draft.buName = bu?.name || null;
+    AppState.draft.applicableRegulations = deriveApplicableRegulations(bu, getSelectedRisks());
+    saveDraft();
+    renderWizard1();
+  });
+  document.getElementById('wizard-geo').addEventListener('input', function() {
+    AppState.draft.geography = this.value.trim();
+  });
+  document.getElementById('intake-risk-statement').addEventListener('input', function() {
+    AppState.draft.narrative = this.value;
+  });
+  document.getElementById('linked-risks-toggle').addEventListener('change', function() {
+    AppState.draft.linkedRisks = this.checked;
+    saveDraft();
+  });
+  document.getElementById('btn-add-manual-risk').addEventListener('click', () => {
+    const input = document.getElementById('manual-risk-add');
+    const value = input.value.trim();
+    if (!value) return;
+    AppState.draft.selectedRisks = mergeRisks(getSelectedRisks(), [{ title: value, category: 'Manual', source: 'manual' }]);
+    input.value = '';
+    saveDraft();
+    renderWizard1();
+  });
+  document.getElementById('risk-register-file').addEventListener('change', handleRegisterUpload);
+  document.getElementById('btn-intake-assist').addEventListener('click', runIntakeAssist);
+  document.getElementById('btn-register-analyse').addEventListener('click', analyseUploadedRegister);
+  document.getElementById('btn-next-1').addEventListener('click', () => {
+    const buId = document.getElementById('wizard-bu').value;
+    const narrative = document.getElementById('intake-risk-statement').value.trim();
+    const selected = getSelectedRisks();
+    if (!buId) { UI.toast('Please select a business unit.', 'warning'); return; }
+    if (!narrative && !selected.length) { UI.toast('Please enter a risk statement or select at least one risk.', 'warning'); return; }
+    AppState.draft.geography = document.getElementById('wizard-geo').value.trim() || settings.geography;
+    AppState.draft.narrative = narrative;
+    AppState.draft.enhancedNarrative = AppState.draft.enhancedNarrative || narrative;
+    AppState.draft.applicableRegulations = deriveApplicableRegulations(buList.find(b => b.id === buId), selected);
+    if (!AppState.draft.scenarioTitle) {
+      AppState.draft.scenarioTitle = selected.length === 1 ? selected[0].title : `${selected.length || 1}-risk scenario for ${AppState.draft.buName}`;
+    }
+    saveDraft();
+    Router.navigate('/wizard/2');
+  });
+
+  bindRiskCardActions();
+}
+
+function renderSelectedRiskCards(selectedRisks, regulations) {
+  if (!selectedRisks.length) {
+    return `<div class="empty-state">No risks selected yet. Use AI extraction, upload a register, or add risks manually.</div>`;
+  }
+  return `<div class="risk-selection-grid">
+    ${selectedRisks.map(risk => `
+      <div class="risk-pick-card">
+        <div class="risk-pick-head">
+          <div>
+            <div class="risk-pick-title">${risk.title}</div>
+            <div class="risk-pick-meta">${risk.category}${risk.source ? ` · ${risk.source}` : ''}</div>
+          </div>
+          <button class="btn btn--ghost btn--sm btn-remove-risk" data-risk-id="${risk.id}" type="button">Remove</button>
+        </div>
+        ${risk.description ? `<p class="risk-pick-desc">${risk.description}</p>` : ''}
+        <div class="citation-chips">
+          ${Array.from(new Set([...(risk.regulations || []), ...regulations.slice(0, 2)])).slice(0, 4).map(tag => `<span class="badge badge--neutral">${tag}</span>`).join('')}
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function bindRiskCardActions() {
+  document.querySelectorAll('.btn-remove-risk').forEach(btn => {
+    btn.addEventListener('click', () => {
+      AppState.draft.selectedRisks = getSelectedRisks().filter(r => r.id !== btn.dataset.riskId);
+      saveDraft();
+      renderWizard1();
+    });
+  });
+}
+
+async function handleRegisterUpload(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  AppState.draft.uploadedRegisterName = file.name;
+  AppState.draft.registerFindings = await file.text();
+  saveDraft();
+  UI.toast(`Loaded ${file.name}.`, 'success');
+}
+
+async function runIntakeAssist() {
+  const narrative = document.getElementById('intake-risk-statement')?.value.trim() || AppState.draft.narrative || '';
+  const output = document.getElementById('intake-output');
+  const bu = getBUList().find(b => b.id === (document.getElementById('wizard-bu')?.value || AppState.draft.buId));
+  if (!narrative && !AppState.draft.registerFindings) {
+    UI.toast('Add a risk statement or upload a risk register first.', 'warning');
+    return;
+  }
+  output.innerHTML = `<div class="card">${UI.skeletonBlock(18)}<div class="mt-3">${UI.skeletonBlock(14, 4)}</div><div class="mt-3">${UI.skeletonBlock(90, 10)}</div></div>`;
+  try {
+    const citations = await RAGService.retrieveRelevantDocs(bu?.id, narrative || AppState.draft.registerFindings, 5);
+    const result = await LLMService.enhanceRiskContext({
+      riskStatement: narrative,
+      registerText: AppState.draft.registerFindings,
+      businessUnit: bu,
+      geography: document.getElementById('wizard-geo')?.value.trim() || AppState.draft.geography,
+      applicableRegulations: deriveApplicableRegulations(bu, getSelectedRisks()),
+      citations,
+      adminSettings: getAdminSettings()
+    });
+    AppState.draft.llmAssisted = true;
+    AppState.draft.enhancedNarrative = result.enhancedStatement || narrative;
+    AppState.draft.narrative = AppState.draft.narrative || narrative;
+    AppState.draft.intakeSummary = result.summary || '';
+    AppState.draft.linkAnalysis = result.linkAnalysis || '';
+    AppState.draft.selectedRisks = mergeRisks(getSelectedRisks(), result.risks || guessRisksFromText(narrative + '\n' + AppState.draft.registerFindings));
+    AppState.draft.applicableRegulations = Array.from(new Set([...(AppState.draft.applicableRegulations || []), ...(result.regulations || [])]));
+    AppState.draft.citations = result.citations || citations;
+    if (!AppState.draft.scenarioTitle && getSelectedRisks()[0]) AppState.draft.scenarioTitle = getSelectedRisks()[0].title;
+    saveDraft();
+    renderWizard1();
+    UI.toast('AI intake completed.', 'success');
+  } catch (e1) {
+    output.innerHTML = `<div class="banner banner--danger"><span class="banner-icon">⚠</span><span class="banner-text">AI intake error: ${e1.message}</span></div>`;
+  }
+}
+
+async function analyseUploadedRegister() {
+  if (!AppState.draft.registerFindings) {
+    UI.toast('Upload a risk register first.', 'warning');
+    return;
+  }
+  const bu = getBUList().find(b => b.id === AppState.draft.buId);
+  try {
+    const result = await LLMService.analyseRiskRegister({
+      registerText: AppState.draft.registerFindings,
+      businessUnit: bu,
+      geography: AppState.draft.geography,
+      applicableRegulations: AppState.draft.applicableRegulations || []
+    });
+    AppState.draft.selectedRisks = mergeRisks(getSelectedRisks(), result.risks || parseRegisterText(AppState.draft.registerFindings).map(title => ({ title, source: 'register' })));
+    AppState.draft.intakeSummary = result.summary || `Extracted ${getSelectedRisks().length} risks from ${AppState.draft.uploadedRegisterName}.`;
+    AppState.draft.linkAnalysis = result.linkAnalysis || AppState.draft.linkAnalysis;
+    saveDraft();
+    renderWizard1();
+    UI.toast('Risk register analysed.', 'success');
+  } catch (e2) {
+    UI.toast('Register analysis failed: ' + e2.message, 'danger');
+  }
+}
+
 // ─── WIZARD 2 ─────────────────────────────────────────────────
 function renderWizard2() {
   const draft = AppState.draft;
+  const selectedRisks = getSelectedRisks();
   setPage(`
     <main class="page">
       <div class="wizard-layout container container--narrow">
         <div class="wizard-header">
           ${UI.renderStepper(2)}
-          <h2 class="wizard-step-title">Describe the Risk Scenario</h2>
-          <p class="wizard-step-desc">Describe the risk in your own words, then use LLM Assist to structure it and suggest FAIR inputs.</p>
+          <h2 class="wizard-step-title">Refine the Scenario</h2>
+          <p class="wizard-step-desc">Review the AI-built context, refine the narrative, and confirm how the selected risks should be quantified together.</p>
         </div>
         <div class="wizard-body">
+          ${selectedRisks.length ? `<div class="card card--elevated anim-fade-in"><div class="context-panel-title">Selected Risks</div><div class="citation-chips">${selectedRisks.map(r => `<span class="badge badge--neutral">${r.title}</span>`).join('')}</div><div class="context-panel-foot">${draft.linkedRisks && selectedRisks.length > 1 ? 'Linked scenario uplift will be applied in the simulation.' : 'Risks will be assessed as a combined scenario without linked uplift.'}</div></div>` : ''}
           <div class="card anim-fade-in">
             <div class="form-group">
               <label class="form-label" for="narrative">Risk Scenario Narrative <span class="required">*</span></label>
-              <textarea class="form-textarea" id="narrative" rows="5" placeholder="Describe the risk: What could happen? Who might cause it? What assets are at risk? What are the potential impacts?" style="min-height:140px">${draft.narrative||''}</textarea>
+              <textarea class="form-textarea" id="narrative" rows="5" placeholder="Describe the risk: What could happen? Who might cause it? What assets are at risk? What are the potential impacts?" style="min-height:160px">${draft.enhancedNarrative || draft.narrative || ''}</textarea>
             </div>
           </div>
           <div class="card anim-fade-in anim-delay-1">
@@ -358,12 +792,16 @@ function renderWizard2() {
     </main>`);
 
   document.getElementById('btn-back-2').addEventListener('click', () => Router.navigate('/wizard/1'));
-  document.getElementById('narrative').addEventListener('input', function() { AppState.draft.narrative = this.value; });
+  document.getElementById('narrative').addEventListener('input', function() {
+    AppState.draft.enhancedNarrative = this.value;
+    if (!AppState.draft.narrative) AppState.draft.narrative = this.value;
+  });
   document.getElementById('btn-llm-assist').addEventListener('click', runLLMAssist);
   document.getElementById('btn-next-2').addEventListener('click', () => {
     const n = document.getElementById('narrative').value.trim();
     if (!n) { UI.toast('Please enter a risk narrative.', 'warning'); return; }
-    AppState.draft.narrative = n;
+    AppState.draft.enhancedNarrative = n;
+    AppState.draft.narrative = AppState.draft.narrative || n;
     saveDraft(); Router.navigate('/wizard/3');
   });
   attachCitationHandlers();
@@ -380,11 +818,17 @@ async function runLLMAssist() {
   output.innerHTML = `<div class="card mt-4">${UI.skeletonBlock(20)}<div style="margin-top:12px">${UI.skeletonBlock(14,4)}</div><div style="margin-top:8px">${UI.skeletonBlock(14,4)}</div></div>`;
   try {
     const bu = getBUList().find(b => b.id === AppState.draft.buId);
-    const citations = await RAGService.retrieveRelevantDocs(AppState.draft.buId, narrative);
-    const result = await LLMService.generateScenarioAndInputs(narrative, bu, citations);
+    const scenarioText = [narrative, buildScenarioNarrative()].filter(Boolean).join('\n\n');
+    const citations = await RAGService.retrieveRelevantDocs(AppState.draft.buId, scenarioText);
+    const result = await LLMService.generateScenarioAndInputs(scenarioText, {
+      ...bu,
+      regulatoryTags: deriveApplicableRegulations(bu, getSelectedRisks()),
+      geography: AppState.draft.geography
+    }, citations);
     AppState.draft.scenarioTitle = result.scenarioTitle;
     AppState.draft.structuredScenario = result.structuredScenario;
     AppState.draft.llmAssisted = true;
+    AppState.draft.enhancedNarrative = narrative;
     AppState.draft.citations = result.citations || citations;
     AppState.draft.recommendations = result.recommendations || [];
     const s = result.suggestedInputs;
@@ -636,6 +1080,8 @@ function validateFairParams() {
 function renderWizard4() {
   const draft = AppState.draft;
   const p = draft.fairParams;
+  const selectedRisks = getSelectedRisks();
+  const multipliers = getScenarioMultipliers();
   setPage(`
     <main class="page">
       <div class="wizard-layout container container--narrow">
@@ -655,8 +1101,9 @@ function renderWizard4() {
             </div>
             <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:var(--sp-2)">Scenario</div>
             <div style="font-size:var(--text-base);font-weight:600;font-family:var(--font-display);margin-bottom:var(--sp-3)">${draft.scenarioTitle||'Untitled'}</div>
-            <p style="font-size:.85rem;color:var(--text-secondary);line-height:1.7">${(draft.narrative||'').substring(0,280)}${(draft.narrative||'').length>280?'…':''}</p>
+            <p style="font-size:.85rem;color:var(--text-secondary);line-height:1.7">${(draft.enhancedNarrative || draft.narrative || '').substring(0,280)}${(draft.enhancedNarrative || draft.narrative || '').length>280?'…':''}</p>
             ${draft.llmAssisted?'<span class="badge badge--success" style="margin-top:12px">✓ AI-Assisted</span>':''}
+            ${selectedRisks.length ? `<div class="mt-4"><div class="context-panel-title">Scenario Scope</div><div class="citation-chips">${selectedRisks.map(r => `<span class="badge badge--neutral">${r.title}</span>`).join('')}</div><div class="context-panel-foot">${multipliers.linked ? `${selectedRisks.length} linked risks selected. Uplift is being applied to TEF and loss components.` : `${selectedRisks.length} risks selected. Combined scenario, no linked uplift.`}</div></div>` : ''}
           </div>
           <div class="card anim-fade-in anim-delay-1">
             <h3 style="font-size:var(--text-base);margin-bottom:var(--sp-4)">Key Parameters</h3>
@@ -668,7 +1115,8 @@ function renderWizard4() {
               <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Business Int.</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${fmtCurrency(p.biMin)}–${fmtCurrency(p.biMax)}</div></div>
               <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Reg & Legal</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${fmtCurrency(p.rlMin)}–${fmtCurrency(p.rlMax)}</div></div>
             </div>
-            <div class="mt-4" style="font-size:.78rem;color:var(--text-muted)">Iterations: <strong>${p.iterations||10000}</strong> · Distribution: <strong>${p.distType||'triangular'}</strong> · Threshold: <strong>${fmtCurrency(TOLERANCE_THRESHOLD)}</strong></div>
+            <div class="mt-4" style="font-size:.78rem;color:var(--text-muted)">Iterations: <strong>${p.iterations||10000}</strong> · Distribution: <strong>${p.distType||'triangular'}</strong> · Threshold: <strong>${fmtCurrency(TOLERANCE_THRESHOLD)}</strong> · Geography: <strong>${draft.geography || '—'}</strong></div>
+            ${draft.applicableRegulations?.length ? `<div class="citation-chips mt-3">${draft.applicableRegulations.map(tag => `<span class="badge badge--gold">${tag}</span>`).join('')}</div>` : ''}
           </div>
           <div class="banner banner--poc anim-fade-in anim-delay-2"><span class="banner-icon">⚠</span><span class="banner-text">PoC tool. FAIR input ranges should be validated through expert elicitation for production risk decisions.</span></div>
           <div id="run-area">
@@ -699,28 +1147,32 @@ async function runSimulation() {
   await new Promise(r => setTimeout(r, 80));
   try {
     const p = AppState.draft.fairParams;
+    const scenario = getScenarioMultipliers();
     const fxMul = AppState.currency === 'AED' ? (1 / AppState.fxRate) : 1;
     const toUSD = v => (v||0) * fxMul;
     const ep = {
       distType: p.distType||'triangular', iterations: p.iterations||10000, seed: p.seed||null,
-      tefMin: p.tefMin, tefLikely: p.tefLikely, tefMax: p.tefMax,
+      tefMin: p.tefMin * scenario.tefMultiplier, tefLikely: p.tefLikely * scenario.tefMultiplier, tefMax: p.tefMax * scenario.tefMultiplier,
       vulnDirect: p.vulnDirect||false,
       vulnMin: p.vulnMin, vulnLikely: p.vulnLikely, vulnMax: p.vulnMax,
       threatCapMin: p.threatCapMin, threatCapLikely: p.threatCapLikely, threatCapMax: p.threatCapMax,
       controlStrMin: p.controlStrMin, controlStrLikely: p.controlStrLikely, controlStrMax: p.controlStrMax,
-      irMin: toUSD(p.irMin), irLikely: toUSD(p.irLikely), irMax: toUSD(p.irMax),
-      biMin: toUSD(p.biMin), biLikely: toUSD(p.biLikely), biMax: toUSD(p.biMax),
-      dbMin: toUSD(p.dbMin), dbLikely: toUSD(p.dbLikely), dbMax: toUSD(p.dbMax),
-      rlMin: toUSD(p.rlMin), rlLikely: toUSD(p.rlLikely), rlMax: toUSD(p.rlMax),
-      tpMin: toUSD(p.tpMin), tpLikely: toUSD(p.tpLikely), tpMax: toUSD(p.tpMax),
-      rcMin: toUSD(p.rcMin), rcLikely: toUSD(p.rcLikely), rcMax: toUSD(p.rcMax),
+      irMin: toUSD(p.irMin) * scenario.lossMultiplier, irLikely: toUSD(p.irLikely) * scenario.lossMultiplier, irMax: toUSD(p.irMax) * scenario.lossMultiplier,
+      biMin: toUSD(p.biMin) * scenario.lossMultiplier, biLikely: toUSD(p.biLikely) * scenario.lossMultiplier, biMax: toUSD(p.biMax) * scenario.lossMultiplier,
+      dbMin: toUSD(p.dbMin) * scenario.lossMultiplier, dbLikely: toUSD(p.dbLikely) * scenario.lossMultiplier, dbMax: toUSD(p.dbMax) * scenario.lossMultiplier,
+      rlMin: toUSD(p.rlMin) * scenario.lossMultiplier, rlLikely: toUSD(p.rlLikely) * scenario.lossMultiplier, rlMax: toUSD(p.rlMax) * scenario.lossMultiplier,
+      tpMin: toUSD(p.tpMin) * scenario.lossMultiplier, tpLikely: toUSD(p.tpLikely) * scenario.lossMultiplier, tpMax: toUSD(p.tpMax) * scenario.lossMultiplier,
+      rcMin: toUSD(p.rcMin) * scenario.lossMultiplier, rcLikely: toUSD(p.rcLikely) * scenario.lossMultiplier, rcMax: toUSD(p.rcMax) * scenario.lossMultiplier,
       corrBiIr: p.corrBiIr||0.3, corrRlRc: p.corrRlRc||0.2,
       secondaryEnabled: p.secondaryEnabled||false,
-      secProbMin: p.secProbMin, secProbLikely: p.secProbLikely, secProbMax: p.secProbMax,
-      secMagMin: toUSD(p.secMagMin), secMagLikely: toUSD(p.secMagLikely), secMagMax: toUSD(p.secMagMax),
+      secProbMin: Math.min(1, (p.secProbMin || 0) * scenario.secondaryMultiplier), secProbLikely: Math.min(1, (p.secProbLikely || 0) * scenario.secondaryMultiplier), secProbMax: Math.min(1, (p.secProbMax || 0) * scenario.secondaryMultiplier),
+      secMagMin: toUSD(p.secMagMin) * scenario.lossMultiplier, secMagLikely: toUSD(p.secMagLikely) * scenario.lossMultiplier, secMagMax: toUSD(p.secMagMax) * scenario.lossMultiplier,
       threshold: TOLERANCE_THRESHOLD
     };
     const results = RiskEngine.run(ep);
+    results.portfolioMeta = scenario;
+    results.selectedRiskCount = scenario.riskCount;
+    results.applicableRegulations = [...(AppState.draft.applicableRegulations || [])];
     if (!AppState.draft.id) AppState.draft.id = 'a_' + Date.now();
     const assessment = { ...AppState.draft, results, completedAt: Date.now() };
     saveAssessment(assessment);
@@ -763,9 +1215,10 @@ function renderResults(id, isShared) {
           <div>
             <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:4px">Assessment Results</div>
             <h2 style="font-size:var(--text-2xl)">${assessment.scenarioTitle||'Risk Assessment'}</h2>
-            <div style="font-size:var(--text-sm);color:var(--text-muted);margin-top:4px">${assessment.buName||'—'} · ${new Date(assessment.completedAt||Date.now()).toLocaleDateString('en-AE',{year:'numeric',month:'long',day:'numeric'})}</div>
+            <div style="font-size:var(--text-sm);color:var(--text-muted);margin-top:4px">${assessment.buName||'—'} · ${assessment.geography||'—'} · ${new Date(assessment.completedAt||Date.now()).toLocaleDateString('en-AE',{year:'numeric',month:'long',day:'numeric'})}</div>
           </div>
           <div class="flex items-center gap-3">
+            <button class="btn btn--secondary btn--sm" id="btn-share-results">Share</button>
             <button class="btn btn--secondary btn--sm" id="btn-export-json">↓ JSON</button>
             <button class="btn btn--secondary btn--sm" id="btn-export-pptx">↓ PPTX Spec</button>
             <button class="btn btn--primary btn--sm" id="btn-export-pdf">↓ PDF Report</button>
@@ -779,6 +1232,19 @@ function renderResults(id, isShared) {
             <div class="tolerance-detail">Per-event P90: <strong>${fmtCurrency(r.lm.p90)}</strong> ${r.toleranceBreached?'>':'<'} threshold: <strong>${fmtCurrency(r.threshold)}</strong> &nbsp;·&nbsp; Exceedance: <strong>${(r.toleranceDetail.lmExceedProb*100).toFixed(1)}%</strong></div>
           </div>
         </div>
+
+        ${(assessment.selectedRisks?.length || r.selectedRiskCount) ? `
+        <div class="card mb-6 anim-fade-in">
+          <div class="flex items-center justify-between" style="flex-wrap:wrap;gap:var(--sp-3)">
+            <div>
+              <div class="context-panel-title">Scenario Scope</div>
+              <div class="context-panel-copy">${r.portfolioMeta?.linked ? 'Linked risk scenario uplift applied.' : 'Combined multi-risk scenario.'}</div>
+            </div>
+            <div class="badge badge--neutral">${r.selectedRiskCount || assessment.selectedRisks?.length || 1} risk${(r.selectedRiskCount || assessment.selectedRisks?.length || 1) > 1 ? 's' : ''}</div>
+          </div>
+          ${assessment.selectedRisks?.length ? `<div class="citation-chips mt-4">${assessment.selectedRisks.map(risk => `<span class="badge badge--gold">${risk.title}</span>`).join('')}</div>` : ''}
+          ${assessment.applicableRegulations?.length ? `<div class="citation-chips mt-4">${assessment.applicableRegulations.map(tag => `<span class="badge badge--neutral">${tag}</span>`).join('')}</div>` : ''}
+        </div>` : ''}
 
         <div class="mb-6">
           <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:var(--sp-3)">Per-Event Loss (LM)</div>
@@ -907,6 +1373,7 @@ function adminLayout(active, content) {
   return `<div style="display:flex;min-height:calc(100vh - 60px)">
     <nav class="admin-sidebar">
       <div style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:var(--sp-3)">Admin</div>
+      <a href="#/admin/settings" class="admin-nav-link ${active==='settings'?'active':''}">⚙️ Settings</a>
       <a href="#/admin/bu" class="admin-nav-link ${active==='bu'?'active':''}">🏢 Business Units</a>
       <a href="#/admin/docs" class="admin-nav-link ${active==='docs'?'active':''}">📚 Internal Docs</a>
       <div style="flex:1"></div>
@@ -917,6 +1384,72 @@ function adminLayout(active, content) {
     </nav>
     <div style="flex:1;padding:var(--sp-8);overflow-y:auto">${content}</div>
   </div>`;
+}
+
+function renderAdminSettings() {
+  if (!requireAdmin()) return;
+  const settings = getAdminSettings();
+  setPage(adminLayout('settings', `
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h2>Platform Settings</h2>
+        <p style="margin-top:6px">Configure default context for the AI-assisted risk builder. The simulation tolerance remains fixed at ${fmtCurrency(TOLERANCE_THRESHOLD)} P90 per event.</p>
+      </div>
+      <button class="btn btn--secondary" id="btn-reset-settings">Reset Defaults</button>
+    </div>
+    <div class="card card--elevated">
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label" for="admin-geo">Default Geography</label>
+          <input class="form-input" id="admin-geo" value="${settings.geography}">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="admin-link-mode">Default Linked-Risk Mode</label>
+          <select class="form-select" id="admin-link-mode">
+            <option value="yes" ${settings.defaultLinkMode ? 'selected' : ''}>Enabled</option>
+            <option value="no" ${!settings.defaultLinkMode ? 'selected' : ''}>Disabled</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group mt-4">
+        <label class="form-label" for="admin-appetite">Risk Appetite Statement</label>
+        <textarea class="form-textarea" id="admin-appetite" rows="4">${settings.riskAppetiteStatement}</textarea>
+      </div>
+      <div class="form-group mt-4">
+        <label class="form-label">Applicable Regulations</label>
+        <div class="tag-input-wrap" id="ti-admin-regulations"></div>
+      </div>
+      <div class="form-group mt-4">
+        <label class="form-label" for="admin-ai-instructions">AI Guidance</label>
+        <textarea class="form-textarea" id="admin-ai-instructions" rows="3">${settings.aiInstructions}</textarea>
+      </div>
+      <div class="flex items-center gap-3 mt-5">
+        <button class="btn btn--primary" id="btn-save-settings">Save Settings</button>
+        <span class="form-help">Applies to new and in-progress assessments immediately.</span>
+      </div>
+    </div>`));
+
+  document.getElementById('btn-admin-logout').addEventListener('click', () => { AuthService.adminLogout(); Router.navigate('/admin'); });
+  const regsInput = UI.tagInput('ti-admin-regulations', settings.applicableRegulations);
+  document.getElementById('btn-save-settings').addEventListener('click', () => {
+    saveAdminSettings({
+      geography: document.getElementById('admin-geo').value.trim() || DEFAULT_ADMIN_SETTINGS.geography,
+      defaultLinkMode: document.getElementById('admin-link-mode').value === 'yes',
+      riskAppetiteStatement: document.getElementById('admin-appetite').value.trim() || DEFAULT_ADMIN_SETTINGS.riskAppetiteStatement,
+      applicableRegulations: regsInput.getTags(),
+      aiInstructions: document.getElementById('admin-ai-instructions').value.trim()
+    });
+    if (!AppState.draft.geography) AppState.draft.geography = getAdminSettings().geography;
+    saveDraft();
+    UI.toast('Settings saved.', 'success');
+  });
+  document.getElementById('btn-reset-settings').addEventListener('click', async () => {
+    if (await UI.confirm('Reset platform settings to defaults?')) {
+      localStorage.removeItem('rq_admin_settings');
+      UI.toast('Settings reset.', 'success');
+      renderAdminSettings();
+    }
+  });
 }
 
 function renderAdminBU() {
@@ -1088,6 +1621,10 @@ async function init() {
   RAGService.init(getDocList(), getBUList());
   loadDraft();
   if (!AppState.draft.id) resetDraft();
+  ensureDraftShape();
+  if (!AppState.draft.applicableRegulations?.length) {
+    AppState.draft.applicableRegulations = [...getAdminSettings().applicableRegulations];
+  }
 
   renderAppBar();
 
@@ -1099,6 +1636,7 @@ async function init() {
     .on('/wizard/4', renderWizard4)
     .on('/results/:id', params => renderResults(params.id))
     .on('/admin', renderAdminLogin)
+    .on('/admin/settings', renderAdminSettings)
     .on('/admin/bu', renderAdminBU)
     .on('/admin/docs', renderAdminDocs)
     .notFound(() => { setPage(`<div class="container" style="padding:var(--sp-12)"><h2>Page Not Found</h2><a href="#/" class="btn btn--primary" style="margin-top:var(--sp-4)">← Home</a></div>`); });

@@ -25,6 +25,30 @@ const LLMService = (() => {
 
   function setOpenAIKey(key) { _openAIKey = key; }
 
+  function _extractRiskCandidates(text) {
+    const source = String(text || '').toLowerCase();
+    const catalog = [
+      { title: 'Ransomware disruption of critical services', category: 'Cyber', regulations: ['UAE PDPL', 'UAE NESA IAS'] },
+      { title: 'Cloud misconfiguration exposing sensitive data', category: 'Cloud', regulations: ['UAE PDPL', 'ISO 27001'] },
+      { title: 'Third-party compromise through supplier access', category: 'Third Party', regulations: ['UAE Cybersecurity Council Guidance'] },
+      { title: 'Export control or sanctions compliance breach', category: 'Regulatory', regulations: ['BIS Export Controls', 'OFAC Sanctions'] },
+      { title: 'Insider misuse of privileged access', category: 'Insider Threat', regulations: ['UAE PDPL'] },
+      { title: 'Fraud or payment manipulation event', category: 'Financial Crime', regulations: ['UAE AML/CFT'] },
+      { title: 'Technology outage affecting core business services', category: 'Operational Resilience', regulations: ['UAE NESA IAS'] }
+    ];
+    const hits = catalog.filter(item =>
+      (source.includes('ransom') && item.title.toLowerCase().includes('ransom'))
+      || (source.includes('cloud') && item.title.toLowerCase().includes('cloud'))
+      || ((source.includes('supplier') || source.includes('vendor') || source.includes('third')) && item.title.toLowerCase().includes('third-party'))
+      || ((source.includes('export') || source.includes('sanction') || source.includes('bis')) && item.title.toLowerCase().includes('export control'))
+      || ((source.includes('insider') || source.includes('privileged')) && item.title.toLowerCase().includes('insider'))
+      || ((source.includes('fraud') || source.includes('payment') || source.includes('invoice')) && item.title.toLowerCase().includes('fraud'))
+      || ((source.includes('outage') || source.includes('availability') || source.includes('disruption')) && item.title.toLowerCase().includes('outage'))
+      || ((source.includes('breach') || source.includes('data')) && item.title.toLowerCase().includes('sensitive data'))
+    );
+    return hits.length ? hits : [{ title: 'Material technology and cyber risk requiring structured assessment', category: 'General', regulations: [] }];
+  }
+
   // ─── Real API call (when keys are available) ─────────────
   async function _callLLM(systemPrompt, userPrompt) {
     const apiKey   = _openAIKey || COMPASS_API_KEY;
@@ -172,6 +196,32 @@ const LLMService = (() => {
     };
   }
 
+  function _generateRiskBuilderStub(input) {
+    const riskStatement = input.riskStatement || '';
+    const registerText = input.registerText || '';
+    const joined = [riskStatement, registerText].filter(Boolean).join('\n');
+    const risks = _extractRiskCandidates(joined).map((risk, idx) => ({
+      id: `stub-risk-${idx + 1}`,
+      title: risk.title,
+      category: risk.category,
+      description: `Candidate risk identified from the intake text${input.businessUnit?.name ? ` for ${input.businessUnit.name}` : ''}.`,
+      source: registerText ? 'ai+register' : 'ai',
+      regulations: Array.from(new Set([...(risk.regulations || []), ...(input.applicableRegulations || [])])).slice(0, 4)
+    }));
+    return {
+      enhancedStatement: riskStatement
+        ? `In ${input.geography || 'the selected geography'}, ${input.businessUnit?.name || 'the business unit'} faces a material risk scenario in which ${riskStatement.charAt(0).toLowerCase() + riskStatement.slice(1)}. This scenario should be assessed for operational disruption, regulatory exposure, and downstream commercial impact across the selected risk set.`
+        : '',
+      summary: `AI identified ${risks.length} candidate risk${risks.length > 1 ? 's' : ''} and prepared a combined scenario for FAIR analysis.`,
+      linkAnalysis: risks.length > 1
+        ? 'Several selected risks appear capable of cascading together. Treat them as linked if one event could trigger operational, regulatory, or third-party consequences in the same chain.'
+        : 'A single primary risk driver was identified from the intake.',
+      risks,
+      regulations: Array.from(new Set([...(input.applicableRegulations || []), ...risks.flatMap(r => r.regulations || [])])),
+      citations: input.citations || []
+    };
+  }
+
   /**
    * Main method: generate scenario and FAIR inputs
    * [LLM-INTEGRATION] Replace stub body with real API call + JSON parsing
@@ -229,5 +279,66 @@ ${retrievedDocs.map(d => `- ${d.title}: ${d.excerpt}`).join('\
     return _generateStub(narrative, buContext, retrievedDocs);
   }
 
-  return { generateScenarioAndInputs, setOpenAIKey };
+  async function enhanceRiskContext(input) {
+    await new Promise(r => setTimeout(r, 1400 + Math.random() * 600));
+    if (_openAIKey || COMPASS_API_KEY) {
+      try {
+        const systemPrompt = `You are a senior enterprise risk analyst. Given a risk statement, optional risk register text, business context, and regulations, return JSON only with this schema:
+{
+  "enhancedStatement": "string",
+  "summary": "string",
+  "linkAnalysis": "string",
+  "risks": [
+    { "title": "string", "category": "string", "description": "string", "regulations": ["string"] }
+  ],
+  "regulations": ["string"]
+}`;
+        const userPrompt = `Business unit: ${input.businessUnit?.name || 'Unknown'}
+Geography: ${input.geography || 'Unknown'}
+Applicable regulations: ${(input.applicableRegulations || []).join(', ')}
+AI guidance: ${input.adminSettings?.aiInstructions || ''}
+
+Risk statement:
+${input.riskStatement || '(none)'}
+
+Risk register text:
+${input.registerText || '(none)'}
+
+Retrieved citations:
+${(input.citations || []).map(c => `- ${c.title}: ${c.excerpt}`).join('\n')}`;
+        const raw = await _callLLM(systemPrompt, userPrompt);
+        if (raw) {
+          const parsed = JSON.parse(raw.replace(/```json\n?|```/g, '').trim());
+          return { ...parsed, citations: input.citations || [] };
+        }
+      } catch (e) {
+        console.warn('enhanceRiskContext fallback:', e.message);
+      }
+    }
+    return _generateRiskBuilderStub(input);
+  }
+
+  async function analyseRiskRegister(input) {
+    await new Promise(r => setTimeout(r, 1000 + Math.random() * 500));
+    const lines = String(input.registerText || '')
+      .split(/\r?\n|;/)
+      .map(line => line.trim())
+      .filter(line => line.length > 10)
+      .slice(0, 20);
+    const stub = _generateRiskBuilderStub({ ...input, riskStatement: lines.slice(0, 4).join('. ') });
+    if (lines.length) {
+      stub.risks = lines.slice(0, 8).map((line, idx) => ({
+        id: `register-risk-${idx + 1}`,
+        title: line.replace(/^[-*]\s*/, ''),
+        category: 'Register',
+        description: 'Imported from uploaded risk register.',
+        source: 'register',
+        regulations: stub.regulations.slice(0, 3)
+      }));
+      stub.summary = `Analysed ${lines.length} register entr${lines.length === 1 ? 'y' : 'ies'} and extracted ${stub.risks.length} candidate risks.`;
+    }
+    return stub;
+  }
+
+  return { generateScenarioAndInputs, enhanceRiskContext, analyseRiskRegister, setOpenAIKey };
 })();
