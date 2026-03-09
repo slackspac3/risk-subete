@@ -23,12 +23,16 @@ function extractLinks(html, baseUrl) {
   return Array.from(new Set(links));
 }
 
-async function fetchText(url) {
+async function fetchText(url, timeoutMs = 7000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const res = await fetch(url, {
     headers: {
       'User-Agent': 'Risk-Intelligence-Platform/1.0'
-    }
+    },
+    signal: controller.signal
   });
+  clearTimeout(timeout);
   if (!res.ok) {
     throw new Error(`Failed to fetch ${url}: HTTP ${res.status}`);
   }
@@ -128,17 +132,18 @@ async function fetchNewsContext(canonicalUrl, rootHtml = '') {
       url: `https://news.google.com/rss/search?q=${quotedAlias}%20(regulation%20OR%20compliance%20OR%20licence%20OR%20partnership%20OR%20acquisition%20OR%20expansion)&hl=en-US&gl=US&ceid=US:en`
     }
   ];
+  const feedResults = await Promise.allSettled(
+    feeds.map(feed => fetchText(feed.url, 6000).then(xml => ({ feed, xml })))
+  );
   const results = [];
-  for (const feed of feeds) {
-    try {
-      const xml = await fetchText(feed.url);
-      const items = parseRssItems(xml).slice(0, 5).map(item => ({
-        ...item,
-        feed: feed.label
-      }));
-      results.push(...items);
-    } catch {}
-  }
+  feedResults.forEach(result => {
+    if (result.status !== 'fulfilled') return;
+    const items = parseRssItems(result.value.xml).slice(0, 4).map(item => ({
+      ...item,
+      feed: result.value.feed.label
+    }));
+    results.push(...items);
+  });
   return Array.from(new Map(results.map(item => [item.link, item])).values()).slice(0, 12);
 }
 
@@ -215,16 +220,20 @@ module.exports = async function handler(req, res) {
     const rootHtml = await fetchText(canonicalUrl);
     const candidateUrls = deriveCandidateUrls(canonicalUrl, rootHtml);
 
-    for (const url of candidateUrls) {
-      try {
-        const html = url === canonicalUrl ? rootHtml : await fetchText(url);
-        const text = stripHtml(html).slice(0, 6000);
-        if (text.length > 200) {
-          pages.push({ url, content: text });
-        }
-      } catch {}
-      if (pages.length >= 5) break;
-    }
+    const pageResults = await Promise.allSettled(
+      candidateUrls.slice(0, 6).map(url =>
+        (url === canonicalUrl ? Promise.resolve(rootHtml) : fetchText(url, 6500))
+          .then(html => ({ url, html }))
+      )
+    );
+    pages = pageResults
+      .filter(result => result.status === 'fulfilled')
+      .map(result => ({
+        url: result.value.url,
+        content: stripHtml(result.value.html).slice(0, 4500)
+      }))
+      .filter(page => page.content.length > 200)
+      .slice(0, 5);
 
     if (!pages.length) {
       throw new Error('No usable public website content could be extracted from the supplied URL.');
