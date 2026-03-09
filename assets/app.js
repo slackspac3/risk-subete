@@ -321,6 +321,19 @@ function parseRegisterText(text) {
     .slice(0, 25);
 }
 
+function getFileExtension(name = '') {
+  const parts = String(name).toLowerCase().split('.');
+  return parts.length > 1 ? parts.pop() : '';
+}
+
+function looksLikeBinaryRegister(text) {
+  const sample = String(text || '').slice(0, 400);
+  if (!sample) return false;
+  if (sample.startsWith('PK') || /docProps\/|word\/|xl\//i.test(sample)) return true;
+  const controlChars = (sample.match(/[\u0000-\u0008\u000E-\u001F]/g) || []).length;
+  return controlChars > 8;
+}
+
 function composeGuidedNarrative(guidedInput = {}) {
   const event = String(guidedInput.event || '').trim();
   const asset = String(guidedInput.asset || '').trim();
@@ -679,8 +692,8 @@ function renderWizard1() {
             <div class="grid-2 mt-4">
               <div class="form-group">
                 <label class="form-label" for="risk-register-file">Risk Register Upload</label>
-                <input class="form-input" id="risk-register-file" type="file" accept=".txt,.csv,.json,.md">
-                <div class="form-help">${draft.uploadedRegisterName ? `Current file: ${draft.uploadedRegisterName}` : 'Upload TXT, CSV, JSON, or Markdown. The file is processed in-browser only.'}</div>
+                <input class="form-input" id="risk-register-file" type="file" accept=".txt,.csv,.json,.md,.tsv">
+                <div class="form-help">${draft.uploadedRegisterName ? `Current file: ${draft.uploadedRegisterName}` : 'Upload TXT, CSV, TSV, JSON, or Markdown. Word, Excel, PDF, and other binary formats are not parsed directly in the browser.'}</div>
               </div>
               <div class="form-group">
                 <label class="form-label" for="manual-risk-add">Add Risk Manually</label>
@@ -844,8 +857,27 @@ function bindRiskCardActions() {
 async function handleRegisterUpload(e) {
   const file = e.target.files?.[0];
   if (!file) return;
+  const ext = getFileExtension(file.name);
+  const unsupported = ['docx', 'xlsx', 'xls', 'pptx', 'pdf', 'zip'];
+  if (unsupported.includes(ext)) {
+    AppState.draft.uploadedRegisterName = '';
+    AppState.draft.registerFindings = '';
+    saveDraft();
+    e.target.value = '';
+    UI.toast('This file type is not supported for direct browser parsing. Please export the register as TXT, CSV, TSV, JSON, or Markdown first.', 'warning', 7000);
+    return;
+  }
+  const text = await file.text();
+  if (looksLikeBinaryRegister(text)) {
+    AppState.draft.uploadedRegisterName = '';
+    AppState.draft.registerFindings = '';
+    saveDraft();
+    e.target.value = '';
+    UI.toast('The uploaded file appears to be binary or an Office container. Please convert it to TXT, CSV, TSV, JSON, or Markdown before uploading.', 'warning', 7000);
+    return;
+  }
   AppState.draft.uploadedRegisterName = file.name;
-  AppState.draft.registerFindings = await file.text();
+  AppState.draft.registerFindings = text;
   saveDraft();
   UI.toast(`Loaded ${file.name}.`, 'success');
 }
@@ -892,6 +924,10 @@ async function analyseUploadedRegister() {
     UI.toast('Upload a risk register first.', 'warning');
     return;
   }
+  if (looksLikeBinaryRegister(AppState.draft.registerFindings)) {
+    UI.toast('This uploaded file still looks binary and cannot be analysed safely. Please convert it to TXT, CSV, TSV, JSON, or Markdown.', 'warning', 7000);
+    return;
+  }
   const bu = getBUList().find(b => b.id === AppState.draft.buId);
   try {
     const result = await LLMService.analyseRiskRegister({
@@ -900,7 +936,13 @@ async function analyseUploadedRegister() {
       geography: AppState.draft.geography,
       applicableRegulations: AppState.draft.applicableRegulations || []
     });
-    AppState.draft.selectedRisks = mergeRisks(getSelectedRisks(), result.risks || parseRegisterText(AppState.draft.registerFindings).map(title => ({ title, source: 'register' })));
+    const parsedFallback = parseRegisterText(AppState.draft.registerFindings).map(title => ({ title, source: 'register' }));
+    const extractedRisks = result.risks || parsedFallback;
+    if (!extractedRisks.length) {
+      UI.toast('No usable risk lines were found in that file. Try a cleaner TXT/CSV export or paste the risks directly.', 'warning', 7000);
+      return;
+    }
+    AppState.draft.selectedRisks = mergeRisks(getSelectedRisks(), extractedRisks);
     AppState.draft.intakeSummary = result.summary || `Extracted ${getSelectedRisks().length} risks from ${AppState.draft.uploadedRegisterName}.`;
     AppState.draft.linkAnalysis = result.linkAnalysis || AppState.draft.linkAnalysis;
     saveDraft();
