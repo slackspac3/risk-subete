@@ -150,15 +150,26 @@ async function fetchNewsContext(canonicalUrl, rootHtml = '') {
 function buildFallbackProfile(canonicalUrl, pages, newsItems = []) {
   const combined = pages.map(page => page.content).join(' ').toLowerCase();
   const signals = [];
+  const commitments = [];
+  const obligations = [];
   if (/cloud|platform|software|digital|data/.test(combined)) signals.push('Material dependence on digital platforms, data flows, or cloud services.');
   if (/customer|consumer|client|member|patient|user/.test(combined)) signals.push('Potential exposure to personal, customer, or regulated data handling obligations.');
   if (/partner|supplier|vendor|ecosystem/.test(combined)) signals.push('Third-party and supplier dependence may be relevant to the operating model.');
   if (/global|regional|international|middle east|uae|gcc/.test(combined)) signals.push('Cross-border operations or regional footprint may change regulatory and resilience expectations.');
   if (newsItems.length) signals.push('Recent public news coverage was also reviewed to widen the context beyond the corporate website.');
+  if (/healthcare|genome|clinical|hospital/.test(combined)) obligations.push('Healthcare and health-data handling likely increase sensitivity around privacy, resilience, safety, and regulated service continuity.');
+  if (/government|public services|national security|sovereign|digital embassies/.test(combined)) obligations.push('Government, sovereign, or public-sector work likely increases expectations around data sovereignty, access control, auditability, and national-security-aligned governance.');
+  if (/cloud|data center|compute|infrastructure/.test(combined)) obligations.push('Cloud, compute, and data-centre operations likely increase obligations around availability, physical security, supply chain resilience, and service continuity.');
+  if (/responsible ai|trust|safety|governance|compliance/.test(combined)) commitments.push('Public messaging suggests commitments around responsible, trusted, and secure AI deployment.');
+  if (/global south|countries|operating globally|international/.test(combined)) commitments.push('Public messaging suggests a commitment to international expansion and cross-border delivery.');
+  if (/sovereign|data sovereignty|legal authority|control over their data/.test(combined)) commitments.push('Public messaging suggests a commitment to sovereignty-preserving AI and cloud deployment models.');
   return {
     companySummary: `Public context was gathered for ${canonicalUrl}, but the AI response could not be parsed cleanly. This fallback summary is based on the website content${newsItems.length ? ' and public news coverage' : ''} that was fetched.`,
-    businessProfile: `Review the fetched public context manually and refine the profile before saving. The company appears to have a business model with some combination of technology dependence, partner reliance, and customer-facing operations.${newsItems.length ? ' Public news coverage may provide additional signals on growth, partnerships, incidents, regulation, or strategic direction.' : ''}`,
+    businessProfile: `Review the fetched public context manually and refine the profile before saving. The company appears to operate as an AI, cloud, and digital infrastructure group with cross-sector solutions and a partner-led delivery model.${newsItems.length ? ' Public news coverage may provide additional signals on growth, partnerships, incidents, regulation, or strategic direction.' : ''}`,
+    operatingModel: 'Likely operating model: combines AI platforms, cloud or data-centre infrastructure, partner ecosystems, and sector-specific solutions for enterprise, government, and other regulated environments.',
+    publicCommitments: commitments.length ? commitments : ['Public materials suggest commitments to trusted AI, secure digital infrastructure, and international growth.'],
     riskSignals: signals.length ? signals : ['Public website content suggests a need to assess technology reliance, data handling, third-party dependencies, and resilience requirements.'],
+    likelyObligations: obligations.length ? obligations : ['Likely obligations include data protection, cloud and service resilience, third-party oversight, and governance over high-impact AI use cases.'],
     regulatorySignals: [],
     aiGuidance: 'Use the public website material as a starting point, then refine the business profile, likely regulations, and technology exposure manually before relying on it in assessments.',
     suggestedGeography: '',
@@ -192,7 +203,10 @@ function normaliseContextPayload(parsed, canonicalUrl, pages, newsItems) {
   return {
     companySummary: String(parsed.companySummary || fallback.companySummary),
     businessProfile: String(parsed.businessProfile || fallback.businessProfile),
+    operatingModel: String(parsed.operatingModel || fallback.operatingModel || ''),
+    publicCommitments: Array.isArray(parsed.publicCommitments) && parsed.publicCommitments.length ? parsed.publicCommitments.map(String) : fallback.publicCommitments,
     riskSignals: Array.isArray(parsed.riskSignals) && parsed.riskSignals.length ? parsed.riskSignals.map(String) : fallback.riskSignals,
+    likelyObligations: Array.isArray(parsed.likelyObligations) && parsed.likelyObligations.length ? parsed.likelyObligations.map(String) : fallback.likelyObligations,
     regulatorySignals: Array.isArray(parsed.regulatorySignals) ? parsed.regulatorySignals.map(String) : fallback.regulatorySignals,
     aiGuidance: String(parsed.aiGuidance || fallback.aiGuidance),
     suggestedGeography: String(parsed.suggestedGeography || fallback.suggestedGeography || ''),
@@ -283,7 +297,10 @@ Respond ONLY with valid JSON matching this schema:
 {
   "companySummary": "string",
   "businessProfile": "string",
+  "operatingModel": "string",
+  "publicCommitments": ["string"],
   "riskSignals": ["string"],
+  "likelyObligations": ["string"],
   "regulatorySignals": ["string"],
   "aiGuidance": "string",
   "suggestedGeography": "string",
@@ -302,11 +319,13 @@ Public news context:
 ${newsItems.length ? newsItems.map((item, idx) => `News ${idx + 1}: ${item.feed} | ${item.title} | ${item.pubDate}\n${item.description}\n${item.link}`).join('\n\n') : '(no public news items were retrieved)'}
 
 Instructions:
-- infer the company's business model, operating profile, technology reliance, data exposure, and likely regulatory posture
+- infer the company's business model, operating profile, technology reliance, public commitments, likely obligations, data exposure, and likely regulatory posture
 - focus on technology, cyber, operational resilience, third-party, compliance, and data risks
 - use the aliases and the mix of local and global news to widen the context beyond the company website
 - keep the output useful for setting admin context for a risk quantification platform
 - mention that this is based on public website and public news context only
+- prefer concrete, company-specific statements over generic technology-company language
+- if the company appears to serve governments, healthcare, energy, cloud, sovereign infrastructure, or regulated environments, make that explicit
 - use British English`;
 
     const upstream = await fetch(compassApiUrl, {

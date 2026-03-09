@@ -401,7 +401,10 @@ function formatCompanyContextProfile(result) {
   return [
     result.companySummary,
     result.businessProfile,
+    result.operatingModel ? `Operating model:\n${result.operatingModel}` : '',
+    result.publicCommitments?.length ? `Public commitments:\n- ${result.publicCommitments.join('\n- ')}` : '',
     result.riskSignals?.length ? `Key public risk signals:\n- ${result.riskSignals.join('\n- ')}` : '',
+    result.likelyObligations?.length ? `Likely obligations and exposures:\n- ${result.likelyObligations.join('\n- ')}` : '',
     sourceNotes.length ? `Sources reviewed:\n- ${sourceNotes.join('\n- ')}` : ''
   ].filter(Boolean).join('\n\n');
 }
