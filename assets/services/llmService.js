@@ -340,6 +340,7 @@ ${retrievedDocs.map(d => `- ${d.title}: ${d.excerpt}`).join('\
 Geography: ${input.geography || 'Unknown'}
 Applicable regulations: ${(input.applicableRegulations || []).join(', ')}
 AI guidance: ${input.adminSettings?.aiInstructions || ''}
+Register metadata: ${input.registerMeta ? JSON.stringify(input.registerMeta) : '(none)'}
 
 Risk statement:
 ${input.riskStatement || '(none)'}
@@ -368,6 +369,37 @@ ${(input.citations || []).map(c => `- ${c.title}: ${c.excerpt}`).join('\n')}`;
       .map(line => line.trim())
       .filter(line => line.length > 10)
       .slice(0, 20);
+    if (_compassApiKey || !_isDirectCompassUrl(_compassApiUrl)) {
+      try {
+        const systemPrompt = `You are a senior enterprise risk analyst. You will receive a risk register that may contain multiple sheets, multiple columns, and contextual metadata. Return JSON only with this schema:
+{
+  "summary": "string",
+  "linkAnalysis": "string",
+  "risks": [
+    { "title": "string", "category": "string", "description": "string", "regulations": ["string"] }
+  ]
+}`;
+        const userPrompt = `Business unit: ${input.businessUnit?.name || 'Unknown'}
+Geography: ${input.geography || 'Unknown'}
+Applicable regulations: ${(input.applicableRegulations || []).join(', ')}
+Register metadata: ${input.registerMeta ? JSON.stringify(input.registerMeta) : '(none)'}
+
+Risk register content:
+${input.registerText || '(none)'}
+
+Instructions:
+- use the whole workbook context, including sheet names and column headers
+- deduplicate overlapping risks
+- produce concise risk titles suitable for selection cards
+- preserve important contextual detail in the descriptions`;
+        const raw = await _callLLM(systemPrompt, userPrompt);
+        if (raw) {
+          return JSON.parse(raw.replace(/```json\n?|```/g, '').trim());
+        }
+      } catch (e) {
+        console.warn('analyseRiskRegister fallback:', e.message);
+      }
+    }
     const stub = _generateRiskBuilderStub({ ...input, riskStatement: lines.slice(0, 4).join('. ') });
     if (lines.length) {
       stub.risks = lines.slice(0, 8).map((line, idx) => ({

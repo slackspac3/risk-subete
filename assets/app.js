@@ -63,6 +63,7 @@ function resetDraft() {
     enhancedNarrative: '',
     uploadedRegisterName: '',
     registerFindings: '',
+    registerMeta: null,
     linkedRisks: DEFAULT_ADMIN_SETTINGS.defaultLinkMode,
     applicableRegulations: [...DEFAULT_ADMIN_SETTINGS.applicableRegulations],
     intakeSummary: '',
@@ -97,6 +98,7 @@ function ensureDraftShape() {
     enhancedNarrative: AppState.draft.enhancedNarrative || '',
     uploadedRegisterName: AppState.draft.uploadedRegisterName || '',
     registerFindings: AppState.draft.registerFindings || '',
+    registerMeta: AppState.draft.registerMeta || null,
     linkedRisks: AppState.draft.linkedRisks != null ? !!AppState.draft.linkedRisks : DEFAULT_ADMIN_SETTINGS.defaultLinkMode,
     applicableRegulations: Array.isArray(AppState.draft.applicableRegulations) ? AppState.draft.applicableRegulations : [...DEFAULT_ADMIN_SETTINGS.applicableRegulations],
     intakeSummary: AppState.draft.intakeSummary || '',
@@ -332,6 +334,96 @@ function looksLikeBinaryRegister(text) {
   if (sample.startsWith('PK') || /docProps\/|word\/|xl\//i.test(sample)) return true;
   const controlChars = (sample.match(/[\u0000-\u0008\u000E-\u001F]/g) || []).length;
   return controlChars > 8;
+}
+
+function truncateText(value, max = 180) {
+  const text = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+  return text.length > max ? text.slice(0, max - 1) + '…' : text;
+}
+
+function rowsToStructuredRegisterText(sheetName, rows) {
+  const trimmedRows = rows
+    .filter(row => row && Object.values(row).some(v => String(v ?? '').trim()))
+    .slice(0, 120);
+  if (!trimmedRows.length) return `Sheet: ${sheetName}\nNo non-empty rows found.`;
+  const headers = Array.from(new Set(trimmedRows.flatMap(row => Object.keys(row).filter(Boolean)))).slice(0, 25);
+  const renderedRows = trimmedRows.map((row, idx) => {
+    const cols = headers
+      .map(key => `${key}: ${truncateText(row[key])}`)
+      .filter(entry => !entry.endsWith(':'))
+      .slice(0, 8);
+    return `${idx + 1}. ${cols.join(' | ')}`;
+  });
+  return [
+    `Sheet: ${sheetName}`,
+    `Columns: ${headers.join(', ')}`,
+    `Rows:`,
+    ...renderedRows
+  ].join('\n');
+}
+
+function parseDelimitedText(text, delimiter = ',') {
+  const lines = String(text || '').split(/\r?\n/).filter(line => line.trim());
+  if (!lines.length) return [];
+  const headers = lines[0].split(delimiter).map(h => h.trim()).filter(Boolean);
+  return lines.slice(1).map(line => {
+    const values = line.split(delimiter);
+    const row = {};
+    headers.forEach((header, idx) => { row[header] = values[idx] != null ? values[idx].trim() : ''; });
+    return row;
+  });
+}
+
+async function parseRegisterFile(file) {
+  const ext = getFileExtension(file.name);
+  if (ext === 'xlsx' || ext === 'xls') {
+    if (typeof XLSX === 'undefined') {
+      throw new Error('Spreadsheet parser not loaded. Refresh the page and try again.');
+    }
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: 'array' });
+    const sheetSummaries = workbook.SheetNames.map(sheetName => {
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '', raw: false });
+      return {
+        sheetName,
+        rowCount: rows.length,
+        text: rowsToStructuredRegisterText(sheetName, rows)
+      };
+    });
+    return {
+      text: sheetSummaries.map(s => s.text).join('\n\n'),
+      meta: {
+        type: 'spreadsheet',
+        extension: ext,
+        sheetCount: workbook.SheetNames.length,
+        sheets: sheetSummaries.map(s => ({ sheetName: s.sheetName, rowCount: s.rowCount }))
+      }
+    };
+  }
+
+  const text = await file.text();
+  if (ext === 'csv' || ext === 'tsv') {
+    const rows = parseDelimitedText(text, ext === 'tsv' ? '\t' : ',');
+    return {
+      text: rowsToStructuredRegisterText(file.name, rows),
+      meta: {
+        type: 'delimited',
+        extension: ext,
+        sheetCount: 1,
+        sheets: [{ sheetName: file.name, rowCount: rows.length }]
+      }
+    };
+  }
+
+  return {
+    text,
+    meta: {
+      type: 'text',
+      extension: ext || 'txt',
+      sheetCount: 1,
+      sheets: [{ sheetName: file.name, rowCount: parseRegisterText(text).length }]
+    }
+  };
 }
 
 function composeGuidedNarrative(guidedInput = {}) {
@@ -692,8 +784,8 @@ function renderWizard1() {
             <div class="grid-2 mt-4">
               <div class="form-group">
                 <label class="form-label" for="risk-register-file">Risk Register Upload</label>
-                <input class="form-input" id="risk-register-file" type="file" accept=".txt,.csv,.json,.md,.tsv">
-                <div class="form-help">${draft.uploadedRegisterName ? `Current file: ${draft.uploadedRegisterName}` : 'Upload TXT, CSV, TSV, JSON, or Markdown. Word, Excel, PDF, and other binary formats are not parsed directly in the browser.'}</div>
+                <input class="form-input" id="risk-register-file" type="file" accept=".txt,.csv,.json,.md,.tsv,.xlsx,.xls">
+                <div class="form-help">${draft.uploadedRegisterName ? `Current file: ${draft.uploadedRegisterName}${draft.registerMeta?.sheetCount ? ` · ${draft.registerMeta.sheetCount} sheet(s)` : ''}` : 'Upload TXT, CSV, TSV, JSON, Markdown, or Excel. Word and PDF still need conversion before upload.'}</div>
               </div>
               <div class="form-group">
                 <label class="form-label" for="manual-risk-add">Add Risk Manually</label>
@@ -858,28 +950,32 @@ async function handleRegisterUpload(e) {
   const file = e.target.files?.[0];
   if (!file) return;
   const ext = getFileExtension(file.name);
-  const unsupported = ['docx', 'xlsx', 'xls', 'pptx', 'pdf', 'zip'];
+  const unsupported = ['docx', 'pptx', 'pdf', 'zip'];
   if (unsupported.includes(ext)) {
     AppState.draft.uploadedRegisterName = '';
     AppState.draft.registerFindings = '';
+    AppState.draft.registerMeta = null;
     saveDraft();
     e.target.value = '';
-    UI.toast('This file type is not supported for direct browser parsing. Please export the register as TXT, CSV, TSV, JSON, or Markdown first.', 'warning', 7000);
+    UI.toast('This file type is not supported for direct browser parsing. Please export the register as Excel, TXT, CSV, TSV, JSON, or Markdown first.', 'warning', 7000);
     return;
   }
-  const text = await file.text();
-  if (looksLikeBinaryRegister(text)) {
+  const parsed = await parseRegisterFile(file);
+  if (looksLikeBinaryRegister(parsed.text) && !['xlsx', 'xls'].includes(ext)) {
     AppState.draft.uploadedRegisterName = '';
     AppState.draft.registerFindings = '';
+    AppState.draft.registerMeta = null;
     saveDraft();
     e.target.value = '';
-    UI.toast('The uploaded file appears to be binary or an Office container. Please convert it to TXT, CSV, TSV, JSON, or Markdown before uploading.', 'warning', 7000);
+    UI.toast('The uploaded file appears to be binary or unreadable. Please convert it to Excel, TXT, CSV, TSV, JSON, or Markdown before uploading.', 'warning', 7000);
     return;
   }
   AppState.draft.uploadedRegisterName = file.name;
-  AppState.draft.registerFindings = text;
+  AppState.draft.registerFindings = parsed.text;
+  AppState.draft.registerMeta = parsed.meta;
   saveDraft();
-  UI.toast(`Loaded ${file.name}.`, 'success');
+  const sheetInfo = parsed.meta?.sheetCount > 1 ? ` (${parsed.meta.sheetCount} sheets parsed)` : '';
+  UI.toast(`Loaded ${file.name}${sheetInfo}.`, 'success');
 }
 
 async function runIntakeAssist() {
@@ -896,6 +992,7 @@ async function runIntakeAssist() {
     const result = await LLMService.enhanceRiskContext({
       riskStatement: narrative,
       registerText: AppState.draft.registerFindings,
+      registerMeta: AppState.draft.registerMeta,
       businessUnit: bu,
       geography: document.getElementById('wizard-geo')?.value.trim() || AppState.draft.geography,
       applicableRegulations: deriveApplicableRegulations(bu, getSelectedRisks()),
@@ -932,6 +1029,7 @@ async function analyseUploadedRegister() {
   try {
     const result = await LLMService.analyseRiskRegister({
       registerText: AppState.draft.registerFindings,
+      registerMeta: AppState.draft.registerMeta,
       businessUnit: bu,
       geography: AppState.draft.geography,
       applicableRegulations: AppState.draft.applicableRegulations || []
@@ -943,7 +1041,8 @@ async function analyseUploadedRegister() {
       return;
     }
     AppState.draft.selectedRisks = mergeRisks(getSelectedRisks(), extractedRisks);
-    AppState.draft.intakeSummary = result.summary || `Extracted ${getSelectedRisks().length} risks from ${AppState.draft.uploadedRegisterName}.`;
+    const workbookSummary = AppState.draft.registerMeta?.sheetCount > 1 ? ` across ${AppState.draft.registerMeta.sheetCount} sheets` : '';
+    AppState.draft.intakeSummary = result.summary || `Extracted ${getSelectedRisks().length} risks from ${AppState.draft.uploadedRegisterName}${workbookSummary}.`;
     AppState.draft.linkAnalysis = result.linkAnalysis || AppState.draft.linkAnalysis;
     saveDraft();
     renderWizard1();
