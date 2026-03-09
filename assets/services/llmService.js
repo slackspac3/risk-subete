@@ -32,6 +32,15 @@ const LLMService = (() => {
     _compassApiKey = '';
   }
 
+  function _getCompanyContextUrl() {
+    if (_isDirectCompassUrl(_compassApiUrl)) return '';
+    try {
+      return new URL('/api/company-context', _compassApiUrl).toString();
+    } catch {
+      return '';
+    }
+  }
+
   // Backwards-compatible alias for older setup instructions.
   function setOpenAIKey(key) {
     setCompassAPIKey(key);
@@ -335,6 +344,7 @@ Regulatory tags: ${(buContext?.regulatoryTags || []).join(', ')}
 Critical services: ${(buContext?.criticalServices || []).join(', ')}
 Geography: ${buContext?.geography || 'Unknown'}
 Benchmark strategy: ${buContext?.benchmarkStrategy || 'Prefer GCC and UAE references, then fall back to best global data with clear explanation.'}
+Company context profile: ${buContext?.companyContextProfile || '(none)'}
 
 Risk narrative: ${narrative}
 
@@ -377,6 +387,8 @@ Geography: ${input.geography || 'Unknown'}
 Applicable regulations: ${(input.applicableRegulations || []).join(', ')}
 AI guidance: ${input.adminSettings?.aiInstructions || ''}
 Benchmark strategy: ${input.adminSettings?.benchmarkStrategy || ''}
+Admin context summary: ${input.adminSettings?.adminContextSummary || ''}
+Company context profile: ${input.adminSettings?.companyContextProfile || ''}
 Register metadata: ${input.registerMeta ? JSON.stringify(input.registerMeta) : '(none)'}
 
 Risk statement:
@@ -423,6 +435,8 @@ Geography: ${input.geography || 'Unknown'}
 Applicable regulations: ${(input.applicableRegulations || []).join(', ')}
 Register metadata: ${input.registerMeta ? JSON.stringify(input.registerMeta) : '(none)'}
 Benchmark strategy: ${input.adminSettings?.benchmarkStrategy || 'Prefer GCC and UAE references where possible, then use best global data with clear explanation.'}
+Admin context summary: ${input.adminSettings?.adminContextSummary || ''}
+Company context profile: ${input.adminSettings?.companyContextProfile || ''}
 
 Risk register content:
 ${input.registerText || '(none)'}
@@ -462,6 +476,29 @@ Instructions:
     return stub;
   }
 
+  async function buildCompanyContext(websiteUrl) {
+    const endpoint = _getCompanyContextUrl();
+    if (!endpoint) {
+      throw new Error('Company context building requires a hosted proxy URL, not direct browser-to-Compass mode.');
+    }
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ websiteUrl })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw _normaliseLLMError(new Error(`LLM API error ${res.status}: ${errText}`));
+    }
+    const data = await res.json();
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+    return data;
+  }
+
   async function testCompassConnection() {
     if (_isDirectCompassUrl(_compassApiUrl) && !_compassApiKey) {
       throw new Error('No Compass API key configured for this session.');
@@ -484,6 +521,7 @@ Instructions:
     generateScenarioAndInputs,
     enhanceRiskContext,
     analyseRiskRegister,
+    buildCompanyContext,
     testCompassConnection,
     setCompassAPIKey,
     setCompassConfig,

@@ -9,6 +9,8 @@ const TOLERANCE_THRESHOLD = 5_000_000;
 const DEFAULT_FX_RATE = 3.6725;
 const DEFAULT_ADMIN_SETTINGS = {
   geography: 'United Arab Emirates',
+  companyWebsiteUrl: '',
+  companyContextProfile: '',
   riskAppetiteStatement: 'Moderate. Escalate risks that threaten regulated operations, cross-border data movement, or strategic platforms.',
   applicableRegulations: ['UAE PDPL', 'BIS Export Controls', 'OFAC Sanctions', 'UAE Cybersecurity Council Guidance'],
   aiInstructions: 'Prioritise operational, regulatory, and strategic impact. Use British English.',
@@ -1406,7 +1408,8 @@ async function runLLMAssist() {
       ...bu,
       regulatoryTags: deriveApplicableRegulations(bu, getSelectedRisks()),
       geography: AppState.draft.geography,
-      benchmarkStrategy: getAdminSettings().benchmarkStrategy
+      benchmarkStrategy: getAdminSettings().benchmarkStrategy,
+      companyContextProfile: getAdminSettings().companyContextProfile
     }, citations);
     AppState.draft.scenarioTitle = result.scenarioTitle;
     AppState.draft.structuredScenario = result.structuredScenario;
@@ -2201,6 +2204,25 @@ function renderAdminSettings() {
         <label class="form-label" for="admin-context-summary">Admin Context Summary</label>
         <textarea class="form-textarea" id="admin-context-summary" rows="2">${settings.adminContextSummary}</textarea>
       </div>
+      <div class="card mt-5" style="padding:var(--sp-5);background:var(--bg-elevated)">
+        <div class="context-panel-title">AI Company Context Builder</div>
+        <p class="context-panel-copy">Enter a company website and let the hosted AI builder gather public context from the site to shape the business profile, likely regulations, and AI guidance. This is based on public web material only.</p>
+        <div class="grid-2 mt-4">
+          <div class="form-group">
+            <label class="form-label" for="admin-company-url">Company Website URL</label>
+            <input class="form-input" id="admin-company-url" value="${settings.companyWebsiteUrl || ''}" placeholder="https://example.com">
+            <span class="form-help">Works through the hosted proxy. Direct browser-to-Compass mode cannot build website context.</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="admin-company-profile">Company Risk Context Profile</label>
+            <textarea class="form-textarea" id="admin-company-profile" rows="6" placeholder="Public business profile, operating model, technology exposure, and likely risk signals.">${settings.companyContextProfile || ''}</textarea>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
+          <button class="btn btn--secondary" id="btn-build-company-context">Build from Website</button>
+          <span class="form-help">The result can be reviewed and edited before you save settings.</span>
+        </div>
+      </div>
       <div class="form-group mt-4">
         <label class="form-label">Applicable Regulations</label>
         <div class="tag-input-wrap" id="ti-admin-regulations"></div>
@@ -2266,6 +2288,8 @@ function renderAdminSettings() {
     }
     saveAdminSettings({
       geography: document.getElementById('admin-geo').value.trim() || DEFAULT_ADMIN_SETTINGS.geography,
+      companyWebsiteUrl: document.getElementById('admin-company-url').value.trim(),
+      companyContextProfile: document.getElementById('admin-company-profile').value.trim(),
       defaultLinkMode: document.getElementById('admin-link-mode').value === 'yes',
       toleranceThresholdUsd,
       warningThresholdUsd,
@@ -2280,6 +2304,44 @@ function renderAdminSettings() {
     if (!AppState.draft.geography) AppState.draft.geography = getAdminSettings().geography;
     saveDraft();
     UI.toast('Settings saved.', 'success');
+  });
+  document.getElementById('btn-build-company-context').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-build-company-context');
+    const websiteUrl = document.getElementById('admin-company-url').value.trim();
+    if (!websiteUrl) {
+      UI.toast('Enter a company website URL first.', 'warning');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Building context…';
+    try {
+      const result = await LLMService.buildCompanyContext(websiteUrl);
+      const profileText = [
+        result.companySummary,
+        result.businessProfile,
+        result.riskSignals?.length ? `Key public risk signals: ${result.riskSignals.join('; ')}` : '',
+        result.sources?.length ? `Sources reviewed: ${result.sources.map(source => source.url).join(', ')}` : ''
+      ].filter(Boolean).join('\n\n');
+      document.getElementById('admin-company-profile').value = profileText;
+      if (!document.getElementById('admin-context-summary').value.trim()) {
+        document.getElementById('admin-context-summary').value = result.companySummary || '';
+      }
+      if (result.aiGuidance) {
+        document.getElementById('admin-ai-instructions').value = result.aiGuidance;
+      }
+      if (result.suggestedGeography && !document.getElementById('admin-geo').value.trim()) {
+        document.getElementById('admin-geo').value = result.suggestedGeography;
+      }
+      if (Array.isArray(result.regulatorySignals) && result.regulatorySignals.length) {
+        regsInput.setTags(Array.from(new Set([...regsInput.getTags(), ...result.regulatorySignals])));
+      }
+      UI.toast('Company context built from the public website.', 'success', 5000);
+    } catch (error) {
+      UI.toast('Company context build failed: ' + error.message, 'danger', 6000);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Build from Website';
+    }
   });
   document.getElementById('btn-save-session-llm').addEventListener('click', () => {
     const config = {
