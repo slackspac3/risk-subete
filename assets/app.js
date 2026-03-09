@@ -1765,6 +1765,22 @@ function renderResults(id, isShared) {
     : r.nearTolerance
       ? `Per-event P90: <strong>${fmtCurrency(r.lm.p90)}</strong> is above warning trigger <strong>${fmtCurrency(r.warningThreshold)}</strong> but below tolerance <strong>${fmtCurrency(r.threshold)}</strong>`
       : `Per-event P90: <strong>${fmtCurrency(r.lm.p90)}</strong> is below the warning trigger <strong>${fmtCurrency(r.warningThreshold)}</strong>`;
+  const executiveHeadline = r.toleranceBreached
+    ? `This scenario is currently above the organisation's risk tolerance and should be escalated.`
+    : r.nearTolerance
+      ? `This scenario is close to the organisation's risk tolerance and should be actively managed.`
+      : `This scenario is currently within tolerance, but should still be monitored and treated.`;
+  const executiveAction = r.toleranceBreached
+    ? 'Immediate leadership review recommended, with treatment decisions and ownership confirmed.'
+    : r.nearTolerance
+      ? 'Management review recommended to reduce exposure before it moves above tolerance.'
+      : 'Routine monitoring is appropriate unless conditions, controls, or external threats materially change.';
+  const executiveAnnualView = r.annualReviewTriggered
+    ? `Annual exposure is also material at ${fmtCurrency(r.ale.p90)} on a P90 basis, which is above the annual review trigger.`
+    : `Annual exposure is ${fmtCurrency(r.ale.p90)} on a P90 basis, which is below the annual review trigger.`;
+  const scenarioScopeSummary = r.portfolioMeta?.linked
+    ? `${r.selectedRiskCount || assessment.selectedRisks?.length || 1} linked risks are being treated as one connected scenario.`
+    : `${r.selectedRiskCount || assessment.selectedRisks?.length || 1} risks are being assessed together without linked uplift.`;
   setPage(`
     <main class="page">
       <div class="container container--wide" style="padding:var(--sp-8) var(--sp-6)">
@@ -1788,6 +1804,48 @@ function renderResults(id, isShared) {
           <div>
             <div class="tolerance-title">${statusTitle}</div>
             <div class="tolerance-detail">${statusDetail} &nbsp;·&nbsp; Exceedance: <strong>${(r.toleranceDetail.lmExceedProb*100).toFixed(1)}%</strong></div>
+          </div>
+        </div>
+
+        <div class="grid-2 mb-6 anim-fade-in">
+          <div class="card card--elevated">
+            <div class="context-panel-title">Executive Summary</div>
+            <p class="context-panel-copy">${executiveHeadline}</p>
+            <div style="display:flex;flex-direction:column;gap:var(--sp-3);margin-top:var(--sp-4)">
+              <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)">
+                <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Expected per-event exposure</div>
+                <div style="font-size:var(--text-xl);font-weight:700;color:var(--text-primary);margin-top:6px">${fmtCurrency(r.lm.mean)}</div>
+              </div>
+              <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)">
+                <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Severe but plausible per-event exposure</div>
+                <div style="font-size:var(--text-xl);font-weight:700;color:${r.toleranceBreached ? 'var(--color-danger-400)' : 'var(--text-primary)'};margin-top:6px">${fmtCurrency(r.lm.p90)}</div>
+              </div>
+              <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)">
+                <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Expected annual exposure</div>
+                <div style="font-size:var(--text-xl);font-weight:700;color:var(--text-primary);margin-top:6px">${fmtCurrency(r.ale.mean)}</div>
+              </div>
+            </div>
+          </div>
+          <div class="card card--elevated">
+            <div class="context-panel-title">What Leaders Should Know</div>
+            <div style="display:flex;flex-direction:column;gap:var(--sp-4);margin-top:var(--sp-3)">
+              <div>
+                <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Recommended action</div>
+                <div class="context-panel-copy" style="margin-top:6px">${executiveAction}</div>
+              </div>
+              <div>
+                <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Annual view</div>
+                <div class="context-panel-copy" style="margin-top:6px">${executiveAnnualView}</div>
+              </div>
+              <div>
+                <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Scenario scope</div>
+                <div class="context-panel-copy" style="margin-top:6px">${scenarioScopeSummary}</div>
+              </div>
+              <div>
+                <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Escalation guidance</div>
+                <div class="context-panel-copy" style="margin-top:6px">${getAdminSettings().escalationGuidance}</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1817,19 +1875,19 @@ function renderResults(id, isShared) {
         </div>` : ''}
 
         <div class="mb-6">
-          <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:var(--sp-3)">Per-Event Loss (LM)</div>
+          <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:var(--sp-3)">Per-Event Financial Exposure</div>
           <div class="grid-3 anim-fade-in">
-            <div class="metric-card"><div class="metric-label">P50 — Median</div><div class="metric-value">${fmtCurrency(r.lm.p50)}</div><div class="metric-sub">50% of events below this</div></div>
-            <div class="metric-card"><div class="metric-label">P90 — Tail Risk</div><div class="metric-value ${r.toleranceBreached?'danger':''}">${fmtCurrency(r.lm.p90)}</div><div class="metric-sub">Tolerance threshold check</div></div>
-            <div class="metric-card"><div class="metric-label">Mean — Expected</div><div class="metric-value">${fmtCurrency(r.lm.mean)}</div><div class="metric-sub">Average loss per event</div></div>
+            <div class="metric-card"><div class="metric-label">Typical event cost</div><div class="metric-value">${fmtCurrency(r.lm.p50)}</div><div class="metric-sub">A midpoint view of what one event may cost</div></div>
+            <div class="metric-card"><div class="metric-label">Severe but plausible event cost</div><div class="metric-value ${r.toleranceBreached?'danger':''}">${fmtCurrency(r.lm.p90)}</div><div class="metric-sub">Used for the tolerance check</div></div>
+            <div class="metric-card"><div class="metric-label">Expected event cost</div><div class="metric-value">${fmtCurrency(r.lm.mean)}</div><div class="metric-sub">Average loss per event across all simulations</div></div>
           </div>
         </div>
         <div class="mb-8">
-          <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:var(--sp-3)">Annual Loss Exposure (ALE) — Compound Poisson</div>
+          <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:var(--sp-3)">Annual Financial Exposure</div>
           <div class="grid-3 anim-fade-in anim-delay-1">
-            <div class="metric-card"><div class="metric-label">P50 — Median</div><div class="metric-value">${fmtCurrency(r.ale.p50)}</div><div class="metric-sub">Annual median exposure</div></div>
-            <div class="metric-card"><div class="metric-label">P90 — Annual Tail</div><div class="metric-value warning">${fmtCurrency(r.ale.p90)}</div><div class="metric-sub">90th percentile annual</div></div>
-            <div class="metric-card"><div class="metric-label">Mean — Expected</div><div class="metric-value">${fmtCurrency(r.ale.mean)}</div><div class="metric-sub">Expected annual loss</div></div>
+            <div class="metric-card"><div class="metric-label">Typical annual exposure</div><div class="metric-value">${fmtCurrency(r.ale.p50)}</div><div class="metric-sub">A midpoint annual view</div></div>
+            <div class="metric-card"><div class="metric-label">Severe annual exposure</div><div class="metric-value warning">${fmtCurrency(r.ale.p90)}</div><div class="metric-sub">Useful for annual planning and oversight</div></div>
+            <div class="metric-card"><div class="metric-label">Expected annual exposure</div><div class="metric-value">${fmtCurrency(r.ale.mean)}</div><div class="metric-sub">Average annual loss across all simulations</div></div>
           </div>
         </div>
 
