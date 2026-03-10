@@ -100,7 +100,9 @@ const AuthService = (() => {
       return {
         ok: true,
         apiUrl: getUsersApiUrl(),
-        accountCount: Array.isArray(data?.accounts) ? data.accounts.length : 0
+        accountCount: Array.isArray(data?.accounts) ? data.accounts.length : 0,
+        writable: !!data?.storage?.writable,
+        mode: data?.storage?.mode || 'unknown'
       };
     } catch (error) {
       return {

@@ -4958,8 +4958,13 @@ function renderAdminSettings() {
     statusEl.textContent = 'Checking shared Vercel user store…';
     const result = await AuthService.testUsersStoreHealth();
     if (result.ok) {
-      statusEl.textContent = `Connected to shared user store at ${result.apiUrl} · ${result.accountCount} account(s) available.`;
-      UI.toast('Shared user store is reachable.', 'success');
+      if (result.writable) {
+        statusEl.textContent = `Connected to shared user store at ${result.apiUrl} · writable · ${result.accountCount} account(s) available.`;
+        UI.toast('Shared user store is reachable and writable.', 'success');
+      } else {
+        statusEl.textContent = `Connected to ${result.apiUrl}, but it is running in ${result.mode} mode. Add KV_REST_API_URL and KV_REST_API_TOKEN in Vercel to enable shared user creation.`;
+        UI.toast('Shared user store is reachable but not writable.', 'warning');
+      }
     } else {
       statusEl.textContent = `Shared user store check failed: ${result.error}`;
       UI.toast('Shared user store check failed.', 'warning');

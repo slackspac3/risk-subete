@@ -39,6 +39,10 @@ async function runKvCommand(command) {
   return res.json();
 }
 
+function hasWritableKv() {
+  return !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+}
+
 async function readAccounts() {
   const response = await runKvCommand(['GET', USERS_KEY]);
   const raw = response?.result;
@@ -52,8 +56,8 @@ async function readAccounts() {
 }
 
 async function writeAccounts(accounts) {
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-    throw new Error('Missing KV_REST_API_URL or KV_REST_API_TOKEN secret in Vercel.');
+  if (!hasWritableKv()) {
+    throw new Error('Shared user store is not writable. Add KV_REST_API_URL and KV_REST_API_TOKEN in the Vercel project.');
   }
   await runKvCommand(['SET', USERS_KEY, JSON.stringify(accounts.map(normaliseAccount))]);
   return accounts.map(normaliseAccount);
@@ -90,7 +94,13 @@ module.exports = async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const accounts = await readAccounts();
-      res.status(200).json({ accounts });
+      res.status(200).json({
+        accounts,
+        storage: {
+          writable: hasWritableKv(),
+          mode: hasWritableKv() ? 'shared-kv' : 'fallback-defaults'
+        }
+      });
       return;
     }
 
