@@ -616,6 +616,69 @@ Instructions:
     }
   }
 
+  function _buildUserPreferenceAssistStub(input = {}) {
+    const role = String(input.userProfile?.jobTitle || 'team member').trim();
+    const businessUnit = String(input.userProfile?.businessUnit || 'the business unit').trim();
+    const department = String(input.userProfile?.department || 'the current function').trim();
+    const uploadedContext = String(input.uploadedText || '').trim();
+    const sourceHint = uploadedContext ? 'uploaded notes and source material' : 'the current profile and organisation context';
+    return {
+      workingContext: `${role} supporting ${department} in ${businessUnit}. Prioritise practical analysis tied to current responsibilities, dependencies, decision-making needs, and any regulated or business-critical services referenced in ${sourceHint}.`,
+      preferredOutputs: `Give concise, decision-ready outputs for a ${role}. Lead with the main risk signal, explain why it matters to ${department}, and end with clear actions, owners, and escalation points where needed.`,
+      aiInstructions: `Tailor outputs for a ${role} in ${department}, ${businessUnit}. Use the organisation context and any uploaded material, avoid generic filler, and keep recommendations practical, structured, and usable by the team.`,
+      adminContextSummary: `Personal working context for ${role} in ${department}, ${businessUnit}. Focus on responsibilities, dependencies, stakeholder communication, and operational or regulatory impacts most relevant to this user.`
+    };
+  }
+
+  async function buildUserPreferenceAssist(input = {}) {
+    const stub = _buildUserPreferenceAssistStub(input);
+    if (_isDirectCompassUrl(_compassApiUrl) && !_compassApiKey) return stub;
+    try {
+      const systemPrompt = `You are a senior enterprise risk assistant helping personalise a user's working context. Return JSON only with this schema:
+{
+  "workingContext": "string",
+  "preferredOutputs": "string",
+  "aiInstructions": "string",
+  "adminContextSummary": "string"
+}`;
+      const userPrompt = `Create concise personalised settings for this user.
+
+User profile:
+${JSON.stringify(input.userProfile || {}, null, 2)}
+
+Organisation selection:
+${JSON.stringify(input.organisationContext || {}, null, 2)}
+
+Existing personal settings:
+${JSON.stringify(input.currentSettings || {}, null, 2)}
+
+Uploaded source text:
+${String(input.uploadedText || '').slice(0, 12000)}
+
+Instructions:
+- use uploaded text when provided, otherwise rely on the role and organisation context
+- keep each field concise and practical
+- make the output specific to the user's role, BU, and department
+- do not restate generic company marketing language
+- workingContext should explain the user's likely operating context in 2-4 sentences
+- preferredOutputs should describe how answers should be formatted for this user
+- aiInstructions should be a compact set of standing instructions for future AI responses
+- adminContextSummary should be a short personal context summary suitable for defaults`;
+      const raw = await _callLLM(systemPrompt, userPrompt);
+      if (!raw) return stub;
+      const parsed = JSON.parse(String(raw).replace(/```json\n?|```/g, '').trim());
+      return {
+        workingContext: String(parsed.workingContext || stub.workingContext || '').trim(),
+        preferredOutputs: String(parsed.preferredOutputs || stub.preferredOutputs || '').trim(),
+        aiInstructions: String(parsed.aiInstructions || stub.aiInstructions || '').trim(),
+        adminContextSummary: String(parsed.adminContextSummary || stub.adminContextSummary || '').trim()
+      };
+    } catch (error) {
+      console.warn('buildUserPreferenceAssist fallback:', error.message);
+      return stub;
+    }
+  }
+
   async function testCompassConnection() {
     if (_isDirectCompassUrl(_compassApiUrl) && !_compassApiKey) {
       throw new Error('No Compass API key configured for this session.');
@@ -640,6 +703,7 @@ Instructions:
     analyseRiskRegister,
     buildCompanyContext,
     buildEntityContext,
+    buildUserPreferenceAssist,
     testCompassConnection,
     setCompassAPIKey,
     setCompassConfig,

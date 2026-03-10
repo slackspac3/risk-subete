@@ -3656,8 +3656,6 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
     companySummary: settings.adminContextSummary || '',
     businessProfile: settings.companyContextProfile || ''
   });
-  const sessionLLM = getSessionLLMConfig();
-  const directCompass = !sessionLLM.apiUrl || sessionLLM.apiUrl.includes('api.core42.ai');
   const userContextSection = renderSettingsSection({
     title: 'Profile And Role Context',
     description: 'Set who you are, where you sit, and how you want outputs framed.',
@@ -3701,6 +3699,30 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
       <div class="form-group mt-4">
         <label class="form-label" for="user-preferred-outputs">Preferred output style</label>
         <textarea class="form-textarea" id="user-preferred-outputs" rows="4">${profile.preferredOutputs || ''}</textarea>
+      </div>
+      <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
+        <button class="btn btn--secondary" id="btn-user-role-ai">AI Assist Role Context</button>
+        <span class="form-help">Use your role, BU, department, and uploaded source material to draft these fields.</span>
+      </div>`
+  });
+  const aiWorkspaceSection = renderSettingsSection({
+    title: 'AI Assist Workspace',
+    description: 'Upload notes, role descriptions, team material, or planning documents, then use AI assist across your settings.',
+    meta: 'Shared source',
+    open: true,
+    body: `
+      <div class="form-group">
+        <label class="form-label" for="user-ai-source-notes">Notes for AI assist</label>
+        <textarea class="form-textarea" id="user-ai-source-notes" rows="4" placeholder="Paste role notes, remit details, team responsibilities, reporting expectations, or any other useful context."></textarea>
+      </div>
+      <div class="form-group mt-4">
+        <label class="form-label" for="user-ai-source-file">Upload source material</label>
+        <input class="form-input" id="user-ai-source-file" type="file" accept=".txt,.csv,.json,.md,.tsv,.xlsx,.xls">
+        <div class="form-help" id="user-ai-source-file-help">Upload TXT, CSV, TSV, JSON, Markdown, or Excel. The content will be used only to draft your personal settings.</div>
+      </div>
+      <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
+        <button class="btn btn--secondary" id="btn-user-defaults-ai">AI Assist Personal Defaults</button>
+        <span class="form-help">Fills personal context summary and AI guidance from the same source material.</span>
       </div>`
   });
   const companyContextSection = renderSettingsSection({
@@ -3826,32 +3848,6 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
         <textarea class="form-textarea" id="user-benchmark-strategy" rows="3">${settings.benchmarkStrategy || ''}</textarea>
       </div>`
   });
-  const systemAccessSection = renderSettingsSection({
-    title: 'System Access For This Session',
-    description: directCompass ? 'Use direct Compass access for temporary testing only.' : 'A hosted proxy URL is configured for this user session.',
-    meta: sessionLLM.model || 'gpt-5.1',
-    body: `
-      <div class="grid-2">
-        <div class="form-group">
-          <label class="form-label" for="user-compass-url">Compass URL</label>
-          <input class="form-input" id="user-compass-url" value="${sessionLLM.apiUrl || DEFAULT_COMPASS_PROXY_URL}">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="user-compass-model">Model</label>
-          <input class="form-input" id="user-compass-model" value="${sessionLLM.model || 'gpt-5.1'}">
-        </div>
-      </div>
-      <div class="form-group mt-4">
-        <label class="form-label" for="user-compass-key">Compass API Key</label>
-        <input class="form-input" id="user-compass-key" type="password" value="${sessionLLM.apiKey || ''}" placeholder="Paste key for this browser session">
-      </div>
-      <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
-        <button class="btn btn--secondary" id="btn-save-user-session-llm">Save Session Key</button>
-        <button class="btn btn--secondary" id="btn-test-user-session-llm">Test Connection</button>
-        <button class="btn btn--ghost" id="btn-clear-user-session-llm">Clear Session Key</button>
-      </div>`
-  });
-
   setPage(`
     <main class="page">
       <div class="container container--narrow" style="padding:var(--sp-10) var(--sp-6);max-width:960px">
@@ -3887,10 +3883,10 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
 
           <div class="settings-accordion">
             ${userContextSection}
+            ${aiWorkspaceSection}
             ${companyContextSection}
             ${roleManagementSection}
             ${defaultsSection}
-            ${systemAccessSection}
           </div>
 
           <div class="settings-shell__footer">
@@ -3913,6 +3909,8 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
   const websiteEl = document.getElementById('user-company-url');
   const businessUnitEl = document.getElementById('user-business-unit');
   const departmentEl = document.getElementById('user-department');
+  let userAiSourceText = '';
+  let userAiSourceName = '';
 
   function renderUserDepartmentOptions() {
     const departments = getDepartmentEntities(companyStructure, businessUnitEl.value);
@@ -3932,6 +3930,48 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
       focusInput.setTags(next);
     });
   });
+
+  async function loadUserAiSource() {
+    const notes = document.getElementById('user-ai-source-notes')?.value.trim() || '';
+    const file = document.getElementById('user-ai-source-file')?.files?.[0];
+    let uploadedText = '';
+    if (file) {
+      const parsed = await parseRegisterFile(file);
+      if (looksLikeBinaryRegister(parsed.text) && !['xlsx', 'xls'].includes(getFileExtension(file.name))) {
+        throw new Error('The uploaded file appears unreadable. Please use Excel, TXT, CSV, TSV, JSON, or Markdown.');
+      }
+      uploadedText = parsed.text;
+      userAiSourceText = uploadedText;
+      userAiSourceName = file.name;
+      const help = document.getElementById('user-ai-source-file-help');
+      if (help) help.textContent = `Loaded ${file.name}. AI assist will use this content for your personal settings.`;
+    }
+    return [notes, uploadedText || userAiSourceText].filter(Boolean).join('\n\n');  }
+
+  function buildUserAssistInput(sourceText = '') {
+    const businessEntity = getEntityById(companyStructure, businessUnitEl.value.trim());
+    const departmentEntity = getEntityById(companyStructure, departmentEl.value.trim());
+    return {
+      userProfile: {
+        fullName: document.getElementById('user-full-name').value.trim() || AppState.currentUser?.displayName || '',
+        jobTitle: document.getElementById('user-job-title').value.trim(),
+        businessUnit: businessEntity?.name || profile.businessUnit || '',
+        department: departmentEntity?.name || profile.department || '',
+        focusAreas: focusInput.getTags(),
+        preferredOutputs: document.getElementById('user-preferred-outputs').value.trim(),
+        workingContext: document.getElementById('user-working-context').value.trim()
+      },
+      organisationContext: {
+        businessUnitContext: businessEntity?.profile || getEntityLayerById(globalSettings, businessEntity?.id || '')?.contextSummary || '',
+        departmentContext: departmentEntity?.profile || getEntityLayerById(globalSettings, departmentEntity?.id || '')?.contextSummary || ''
+      },
+      currentSettings: {
+        aiInstructions: document.getElementById('user-ai-instructions').value.trim(),
+        adminContextSummary: document.getElementById('user-context-summary').value.trim()
+      },
+      uploadedText: sourceText
+    };
+  }
 
   function buildUserSettingsPayload() {
     const businessUnitEntityId = businessUnitEl.value.trim();
@@ -4096,11 +4136,7 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
   document.getElementById('btn-build-user-context').addEventListener('click', async () => {
     const btn = document.getElementById('btn-build-user-context');
     const websiteUrl = websiteEl.value.trim();
-    const llmConfig = {
-      apiUrl: document.getElementById('user-compass-url').value.trim() || DEFAULT_COMPASS_PROXY_URL,
-      model: document.getElementById('user-compass-model').value.trim() || 'gpt-5.1',
-      apiKey: document.getElementById('user-compass-key').value.trim()
-    };
+    const llmConfig = getSessionLLMConfig();
     if (!websiteUrl) {
       UI.toast('Enter a company website URL first.', 'warning');
       return;
@@ -4141,43 +4177,55 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
     }
   });
 
-  document.getElementById('btn-save-user-session-llm').addEventListener('click', () => {
-    const config = {
-      apiUrl: document.getElementById('user-compass-url').value.trim() || DEFAULT_COMPASS_PROXY_URL,
-      model: document.getElementById('user-compass-model').value.trim() || 'gpt-5.1',
-      apiKey: document.getElementById('user-compass-key').value.trim()
-    };
-    saveSessionLLMConfig(config);
-    LLMService.setCompassConfig(config);
-    UI.toast(config.apiKey ? 'Compass session key loaded for this user.' : 'Compass proxy/session settings loaded for this user.', 'success');
-  });
-
-  document.getElementById('btn-test-user-session-llm').addEventListener('click', async () => {
-    const btn = document.getElementById('btn-test-user-session-llm');
-    const config = {
-      apiUrl: document.getElementById('user-compass-url').value.trim() || DEFAULT_COMPASS_PROXY_URL,
-      model: document.getElementById('user-compass-model').value.trim() || 'gpt-5.1',
-      apiKey: document.getElementById('user-compass-key').value.trim()
-    };
+  document.getElementById('btn-user-role-ai').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-user-role-ai');
     btn.disabled = true;
-    btn.textContent = 'Testing…';
+    btn.textContent = 'Building…';
     try {
-      LLMService.setCompassConfig(config);
-      const result = await LLMService.testCompassConnection();
-      UI.toast(result.message || 'Compass connection successful.', 'success', 5000);
-    } catch (e) {
-      UI.toast('Compass test failed: ' + e.message, 'danger', 6000);
+      const sourceText = await loadUserAiSource();
+      const llmConfig = getSessionLLMConfig();
+      LLMService.setCompassConfig({
+        apiUrl: llmConfig.apiUrl || DEFAULT_COMPASS_PROXY_URL,
+        model: llmConfig.model || 'gpt-5.1',
+        apiKey: llmConfig.apiKey || ''
+      });
+      const result = await LLMService.buildUserPreferenceAssist(buildUserAssistInput(sourceText));
+      document.getElementById('user-working-context').value = result.workingContext || document.getElementById('user-working-context').value;
+      document.getElementById('user-preferred-outputs').value = result.preferredOutputs || document.getElementById('user-preferred-outputs').value;
+      if (result.aiInstructions && !document.getElementById('user-ai-instructions').value.trim()) {
+        document.getElementById('user-ai-instructions').value = result.aiInstructions;
+      }
+      UI.toast('Role context and preferred output style drafted.', 'success', 5000);
+    } catch (error) {
+      UI.toast('AI assist failed: ' + error.message, 'danger', 6000);
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Test Connection';
+      btn.textContent = 'AI Assist Role Context';
     }
   });
 
-  document.getElementById('btn-clear-user-session-llm').addEventListener('click', () => {
-    sessionStorage.removeItem(buildUserStorageKey(SESSION_LLM_STORAGE_PREFIX));
-    LLMService.clearCompassConfig();
-    renderUserSettings();
-    UI.toast('Compass session key cleared for this user.', 'success');
+  document.getElementById('btn-user-defaults-ai').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-user-defaults-ai');
+    btn.disabled = true;
+    btn.textContent = 'Building…';
+    try {
+      const sourceText = await loadUserAiSource();
+      const llmConfig = getSessionLLMConfig();
+      LLMService.setCompassConfig({
+        apiUrl: llmConfig.apiUrl || DEFAULT_COMPASS_PROXY_URL,
+        model: llmConfig.model || 'gpt-5.1',
+        apiKey: llmConfig.apiKey || ''
+      });
+      const result = await LLMService.buildUserPreferenceAssist(buildUserAssistInput(sourceText));
+      document.getElementById('user-context-summary').value = result.adminContextSummary || document.getElementById('user-context-summary').value;
+      document.getElementById('user-ai-instructions').value = result.aiInstructions || document.getElementById('user-ai-instructions').value;
+      UI.toast('Personal defaults drafted from your source material.', 'success', 5000);
+    } catch (error) {
+      UI.toast('AI assist failed: ' + error.message, 'danger', 6000);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'AI Assist Personal Defaults';
+    }
   });
 
   document.getElementById('btn-reset-user-settings').addEventListener('click', async () => {
