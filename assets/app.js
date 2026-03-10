@@ -612,8 +612,45 @@ function renderCompanyStructureSummary(structure = []) {
     if (!byParent.has(key)) byParent.set(key, []);
     byParent.get(key).push(node);
   });
+
+  function sortNodes(nodes = []) {
+    return [...nodes].sort((left, right) => {
+      const leftIsDepartment = isDepartmentEntityType(left.type);
+      const rightIsDepartment = isDepartmentEntityType(right.type);
+      if (leftIsDepartment !== rightIsDepartment) return leftIsDepartment ? 1 : -1;
+      return String(left.name || '').localeCompare(String(right.name || ''));
+    });
+  }
+
+  function renderDepartmentList(parentNode) {
+    const departments = sortNodes((byParent.get(parentNode.id) || []).filter(node => isDepartmentEntityType(node.type)));
+    if (!departments.length) return '';
+    return `
+      <div class="org-tree-node__department-group">
+        <div class="form-help" style="margin-top:12px">Functions directly under ${parentNode.name}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          ${departments.map(node => `
+            <div class="org-related-card org-theme--department">
+              <div class="org-related-card__head">
+                <div>
+                  <div class="context-panel-title">${node.name}</div>
+                  <div class="form-help">${node.departmentRelationshipType || 'In-house'}${node.ownerUsername ? ` · Owner: ${accountLabelByUsername.get(node.ownerUsername) || node.ownerUsername}` : ''}</div>
+                  <div class="form-help">${getEntityLayerById(getAdminSettings(), node.id)?.contextSummary || node.profile || 'No retained department context yet'}</div>
+                </div>
+                <div class="flex items-center gap-3" style="flex-wrap:wrap">
+                  <button class="btn btn--ghost btn--sm org-entity-context" data-org-id="${node.id}" type="button">Manage Context</button>
+                  <button class="btn btn--ghost btn--sm org-entity-edit" data-org-id="${node.id}" type="button">Edit</button>
+                  <button class="btn btn--ghost btn--sm org-entity-delete" data-org-id="${node.id}" type="button">Remove</button>
+                </div>
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  }
+
   function renderNodes(parentId, depth = 0) {
-    return (byParent.get(parentId || 'root') || []).map(node => `
+    const childCompanies = sortNodes((byParent.get(parentId || 'root') || []).filter(node => isCompanyEntityType(node.type)));
+    return childCompanies.map(node => `
       <div class="org-tree-node ${getOrgEntityThemeClass(node.type)}" style="--org-depth:${depth};margin-top:8px">
         <div class="org-tree-node__rail"></div>
         <div class="org-tree-node__card">
@@ -625,13 +662,14 @@ function renderCompanyStructureSummary(structure = []) {
               ${node.ownerUsername ? `<span class="form-help" style="margin-top:0">Owner: ${accountLabelByUsername.get(node.ownerUsername) || node.ownerUsername}</span>` : ''}
             </div>
             <div class="org-tree-node__actions">
-              ${isCompanyEntityType(node.type) ? `<button class="btn btn--secondary btn--sm org-entity-add-department" data-org-id="${node.id}" type="button">Add Function / Department</button>` : ''}
+              <button class="btn btn--secondary btn--sm org-entity-add-department" data-org-id="${node.id}" type="button">Add Function / Department</button>
               <button class="btn btn--ghost btn--sm org-entity-context" data-org-id="${node.id}" type="button">Manage Context</button>
               <button class="btn btn--ghost btn--sm org-entity-edit" data-org-id="${node.id}" type="button">Edit</button>
               <button class="btn btn--ghost btn--sm org-entity-delete" data-org-id="${node.id}" type="button">Remove</button>
             </div>
           </div>
           ${depth ? `<div class="org-tree-node__path">${getEntityLineageLabel(structure, node.id)}</div>` : ''}
+          ${renderDepartmentList(node)}
         </div>
         <div class="org-tree-node__children">${renderNodes(node.id, depth + 1)}</div>
       </div>`).join('');
