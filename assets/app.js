@@ -52,7 +52,8 @@ const AppState = {
   adminVisiblePasswords: {},
   settingsSectionState: {},
   settingsScrollState: {},
-  adminSettingsCache: null
+  adminSettingsCache: null,
+  userStateCache: { username: '', userSettings: null, assessments: null, learningStore: null }
 };
 
 
@@ -108,6 +109,85 @@ function syncSharedAdminSettings(settings) {
   return requestSharedSettings('PUT', { settings }, { includeAdminSecret: true });
 }
 
+
+function getUserStateApiUrl() {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  if (origin && origin.includes('vercel.app')) return `${origin}/api/user-state`;
+  return 'https://risk-calculator-eight.vercel.app/api/user-state';
+}
+
+async function requestUserState(method = 'GET', username, payload) {
+  const safeUsername = String(username || '').trim().toLowerCase();
+  const url = method === 'GET'
+    ? `${getUserStateApiUrl()}?username=${encodeURIComponent(safeUsername)}`
+    : getUserStateApiUrl();
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: method === 'GET' ? undefined : JSON.stringify({ username: safeUsername, state: payload })
+  });
+  const text = await res.text();
+  let parsed = null;
+  try { parsed = text ? JSON.parse(text) : null; } catch {}
+  if (!res.ok) {
+    throw new Error(parsed?.detail || parsed?.error || text || `User state request failed with HTTP ${res.status}`);
+  }
+  return parsed || {};
+}
+
+async function loadSharedUserState(username = AuthService.getCurrentUser()?.username || '') {
+  const safeUsername = String(username || '').trim().toLowerCase();
+  if (!safeUsername) return null;
+  try {
+    const data = await requestUserState('GET', safeUsername);
+    const state = data?.state || {};
+    AppState.userStateCache = {
+      username: safeUsername,
+      userSettings: state.userSettings || null,
+      assessments: Array.isArray(state.assessments) ? state.assessments : [],
+      learningStore: state.learningStore && typeof state.learningStore === 'object' ? state.learningStore : { templates: {} }
+    };
+    if (state.userSettings) {
+      localStorage.setItem(buildUserStorageKey(USER_SETTINGS_STORAGE_PREFIX, safeUsername), JSON.stringify(state.userSettings));
+    }
+    localStorage.setItem(buildUserStorageKey(ASSESSMENTS_STORAGE_PREFIX, safeUsername), JSON.stringify(AppState.userStateCache.assessments));
+    localStorage.setItem(buildUserStorageKey(LEARNING_STORAGE_PREFIX, safeUsername), JSON.stringify(AppState.userStateCache.learningStore));
+    return AppState.userStateCache;
+  } catch (error) {
+    console.warn('loadSharedUserState fallback:', error.message);
+    return null;
+  }
+}
+
+function queueSharedUserStateSync(username = AuthService.getCurrentUser()?.username || '') {
+  const safeUsername = String(username || '').trim().toLowerCase();
+  if (!safeUsername) return;
+  const payload = {
+    userSettings: AppState.userStateCache.userSettings,
+    assessments: Array.isArray(AppState.userStateCache.assessments) ? AppState.userStateCache.assessments : [],
+    learningStore: AppState.userStateCache.learningStore && typeof AppState.userStateCache.learningStore === 'object' ? AppState.userStateCache.learningStore : { templates: {} }
+  };
+  requestUserState('PUT', safeUsername, payload).catch(error => console.warn('queueSharedUserStateSync failed:', error.message));
+}
+
+function ensureUserStateCache(username = AuthService.getCurrentUser()?.username || '') {
+  const safeUsername = String(username || '').trim().toLowerCase();
+  if (!safeUsername) {
+    return { username: '', userSettings: null, assessments: [], learningStore: { templates: {} } };
+  }
+  if (AppState.userStateCache.username !== safeUsername) {
+    AppState.userStateCache = {
+      username: safeUsername,
+      userSettings: null,
+      assessments: null,
+      learningStore: null
+    };
+  }
+  return AppState.userStateCache;
+}
+
 const USER_SETTINGS_KEYS = [
   'geography',
   'companyWebsiteUrl',
@@ -154,6 +234,10 @@ function clearUserPersistentState(username) {
   localStorage.removeItem(buildUserStorageKey(LEARNING_STORAGE_PREFIX, safeUsername));
   sessionStorage.removeItem(buildUserStorageKey(DRAFT_STORAGE_PREFIX, safeUsername));
   sessionStorage.removeItem(buildUserStorageKey(SESSION_LLM_STORAGE_PREFIX, safeUsername));
+  if (AppState.userStateCache.username === safeUsername) {
+    AppState.userStateCache = { username: safeUsername, userSettings: null, assessments: [], learningStore: { templates: {} } };
+  }
+  requestUserState('PUT', safeUsername, { userSettings: null, assessments: [], learningStore: { templates: {} } }).catch(error => console.warn('clearUserPersistentState sync failed:', error.message));
 }
 
 function getUserSettingsDefaults(globalSettings = getAdminSettings()) {
@@ -254,6 +338,8 @@ const TYPICAL_DEPARTMENTS = [
 ];
 
 function getStoredBUOverrides() {
+  const settings = getAdminSettings();
+  if (Array.isArray(settings.buOverrides)) return settings.buOverrides;
   try {
     const saved = JSON.parse(localStorage.getItem('rq_bu_override') || 'null');
     return Array.isArray(saved) ? saved : [];
@@ -315,28 +401,45 @@ function applyEntityLayerToSettings(baseSettings, layer = null, node = null) {
 }
 
 function getAssessments() {
-  try { return JSON.parse(localStorage.getItem(buildUserStorageKey(ASSESSMENTS_STORAGE_PREFIX)) || '[]'); } catch { return []; }
+  const cache = ensureUserStateCache();
+  if (Array.isArray(cache.assessments)) return cache.assessments;
+  try {
+    const saved = JSON.parse(localStorage.getItem(buildUserStorageKey(ASSESSMENTS_STORAGE_PREFIX)) || '[]');
+    cache.assessments = Array.isArray(saved) ? saved : [];
+  } catch {
+    cache.assessments = [];
+  }
+  return cache.assessments;
 }
 function saveAssessment(a) {
-  const list = getAssessments();
+  const list = getAssessments().slice();
   const idx = list.findIndex(x => x.id === a.id);
   if (idx > -1) list[idx] = a; else list.unshift(a);
+  const cache = ensureUserStateCache();
+  cache.assessments = list;
   localStorage.setItem(buildUserStorageKey(ASSESSMENTS_STORAGE_PREFIX), JSON.stringify(list));
+  queueSharedUserStateSync();
 }
 function getAssessmentById(id) {
   return getAssessments().find(a => a.id === id) || null;
 }
 
 function getLearningStore() {
+  const cache = ensureUserStateCache();
+  if (cache.learningStore && typeof cache.learningStore === 'object') return cache.learningStore;
   try {
-    return JSON.parse(localStorage.getItem(buildUserStorageKey(LEARNING_STORAGE_PREFIX)) || '{"templates":{}}');
+    cache.learningStore = JSON.parse(localStorage.getItem(buildUserStorageKey(LEARNING_STORAGE_PREFIX)) || '{"templates":{}}');
   } catch {
-    return { templates: {} };
+    cache.learningStore = { templates: {} };
   }
+  return cache.learningStore;
 }
 
 function saveLearningStore(store) {
-  localStorage.setItem(buildUserStorageKey(LEARNING_STORAGE_PREFIX), JSON.stringify(store));
+  const cache = ensureUserStateCache();
+  cache.learningStore = store && typeof store === 'object' ? store : { templates: {} };
+  localStorage.setItem(buildUserStorageKey(LEARNING_STORAGE_PREFIX), JSON.stringify(cache.learningStore));
+  queueSharedUserStateSync();
 }
 
 function getTemplateLearningProfile(templateId) {
@@ -526,11 +629,16 @@ function getBUList() {
   return [...syncedCompanies, ...legacyEntries];
 }
 function saveBUList(list) {
-  localStorage.setItem('rq_bu_override', JSON.stringify(Array.isArray(list) ? list : []));
+  const next = Array.isArray(list) ? list : [];
+  localStorage.setItem('rq_bu_override', JSON.stringify(next));
+  const adminSettings = getAdminSettings();
+  saveAdminSettings({ ...adminSettings, buOverrides: next, docOverrides: getDocList() });
   AppState.buList = getBUList();
   RAGService.init(getDocList(), AppState.buList);
 }
 function getDocList() {
+  const settings = getAdminSettings();
+  if (Array.isArray(settings.docOverrides) && settings.docOverrides.length) return settings.docOverrides;
   try {
     const ov = JSON.parse(localStorage.getItem('rq_doc_override') || 'null');
     return ov || AppState.docList;
@@ -538,6 +646,8 @@ function getDocList() {
 }
 function saveDocList(list) {
   localStorage.setItem('rq_doc_override', JSON.stringify(list));
+  const adminSettings = getAdminSettings();
+  saveAdminSettings({ ...adminSettings, docOverrides: list, buOverrides: getStoredBUOverrides() });
   AppState.docList = list;
   RAGService.init(list, getBUList());
 }
@@ -583,8 +693,21 @@ function saveAdminSettings(settings) {
 function getUserSettings() {
   const globalSettings = getAdminSettings();
   const defaults = getUserSettingsDefaults(globalSettings);
+  const cache = ensureUserStateCache();
+  if (cache.userSettings) {
+    return {
+      ...defaults,
+      ...cache.userSettings,
+      applicableRegulations: Array.isArray(cache.userSettings.applicableRegulations) ? cache.userSettings.applicableRegulations : [...defaults.applicableRegulations],
+      userProfile: normaliseUserProfile(cache.userSettings.userProfile || defaults.userProfile),
+      companyContextSections: cache.userSettings.companyContextSections && typeof cache.userSettings.companyContextSections === 'object'
+        ? cache.userSettings.companyContextSections
+        : defaults.companyContextSections
+    };
+  }
   try {
     const saved = JSON.parse(localStorage.getItem(buildUserStorageKey(USER_SETTINGS_STORAGE_PREFIX)) || 'null') || {};
+    cache.userSettings = saved;
     return {
       ...defaults,
       ...saved,
@@ -615,7 +738,10 @@ function saveUserSettings(settings) {
       ? settings.companyContextSections
       : defaults.companyContextSections
   };
+  const cache = ensureUserStateCache();
+  cache.userSettings = merged;
   localStorage.setItem(buildUserStorageKey(USER_SETTINGS_STORAGE_PREFIX), JSON.stringify(merged));
+  queueSharedUserStateSync();
 }
 
 function getEffectiveSettings() {
@@ -3367,6 +3493,7 @@ function renderLogin() {
     const pw = document.getElementById('login-pass').value;
     const result = await AuthService.login(username, pw);
     if (result.success) {
+      await loadSharedUserState(result.user.username);
       activateAuthenticatedState();
       UI.toast(`Logged in as ${result.user.displayName}.`, 'success');
       if (userNeedsOrganisationSelection(AuthService.getCurrentUser())) {
@@ -5620,6 +5747,9 @@ async function init() {
   try {
     await AuthService.init();
     await loadSharedAdminSettings();
+    if (AuthService.getCurrentUser()?.username) {
+      await loadSharedUserState(AuthService.getCurrentUser().username);
+    }
     AppState.buList  = await loadJSON('./data/bu.json');
     AppState.docList = await loadJSON('./data/docs.json');
   } catch(e) {
