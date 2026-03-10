@@ -528,7 +528,7 @@ Instructions:
     const entityType = String(input.entity?.type || 'business unit').trim();
     const departmentRelationshipType = String(input.entity?.departmentRelationshipType || '').trim();
     const parentName = String(input.parentEntity?.name || 'the parent business unit').trim();
-    const parentProfile = String(input.parentEntity?.profile || input.parentLayer?.contextSummary || '').trim();
+    const parentProfile = String(input.parentLayer?.contextSummary || input.parentEntity?.profile || '').trim();
     const remit = String(input.entity?.profile || input.entity?.departmentHint || '').trim();
     const geography = String(input.adminSettings?.geography || input.parentLayer?.geography || '').trim();
     const regulations = Array.from(new Set([
@@ -536,12 +536,19 @@ Instructions:
       ...(input.adminSettings?.applicableRegulations || [])
     ].map(String).filter(Boolean)));
     const relationshipText = departmentRelationshipType ? `${departmentRelationshipType.toLowerCase()} function within ${parentName}` : `${entityType.toLowerCase()} within ${parentName}`;
+    const shortParentContext = parentProfile.split(/(?<=[.!?])\s+/).slice(0, 1).join(' ').trim();
+    const remitSource = remit || `supporting ${parentName} through ${entityName.toLowerCase()} responsibilities`;
+    const isDepartment = String(input.entity?.type || '').toLowerCase() === 'department / function';
     return {
       geography,
-      contextSummary: `${entityName} is an ${relationshipText}. It inherits business context from ${parentName}${parentProfile ? `, which is described as ${parentProfile}` : ''}${remit ? `. The function remit currently points to ${remit}` : ''}. The context should focus on critical processes, dependencies, decision rights, technology reliance, third-party exposure, and regulatory touchpoints relevant to this team.`,
+      contextSummary: isDepartment
+        ? `${entityName} is an ${relationshipText}. It is responsible for ${remitSource}. Keep the summary focused on the team's core remit, dependencies, decision rights, and control responsibilities in support of ${parentName}${shortParentContext ? `, which currently operates in this context: ${shortParentContext}` : ''}.`
+        : `${entityName} sits within ${parentName}. Capture the core remit, dependencies, operating model, and control responsibilities relevant to this entity${shortParentContext ? `, drawing on this parent context: ${shortParentContext}` : ''}.`,
       riskAppetiteStatement: `Keep ${entityName} aligned to ${parentName}'s risk appetite, but escalate issues that could materially disrupt critical services, weaken control assurance, or create regulatory exposure for the wider business unit.`,
       applicableRegulations: regulations,
-      aiInstructions: `Tailor outputs for ${entityName} as a ${relationshipText}. Inherit relevant business-unit context from ${parentName}, avoid generic filler, and emphasise real operational responsibilities, dependencies, and control ownership.`,
+      aiInstructions: isDepartment
+        ? `Tailor outputs for ${entityName} as a ${relationshipText}. Keep summaries brief, functional, and role-specific. Do not restate the full group profile. Focus on actual responsibilities, dependencies, controls, and key interfaces with ${parentName}.`
+        : `Tailor outputs for ${entityName} within ${parentName}. Avoid generic filler and emphasise operational responsibilities, dependencies, and control ownership.`,
       benchmarkStrategy: String(input.parentLayer?.benchmarkStrategy || input.adminSettings?.benchmarkStrategy || '').trim()
     };
   }
@@ -587,6 +594,8 @@ ${JSON.stringify({
 Instructions:
 - derive the context from the entity metadata, any existing remit text, and the parent business unit context
 - if the entity is a department or function, inherit business-unit context and specialise it for the function
+- for departments and functions, keep the context summary to 2-4 sentences max
+- do not restate the full parent or group profile; only carry forward what is directly relevant to the function remit
 - avoid generic corporate language and avoid inventing unsupported facts
 - keep the context practical for future risk assessments and AI assistance
 - include relevant regulations only when supported by the inherited context or the admin baseline`;
