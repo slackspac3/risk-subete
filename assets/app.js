@@ -4228,6 +4228,14 @@ function renderAdminSettings() {
   const profileEl = document.getElementById('admin-company-profile');
   const websiteEl = document.getElementById('admin-company-url');
 
+  function persistAdminTreeState() {
+    saveAdminSettings({
+      ...getAdminSettings(),
+      companyStructure,
+      entityContextLayers
+    });
+  }
+
   function refreshStructureSummary() {
     structureSummaryEl.innerHTML = renderCompanyStructureSummary(companyStructure);
     bindStructureActionHandlers();
@@ -4271,6 +4279,7 @@ function renderAdminSettings() {
             const existingIndex = entityContextLayers.findIndex(item => item.entityId === nextLayer.entityId);
             if (existingIndex > -1) entityContextLayers[existingIndex] = nextLayer;
             else entityContextLayers.push(nextLayer);
+            persistAdminTreeState();
             modal.close();
             renderEntityLayerSummary();
             UI.toast(`Saved context for ${target.name}.`, 'success');
@@ -4285,6 +4294,7 @@ function renderAdminSettings() {
         if (index < 0) return;
         if (!await UI.confirm('Remove this business or department context layer?')) return;
         entityContextLayers.splice(index, 1);
+        persistAdminTreeState();
         renderEntityLayerSummary();
         UI.toast('Context layer removed.', 'success');
       });
@@ -4295,6 +4305,7 @@ function renderAdminSettings() {
     const index = companyStructure.findIndex(item => item.id === node.id);
     if (index > -1) companyStructure[index] = node;
     else companyStructure.push(node);
+    persistAdminTreeState();
     refreshStructureSummary();
     renderEntityLayerSummary();
   }
@@ -4372,6 +4383,7 @@ function renderAdminSettings() {
             const existingIndex = entityContextLayers.findIndex(item => item.entityId === nextLayer.entityId);
             if (existingIndex > -1) entityContextLayers[existingIndex] = nextLayer;
             else entityContextLayers.push(nextLayer);
+            persistAdminTreeState();
             modal.close();
             renderEntityLayerSummary();
             UI.toast(`Saved context for ${target.name}.`, 'success');
@@ -4416,6 +4428,7 @@ function renderAdminSettings() {
         for (let i = entityContextLayers.length - 1; i >= 0; i -= 1) {
           if (removeIds.has(entityContextLayers[i].entityId)) entityContextLayers.splice(i, 1);
         }
+        persistAdminTreeState();
         refreshStructureSummary();
         renderEntityLayerSummary();
         UI.toast(`${target.name} removed from the organisation tree.`, 'success');
