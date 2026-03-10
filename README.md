@@ -282,9 +282,9 @@ The default BU assumptions in `bu.json` are **illustrative only**. For productio
 Cross-system PoC users now use the Vercel `api/users` endpoint.
 
 Recommended Vercel environment variables for the shared user store:
-- `RC_USER_STORE_URL`
-- `RC_USER_STORE_TOKEN`
-- optional fallback names also supported: `USER_STORE_KV_URL`, `USER_STORE_KV_TOKEN`, `KV_REST_API_URL`, `KV_REST_API_TOKEN`
+- `APPLE_CAT`
+- `BANANA_DOG`
+- optional fallback names also supported: `FOO_URL_TEST`, `FOO_TOKEN_TEST`, `RC_USER_STORE_URL`, `RC_USER_STORE_TOKEN`, `USER_STORE_KV_URL`, `USER_STORE_KV_TOKEN`, `KV_REST_API_URL`, `KV_REST_API_TOKEN`
 - optional: `USER_STORE_KEY` (defaults to `risk_calculator_users`)
 - optional: `ALLOWED_ORIGIN` (defaults to `https://slackspac3.github.io`)
 

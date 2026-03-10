@@ -11,11 +11,11 @@ const USERS_KEY = process.env.USER_STORE_KEY || 'risk_calculator_users';
 
 
 function getKvUrl() {
-  return process.env.FOO_URL_TEST || process.env.RC_USER_STORE_URL || process.env.USER_STORE_KV_URL || process.env.KV_REST_API_URL || '';
+  return process.env.APPLE_CAT || process.env.FOO_URL_TEST || process.env.RC_USER_STORE_URL || process.env.USER_STORE_KV_URL || process.env.KV_REST_API_URL || '';
 }
 
 function getKvToken() {
-  return process.env.FOO_TOKEN_TEST || process.env.RC_USER_STORE_TOKEN || process.env.USER_STORE_KV_TOKEN || process.env.KV_REST_API_TOKEN || '';
+  return process.env.BANANA_DOG || process.env.FOO_TOKEN_TEST || process.env.RC_USER_STORE_TOKEN || process.env.USER_STORE_KV_TOKEN || process.env.KV_REST_API_TOKEN || '';
 }
 
 function normaliseAccount(account = {}) {
@@ -118,6 +118,8 @@ module.exports = async function handler(req, res) {
             fooTestValue: process.env.FOO_TEST || '',
             barTestPresent: !!process.env.BAR_TEST,
             barTestValue: process.env.BAR_TEST || '',
+            appleCatPresent: !!process.env.APPLE_CAT,
+            bananaDogPresent: !!process.env.BANANA_DOG,
             fooUrlTestPresent: !!process.env.FOO_URL_TEST,
             fooTokenTestPresent: !!process.env.FOO_TOKEN_TEST,
             rcUserStoreUrlPresent: !!process.env.RC_USER_STORE_URL,
