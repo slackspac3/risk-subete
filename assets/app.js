@@ -4556,6 +4556,7 @@ function renderAdminSettings() {
   }
 
   function openEntityEditor(existingNode = null, seed = {}) {
+    const departmentEditorMode = isDepartmentEntityType(existingNode?.type || seed.type || '');
     const editor = openOrgEntityEditor({
       structure: companyStructure,
       existingNode,
@@ -4572,7 +4573,7 @@ function renderAdminSettings() {
       }
     });
     const buildContextBtn = document.getElementById('btn-org-build-context');
-    if (buildContextBtn) {
+    if (buildContextBtn && !departmentEditorMode) {
       buildContextBtn.addEventListener('click', async () => {
         const llmConfig = {
           apiUrl: document.getElementById('admin-compass-url').value.trim() || 'https://risk-calculator-eight.vercel.app/api/compass',
