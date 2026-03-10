@@ -954,9 +954,11 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
       <span class="form-help" id="org-context-actions-help">Use AI to gather website and public-source context before saving.</span>
     </div>`;
   const modal = UI.modal({
-    title: existingNode ? 'Edit Organisation Entity' : 'Add Organisation Entity',
+    title: isSeedDepartment
+      ? (existingNode ? 'Edit Function / Department' : 'Add Function / Department')
+      : (existingNode ? 'Edit Organisation Entity' : 'Add Organisation Entity'),
     body,
-    footer: `<button class="btn btn--ghost" id="org-cancel">Cancel</button><button class="btn btn--primary" id="org-save">Save Entity</button>`
+    footer: `<button class="btn btn--ghost" id="org-cancel">Cancel</button><button class="btn btn--primary" id="org-save">${isSeedDepartment ? 'Save Function' : 'Save Entity'}</button>`
   });
 
   const departmentEditorMode = isSeedDepartment;
