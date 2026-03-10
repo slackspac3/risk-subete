@@ -615,6 +615,7 @@ function renderCompanyStructureSummary(structure = []) {
           ${node.websiteUrl ? `<span class="form-help" style="margin-top:0">${node.websiteUrl}</span>` : ''}
           ${node.ownerUsername ? `<span class="form-help" style="margin-top:0">Owner: ${accountLabelByUsername.get(node.ownerUsername) || node.ownerUsername}</span>` : ''}
           ${isCompanyEntityType(node.type) ? `<button class="btn btn--secondary btn--sm org-entity-add-department" data-org-id="${node.id}" type="button">Add Function / Department</button>` : ''}
+          <button class="btn btn--ghost btn--sm org-entity-context" data-org-id="${node.id}" type="button">Manage Context</button>
           <button class="btn btn--ghost btn--sm org-entity-edit" data-org-id="${node.id}" type="button">Edit</button>
           <button class="btn btn--ghost btn--sm org-entity-delete" data-org-id="${node.id}" type="button">Remove</button>
         </div>
@@ -3910,19 +3911,19 @@ function renderAdminSettings() {
       <button class="btn btn--secondary" id="btn-reset-settings">Reset Defaults</button>
     </div>
     <div class="card card--elevated mb-6">
-      <div class="context-panel-title">Recommended Setup Flow</div>
+      <div class="context-panel-title">How This Screen Works</div>
       <div class="context-grid mt-4">
         <div class="context-chip-panel">
-          <div class="context-panel-title">1. Build the structure</div>
-          <p class="context-panel-copy">Add holdings, subsidiaries, portfolio companies, partners, and departments so the platform understands how the business is organised.</p>
+          <div class="context-panel-title">1. Build the organisation tree</div>
+          <p class="context-panel-copy">Add holdings, subsidiaries, portfolio companies, partners, and departments in one place.</p>
         </div>
         <div class="context-chip-panel">
-          <div class="context-panel-title">2. Add entity context layers</div>
-          <p class="context-panel-copy">Pick a business or department and tailor geography, regulations, appetite, and AI guidance underneath that node.</p>
+          <div class="context-panel-title">2. Manage context from each node</div>
+          <p class="context-panel-copy">Use the tree actions to edit the retained business or department context directly on the entity you are working on.</p>
         </div>
         <div class="context-chip-panel">
-          <div class="context-panel-title">3. Tune global defaults last</div>
-          <p class="context-panel-copy">Use platform-wide thresholds, benchmark rules, and system access only after the business structure and context layers are in place.</p>
+          <div class="context-panel-title">3. Use platform defaults as fallback</div>
+          <p class="context-panel-copy">Global geography, regulations, thresholds, and AI defaults sit underneath the entity-specific setup.</p>
         </div>
       </div>
     </div>
@@ -3945,7 +3946,7 @@ function renderAdminSettings() {
       <div class="admin-overview-card">
         <div class="admin-overview-label">Org Customisation</div>
         <div class="admin-overview-value">${buCount}</div>
-        <div class="admin-overview-foot">Assessment-specific BU and department context managed in Org Customisation</div>
+        <div class="admin-overview-foot">Assessment-ready BU context derived from the organisation tree</div>
       </div>
       <div class="admin-overview-card">
         <div class="admin-overview-label">Document Library</div>
@@ -3957,7 +3958,7 @@ function renderAdminSettings() {
       <div class="admin-section-head">
         <div>
           <h3>Organisation Tree</h3>
-          <p>Start here. Build the group structure that later AI-assisted assessments should understand and reuse.</p>
+          <p>Use this as the main operating view. Add businesses and departments here, then manage each node's retained context from the same tree.</p>
         </div>
       </div>
       <div class="card" style="padding:var(--sp-5);background:var(--bg-elevated)">
@@ -3970,49 +3971,8 @@ function renderAdminSettings() {
         <div id="admin-company-structure-summary" class="mt-4">${renderCompanyStructureSummary(companyStructure)}</div>
       </div>
       <div class="card mt-4" style="padding:var(--sp-5);background:var(--bg-elevated)">
-        <div class="context-panel-title">Business and Department Context Layers</div>
-        <p class="context-panel-copy">Once the structure exists, pick a saved entity and create a context layer beneath it. This is where you tailor geography, appetite, regulations, and AI behaviour for a specific business or department rather than the whole platform.</p>
-        ${companyStructure.length ? `
-        <div class="grid-2 mt-4">
-          <div class="form-group">
-            <label class="form-label" for="admin-layer-target">Target Business or Department</label>
-            <select class="form-select" id="admin-layer-target">
-              <option value="">Choose a saved entity</option>
-              ${orgContextTargetOptions}
-            </select>
-            <span class="form-help">Select a business or department from the structure first. Departments should already sit under a business.</span>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="admin-layer-geo">Layer Geography</label>
-            <input class="form-input" id="admin-layer-geo" placeholder="e.g. UAE, GCC, Global">
-          </div>
-        </div>
-        <div class="form-group mt-4">
-          <label class="form-label" for="admin-layer-summary">Layer Context Summary</label>
-          <textarea class="form-textarea" id="admin-layer-summary" rows="3" placeholder="Describe what is unique about this business or department, including technology footprint, regulatory exposure, or strategic role."></textarea>
-        </div>
-        <div class="form-group mt-4">
-          <label class="form-label" for="admin-layer-appetite">Layer Risk Appetite</label>
-          <textarea class="form-textarea" id="admin-layer-appetite" rows="3" placeholder="Optional appetite or escalation nuance for this business or department."></textarea>
-        </div>
-        <div class="form-group mt-4">
-          <label class="form-label">Layer Regulations</label>
-          <div class="tag-input-wrap" id="ti-admin-layer-regulations"></div>
-        </div>
-        <div class="form-group mt-4">
-          <label class="form-label" for="admin-layer-ai">Layer AI Guidance</label>
-          <textarea class="form-textarea" id="admin-layer-ai" rows="3" placeholder="Optional AI instructions specific to this entity."></textarea>
-        </div>
-        <div class="form-group mt-4">
-          <label class="form-label" for="admin-layer-benchmark">Layer Benchmark Strategy</label>
-          <textarea class="form-textarea" id="admin-layer-benchmark" rows="3" placeholder="Optional benchmark rule for this entity."></textarea>
-        </div>
-        <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
-          <button class="btn btn--secondary" id="btn-save-layer">Save Layer</button>
-          <button class="btn btn--ghost" id="btn-clear-layer">Clear Layer Form</button>
-          <span class="form-help">Saved layers help the platform reason about different parts of the group more precisely.</span>
-        </div>` : `
-        <div class="form-help mt-4">Add at least one business or department to the organisation tree before creating entity-level context layers.</div>`}
+        <div class="context-panel-title">Entity Context Lives On The Tree</div>
+        <p class="context-panel-copy">Business and department context is now managed from the organisation tree itself. Use <strong>Manage Context</strong> on any business or department to edit geography, appetite, regulations, and AI guidance for that node.</p>
         <div id="admin-layer-summary-list" class="mt-4"></div>
       </div>
       <div class="card mt-4" style="padding:var(--sp-5);background:var(--bg-elevated)">
@@ -4268,7 +4228,22 @@ function renderAdminSettings() {
 
   function bindLayerActionHandlers() {
     layerSummaryEl?.querySelectorAll('.admin-layer-edit').forEach(button => {
-      button.addEventListener('click', () => loadEntityLayer(button.dataset.layerId));
+      button.addEventListener('click', () => {
+        const target = companyStructure.find(item => item.id === button.dataset.layerId);
+        if (!target) return;
+        openEntityContextLayerEditor({
+          entity: target,
+          settings: getAdminSettings(),
+          onSave: (nextLayer, modal) => {
+            const existingIndex = entityContextLayers.findIndex(item => item.entityId === nextLayer.entityId);
+            if (existingIndex > -1) entityContextLayers[existingIndex] = nextLayer;
+            else entityContextLayers.push(nextLayer);
+            modal.close();
+            renderEntityLayerSummary();
+            UI.toast(`Saved context for ${target.name}.`, 'success');
+          }
+        });
+      });
     });
     layerSummaryEl?.querySelectorAll('.admin-layer-delete').forEach(button => {
       button.addEventListener('click', async () => {
@@ -4354,6 +4329,24 @@ function renderAdminSettings() {
   }
 
   function bindStructureActionHandlers() {
+    structureSummaryEl.querySelectorAll('.org-entity-context').forEach(button => {
+      button.addEventListener('click', () => {
+        const target = companyStructure.find(node => node.id === button.dataset.orgId);
+        if (!target) return;
+        openEntityContextLayerEditor({
+          entity: target,
+          settings: getAdminSettings(),
+          onSave: (nextLayer, modal) => {
+            const existingIndex = entityContextLayers.findIndex(item => item.entityId === nextLayer.entityId);
+            if (existingIndex > -1) entityContextLayers[existingIndex] = nextLayer;
+            else entityContextLayers.push(nextLayer);
+            modal.close();
+            renderEntityLayerSummary();
+            UI.toast(`Saved context for ${target.name}.`, 'success');
+          }
+        });
+      });
+    });
     structureSummaryEl.querySelectorAll('.org-entity-add-department').forEach(button => {
       button.addEventListener('click', () => {
         openEntityEditor(null, {
