@@ -1071,13 +1071,49 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
   };
 }
 
+function buildEntityContextRequest(entity, settings = getAdminSettings(), existingLayer = null) {
+  const structure = Array.isArray(settings.companyStructure) ? settings.companyStructure : [];
+  const parentEntity = entity?.parentId ? getEntityById(structure, entity.parentId) : null;
+  const parentLayer = parentEntity?.id ? getEntityLayerById(settings, parentEntity.id) : null;
+  return {
+    entity: {
+      id: entity?.id || '',
+      name: entity?.name || '',
+      type: entity?.type || '',
+      profile: entity?.profile || '',
+      departmentHint: entity?.departmentHint || '',
+      departmentRelationshipType: entity?.departmentRelationshipType || '',
+      ownerUsername: entity?.ownerUsername || ''
+    },
+    parentEntity: parentEntity ? {
+      id: parentEntity.id,
+      name: parentEntity.name,
+      type: parentEntity.type,
+      profile: parentEntity.profile || '',
+      websiteUrl: parentEntity.websiteUrl || ''
+    } : null,
+    existingLayer: existingLayer || {},
+    parentLayer: parentLayer || null,
+    adminSettings: {
+      geography: settings.geography || '',
+      applicableRegulations: Array.isArray(settings.applicableRegulations) ? settings.applicableRegulations : [],
+      aiInstructions: settings.aiInstructions || '',
+      benchmarkStrategy: settings.benchmarkStrategy || '',
+      riskAppetiteStatement: settings.riskAppetiteStatement || ''
+    }
+  };
+}
+
 function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), onSave, readOnlyIdentity = false }) {
   if (!entity?.id) return null;
   const existingLayer = getEntityLayerById(settings, entity.id) || {};
+  const contextRequest = buildEntityContextRequest(entity, settings, existingLayer);
+  const parentName = contextRequest.parentEntity?.name || '';
   const modal = UI.modal({
     title: `Manage Context: ${entity.name}`,
     body: `
       <div class="context-panel-copy" style="margin-bottom:12px">This context sits under <strong>${entity.name}</strong> and helps the platform retain what is unique about this ${isDepartmentEntityType(entity.type) ? 'department' : 'business unit'}.</div>
+      ${parentName ? `<div class="form-help" style="margin-bottom:12px">AI assist will inherit context from <strong>${parentName}</strong> and specialise it for this ${isDepartmentEntityType(entity.type) ? 'function' : 'entity'}.</div>` : ''}
       <div class="grid-2" style="gap:12px">
         <div class="form-group">
           <label class="form-label" for="entity-layer-name">Entity</label>
@@ -1107,12 +1143,54 @@ function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), o
       <div class="form-group mt-4">
         <label class="form-label" for="entity-layer-benchmark">Benchmark Strategy</label>
         <textarea class="form-textarea" id="entity-layer-benchmark" rows="3">${existingLayer.benchmarkStrategy || ''}</textarea>
+      </div>
+      <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
+        <button class="btn btn--secondary" id="btn-entity-layer-ai" type="button">Build with AI</button>
+        <span class="form-help">Derive context from the entity, the parent BU, and the current admin baseline.</span>
       </div>`,
     footer: `<button class="btn btn--ghost" id="entity-layer-cancel">Cancel</button><button class="btn btn--primary" id="entity-layer-save">Save Context</button>`
   });
 
   const regsInput = UI.tagInput('ti-entity-layer-regulations', existingLayer.applicableRegulations || []);
   document.getElementById('entity-layer-cancel').addEventListener('click', () => modal.close());
+  document.getElementById('btn-entity-layer-ai').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-entity-layer-ai');
+    const llmConfig = getSessionLLMConfig();
+    btn.disabled = true;
+    btn.textContent = 'Building context…';
+    try {
+      LLMService.setCompassConfig({
+        apiUrl: llmConfig.apiUrl || DEFAULT_COMPASS_PROXY_URL,
+        model: llmConfig.model || 'gpt-5.1',
+        apiKey: llmConfig.apiKey || ''
+      });
+      const result = await LLMService.buildEntityContext(contextRequest);
+      if (result.geography && !document.getElementById('entity-layer-geo').value.trim()) {
+        document.getElementById('entity-layer-geo').value = result.geography;
+      }
+      if (result.contextSummary) {
+        document.getElementById('entity-layer-summary').value = result.contextSummary;
+      }
+      if (result.riskAppetiteStatement) {
+        document.getElementById('entity-layer-appetite').value = result.riskAppetiteStatement;
+      }
+      if (Array.isArray(result.applicableRegulations) && result.applicableRegulations.length) {
+        regsInput.setTags(Array.from(new Set([...regsInput.getTags(), ...result.applicableRegulations])));
+      }
+      if (result.aiInstructions) {
+        document.getElementById('entity-layer-ai').value = result.aiInstructions;
+      }
+      if (result.benchmarkStrategy) {
+        document.getElementById('entity-layer-benchmark').value = result.benchmarkStrategy;
+      }
+      UI.toast(`Context built for ${entity.name}. Review and save it.`, 'success', 5000);
+    } catch (error) {
+      UI.toast('Context build failed: ' + error.message, 'danger', 6000);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Build with AI';
+    }
+  });
   document.getElementById('entity-layer-save').addEventListener('click', () => {
     onSave?.({
       entityId: entity.id,

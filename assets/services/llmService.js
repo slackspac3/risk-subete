@@ -522,6 +522,91 @@ Instructions:
     return data;
   }
 
+
+  function _buildEntityContextStub(input = {}) {
+    const entityName = String(input.entity?.name || 'This entity').trim();
+    const entityType = String(input.entity?.type || 'business unit').trim();
+    const departmentRelationshipType = String(input.entity?.departmentRelationshipType || '').trim();
+    const parentName = String(input.parentEntity?.name || 'the parent business unit').trim();
+    const parentProfile = String(input.parentEntity?.profile || input.parentLayer?.contextSummary || '').trim();
+    const remit = String(input.entity?.profile || input.entity?.departmentHint || '').trim();
+    const geography = String(input.adminSettings?.geography || input.parentLayer?.geography || '').trim();
+    const regulations = Array.from(new Set([
+      ...(input.parentLayer?.applicableRegulations || []),
+      ...(input.adminSettings?.applicableRegulations || [])
+    ].map(String).filter(Boolean)));
+    const relationshipText = departmentRelationshipType ? `${departmentRelationshipType.toLowerCase()} function within ${parentName}` : `${entityType.toLowerCase()} within ${parentName}`;
+    return {
+      geography,
+      contextSummary: `${entityName} is an ${relationshipText}. It inherits business context from ${parentName}${parentProfile ? `, which is described as ${parentProfile}` : ''}${remit ? `. The function remit currently points to ${remit}` : ''}. The context should focus on critical processes, dependencies, decision rights, technology reliance, third-party exposure, and regulatory touchpoints relevant to this team.`,
+      riskAppetiteStatement: `Keep ${entityName} aligned to ${parentName}'s risk appetite, but escalate issues that could materially disrupt critical services, weaken control assurance, or create regulatory exposure for the wider business unit.`,
+      applicableRegulations: regulations,
+      aiInstructions: `Tailor outputs for ${entityName} as a ${relationshipText}. Inherit relevant business-unit context from ${parentName}, avoid generic filler, and emphasise real operational responsibilities, dependencies, and control ownership.`,
+      benchmarkStrategy: String(input.parentLayer?.benchmarkStrategy || input.adminSettings?.benchmarkStrategy || '').trim()
+    };
+  }
+
+  async function buildEntityContext(input = {}) {
+    const stub = _buildEntityContextStub(input);
+    if (_isDirectCompassUrl(_compassApiUrl) && !_compassApiKey) {
+      return stub;
+    }
+    try {
+      const systemPrompt = `You are a senior enterprise risk and operating-context analyst. Return JSON only with this schema:
+{
+  "geography": "string",
+  "contextSummary": "string",
+  "riskAppetiteStatement": "string",
+  "applicableRegulations": ["string"],
+  "aiInstructions": "string",
+  "benchmarkStrategy": "string"
+}`;
+      const userPrompt = `Build retained context for this organisation node.
+
+Entity:
+${JSON.stringify(input.entity || {}, null, 2)}
+
+Parent entity:
+${JSON.stringify(input.parentEntity || {}, null, 2)}
+
+Existing layer:
+${JSON.stringify(input.existingLayer || {}, null, 2)}
+
+Parent layer:
+${JSON.stringify(input.parentLayer || {}, null, 2)}
+
+Global admin settings:
+${JSON.stringify({
+        geography: input.adminSettings?.geography || '',
+        applicableRegulations: input.adminSettings?.applicableRegulations || [],
+        aiInstructions: input.adminSettings?.aiInstructions || '',
+        benchmarkStrategy: input.adminSettings?.benchmarkStrategy || '',
+        riskAppetiteStatement: input.adminSettings?.riskAppetiteStatement || ''
+      }, null, 2)}
+
+Instructions:
+- derive the context from the entity metadata, any existing remit text, and the parent business unit context
+- if the entity is a department or function, inherit business-unit context and specialise it for the function
+- avoid generic corporate language and avoid inventing unsupported facts
+- keep the context practical for future risk assessments and AI assistance
+- include relevant regulations only when supported by the inherited context or the admin baseline`;
+      const raw = await _callLLM(systemPrompt, userPrompt);
+      if (!raw) return stub;
+      const parsed = JSON.parse(String(raw).replace(/```json\n?|```/g, '').trim());
+      return {
+        geography: String(parsed.geography || stub.geography || '').trim(),
+        contextSummary: String(parsed.contextSummary || stub.contextSummary || '').trim(),
+        riskAppetiteStatement: String(parsed.riskAppetiteStatement || stub.riskAppetiteStatement || '').trim(),
+        applicableRegulations: Array.isArray(parsed.applicableRegulations) ? parsed.applicableRegulations.map(String).filter(Boolean) : stub.applicableRegulations,
+        aiInstructions: String(parsed.aiInstructions || stub.aiInstructions || '').trim(),
+        benchmarkStrategy: String(parsed.benchmarkStrategy || stub.benchmarkStrategy || '').trim()
+      };
+    } catch (error) {
+      console.warn('buildEntityContext fallback:', error.message);
+      return stub;
+    }
+  }
+
   async function testCompassConnection() {
     if (_isDirectCompassUrl(_compassApiUrl) && !_compassApiKey) {
       throw new Error('No Compass API key configured for this session.');
@@ -545,6 +630,7 @@ Instructions:
     enhanceRiskContext,
     analyseRiskRegister,
     buildCompanyContext,
+    buildEntityContext,
     testCompassConnection,
     setCompassAPIKey,
     setCompassConfig,
