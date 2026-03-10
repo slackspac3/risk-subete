@@ -31,7 +31,8 @@ const AuthService = (() => {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify({
       authenticated: true,
       ts: Date.now(),
-      user: sanitiseAccount(account)
+      user: sanitiseAccount(account),
+      context: {}
     }));
   }
 
@@ -75,7 +76,24 @@ const AuthService = (() => {
   }
 
   function getCurrentUser() {
-    return readSession()?.user || null;
+    const session = readSession();
+    if (!session?.user) return null;
+    return {
+      ...session.user,
+      ...(session.context || {})
+    };
+  }
+
+  function updateSessionContext(context = {}) {
+    const session = readSession();
+    if (!session?.user) return null;
+    session.context = {
+      ...(session.context || {}),
+      ...context
+    };
+    session.ts = Date.now();
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    return getCurrentUser();
   }
 
   function getSeededAccounts() {
@@ -94,6 +112,7 @@ const AuthService = (() => {
     isAuthenticated,
     isAdminAuthenticated,
     getCurrentUser,
+    updateSessionContext,
     getSeededAccounts,
     getManagedAccounts
   };

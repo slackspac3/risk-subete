@@ -109,6 +109,8 @@ function getUserSettingsDefaults(globalSettings = getAdminSettings()) {
       jobTitle: '',
       department: '',
       businessUnit: '',
+      departmentEntityId: '',
+      businessUnitEntityId: '',
       focusAreas: [],
       preferredOutputs: '',
       workingContext: ''
@@ -122,6 +124,8 @@ function normaliseUserProfile(profile = {}, currentUser = AuthService.getCurrent
     jobTitle: String(profile.jobTitle || '').trim(),
     department: String(profile.department || '').trim(),
     businessUnit: String(profile.businessUnit || '').trim(),
+    departmentEntityId: String(profile.departmentEntityId || '').trim(),
+    businessUnitEntityId: String(profile.businessUnitEntityId || '').trim(),
     focusAreas: Array.isArray(profile.focusAreas) ? profile.focusAreas.map(String).filter(Boolean) : [],
     preferredOutputs: String(profile.preferredOutputs || '').trim(),
     workingContext: String(profile.workingContext || '').trim()
@@ -177,6 +181,67 @@ const TYPICAL_DEPARTMENTS = [
   'Commercial',
   'Shared Services'
 ];
+
+function getStoredBUOverrides() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('rq_bu_override') || 'null');
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
+
+function getCompanyEntities(structure = getAdminSettings().companyStructure || []) {
+  return Array.isArray(structure) ? structure.filter(node => isCompanyEntityType(node.type)) : [];
+}
+
+function getDepartmentEntities(structure = getAdminSettings().companyStructure || [], parentId = '') {
+  const list = Array.isArray(structure) ? structure.filter(node => isDepartmentEntityType(node.type)) : [];
+  return parentId ? list.filter(node => node.parentId === parentId) : list;
+}
+
+function getEntityById(structure = getAdminSettings().companyStructure || [], entityId = '') {
+  return (Array.isArray(structure) ? structure : []).find(node => node.id === entityId) || null;
+}
+
+function getCompanyEntityForDepartment(structure = getAdminSettings().companyStructure || [], departmentId = '') {
+  const department = getEntityById(structure, departmentId);
+  if (!department?.parentId) return null;
+  return getEntityById(structure, department.parentId);
+}
+
+function getDefaultOrgAssignmentForUser(username = '', settings = getAdminSettings()) {
+  const structure = Array.isArray(settings.companyStructure) ? settings.companyStructure : [];
+  const ownedDepartment = structure.find(node => isDepartmentEntityType(node.type) && node.ownerUsername === username);
+  if (!ownedDepartment) return { businessUnitEntityId: '', departmentEntityId: '' };
+  return {
+    businessUnitEntityId: ownedDepartment.parentId || '',
+    departmentEntityId: ownedDepartment.id
+  };
+}
+
+function resolveUserOrganisationSelection(user = AuthService.getCurrentUser(), userSettings = getUserSettings(), settings = getAdminSettings()) {
+  const profile = normaliseUserProfile(userSettings.userProfile, user);
+  const fallback = getDefaultOrgAssignmentForUser(user?.username || '', settings);
+  const businessUnitEntityId = String(user?.businessUnitEntityId || profile.businessUnitEntityId || fallback.businessUnitEntityId || '').trim();
+  const departmentEntityId = String(user?.departmentEntityId || profile.departmentEntityId || fallback.departmentEntityId || '').trim();
+  return { businessUnitEntityId, departmentEntityId };
+}
+
+function applyEntityLayerToSettings(baseSettings, layer = null, node = null) {
+  if (!layer && !node) return baseSettings;
+  return {
+    ...baseSettings,
+    geography: layer?.geography || baseSettings.geography,
+    companyContextProfile: node?.profile || baseSettings.companyContextProfile,
+    companyContextSections: node?.contextSections || baseSettings.companyContextSections,
+    riskAppetiteStatement: layer?.riskAppetiteStatement || baseSettings.riskAppetiteStatement,
+    applicableRegulations: Array.from(new Set([...(baseSettings.applicableRegulations || []), ...(layer?.applicableRegulations || [])])),
+    aiInstructions: layer?.aiInstructions || baseSettings.aiInstructions,
+    benchmarkStrategy: layer?.benchmarkStrategy || baseSettings.benchmarkStrategy,
+    adminContextSummary: layer?.contextSummary || node?.profile || baseSettings.adminContextSummary
+  };
+}
 
 function getAssessments() {
   try { return JSON.parse(localStorage.getItem(buildUserStorageKey(ASSESSMENTS_STORAGE_PREFIX)) || '[]'); } catch { return []; }
@@ -365,15 +430,34 @@ function ensureDraftShape() {
 }
 
 function getBUList() {
-  try {
-    const ov = JSON.parse(localStorage.getItem('rq_bu_override') || 'null');
-    return ov || AppState.buList;
-  } catch { return AppState.buList; }
+  const settings = getAdminSettings();
+  const companyStructure = Array.isArray(settings.companyStructure) ? settings.companyStructure : [];
+  const companyEntities = getCompanyEntities(companyStructure);
+  const overrides = getStoredBUOverrides();
+
+  if (!companyEntities.length) {
+    return overrides.length ? overrides : AppState.buList;
+  }
+
+  const syncedCompanies = companyEntities.map(entity => {
+    const generated = buildBUFromOrgEntity(entity, settings);
+    const override = overrides.find(bu => bu.orgEntityId === entity.id) || overrides.find(bu => bu.id === generated.id);
+    return {
+      ...generated,
+      ...(override || {}),
+      id: override?.id || generated.id,
+      name: entity.name || override?.name || generated.name,
+      orgEntityId: entity.id
+    };
+  });
+
+  const legacyEntries = overrides.filter(bu => !bu.orgEntityId || !companyEntities.some(entity => entity.id === bu.orgEntityId));
+  return [...syncedCompanies, ...legacyEntries];
 }
 function saveBUList(list) {
-  localStorage.setItem('rq_bu_override', JSON.stringify(list));
-  AppState.buList = list;
-  RAGService.init(getDocList(), list);
+  localStorage.setItem('rq_bu_override', JSON.stringify(Array.isArray(list) ? list : []));
+  AppState.buList = getBUList();
+  RAGService.init(getDocList(), AppState.buList);
 }
 function getDocList() {
   try {
@@ -457,15 +541,27 @@ function getEffectiveSettings() {
     return globalSettings;
   }
   const userSettings = getUserSettings();
+  const selection = resolveUserOrganisationSelection(user, userSettings, globalSettings);
+  const companyNode = getEntityById(globalSettings.companyStructure || [], selection.businessUnitEntityId);
+  const departmentNode = getEntityById(globalSettings.companyStructure || [], selection.departmentEntityId);
+  const companyLayer = getEntityLayerById(globalSettings, selection.businessUnitEntityId);
+  const departmentLayer = getEntityLayerById(globalSettings, selection.departmentEntityId);
+  const organisationScopedDefaults = applyEntityLayerToSettings(
+    applyEntityLayerToSettings(globalSettings, companyLayer, companyNode),
+    departmentLayer,
+    departmentNode
+  );
   return {
-    ...globalSettings,
+    ...organisationScopedDefaults,
     ...userSettings,
-    applicableRegulations: Array.isArray(userSettings.applicableRegulations) ? userSettings.applicableRegulations : [...globalSettings.applicableRegulations],
+    applicableRegulations: Array.isArray(userSettings.applicableRegulations) ? userSettings.applicableRegulations : [...organisationScopedDefaults.applicableRegulations],
     userProfile: normaliseUserProfile(userSettings.userProfile),
     userProfileSummary: buildUserProfileSummary(normaliseUserProfile(userSettings.userProfile)),
     companyContextSections: userSettings.companyContextSections && typeof userSettings.companyContextSections === 'object'
       ? userSettings.companyContextSections
-      : globalSettings.companyContextSections
+      : organisationScopedDefaults.companyContextSections,
+    selectedBusinessEntity: companyNode,
+    selectedDepartmentEntity: departmentNode
   };
 }
 
@@ -502,6 +598,8 @@ function renderCompanyStructureSummary(structure = []) {
   if (!structure.length) {
     return `<div class="form-help">No organisation structure saved yet. Add a top-level entity such as a holding company or operating company, then attach subsidiaries, portfolio companies, partners, and departments beneath it.</div>`;
   }
+  const managedAccounts = AuthService.getManagedAccounts();
+  const accountLabelByUsername = new Map(managedAccounts.map(account => [account.username, account.displayName]));
   const byParent = new Map();
   structure.forEach(node => {
     const key = node.parentId || 'root';
@@ -515,6 +613,8 @@ function renderCompanyStructureSummary(structure = []) {
           <span class="badge badge--gold">${node.type}</span>
           <strong style="color:var(--text-primary)">${node.name}</strong>
           ${node.websiteUrl ? `<span class="form-help" style="margin-top:0">${node.websiteUrl}</span>` : ''}
+          ${node.ownerUsername ? `<span class="form-help" style="margin-top:0">Owner: ${accountLabelByUsername.get(node.ownerUsername) || node.ownerUsername}</span>` : ''}
+          ${isCompanyEntityType(node.type) ? `<button class="btn btn--secondary btn--sm org-entity-add-department" data-org-id="${node.id}" type="button">Add Function / Department</button>` : ''}
           <button class="btn btn--ghost btn--sm org-entity-edit" data-org-id="${node.id}" type="button">Edit</button>
           <button class="btn btn--ghost btn--sm org-entity-delete" data-org-id="${node.id}" type="button">Remove</button>
         </div>
@@ -688,6 +788,8 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
   const defaultProfile = node.profile || seed.profile || '';
   const defaultSections = node.contextSections || seed.contextSections || null;
   const defaultDepartmentHint = node.departmentHint || seed.departmentHint || '';
+  const defaultOwner = node.ownerUsername || seed.ownerUsername || '';
+  const managedAccounts = AuthService.getManagedAccounts();
   const body = `
     <div class="context-panel-copy" style="margin-bottom:12px">Capture how this entity fits into the wider group so later assessments inherit the right business, ownership, and department context.</div>
     <div class="grid-2" style="gap:12px">
@@ -717,6 +819,14 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
           ${TYPICAL_DEPARTMENTS.map(name => `<option value="${name}" ${name === defaultDepartmentHint ? 'selected' : ''}>${name}</option>`).join('')}
         </select>
         <span class="form-help">This helps standardise department naming, but you can still use your own wording.</span>
+      </div>
+      <div class="form-group" id="org-owner-wrap">
+        <label class="form-label" for="org-owner-username" id="org-owner-label">Business Unit Admin</label>
+        <select class="form-select" id="org-owner-username">
+          <option value="">Choose a user account</option>
+          ${managedAccounts.map(account => `<option value="${account.username}" ${account.username === defaultOwner ? 'selected' : ''}>${account.displayName} (${account.username})</option>`).join('')}
+        </select>
+        <span class="form-help" id="org-owner-help">The assigned user can manage the departments and retained context for this business unit from their Settings page.</span>
       </div>
     </div>
     <div class="form-group mt-4">
@@ -776,6 +886,10 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
   const profileHelpEl = document.getElementById('org-profile-help');
   const departmentWrapEl = document.getElementById('org-department-wrap');
   const departmentTemplateEl = document.getElementById('org-department-template');
+  const ownerWrapEl = document.getElementById('org-owner-wrap');
+  const ownerEl = document.getElementById('org-owner-username');
+  const ownerLabelEl = document.getElementById('org-owner-label');
+  const ownerHelpEl = document.getElementById('org-owner-help');
   const contextActionsEl = document.getElementById('org-context-actions');
   const contextSectionsWrapEl = document.getElementById('org-context-sections-wrap');
 
@@ -792,9 +906,14 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
         : 'Use a parent when this entity sits within a wider group. Leave top level for the main holding business.';
     const departmentMode = isDepartmentEntityType(selectedType);
     departmentWrapEl.style.display = departmentMode ? '' : 'none';
+    ownerWrapEl.style.display = isCompanyEntityType(selectedType) || departmentMode ? '' : 'none';
     websiteWrapEl.style.display = departmentMode ? 'none' : '';
     contextActionsEl.style.display = departmentMode ? 'none' : '';
     contextSectionsWrapEl.style.display = departmentMode ? 'none' : '';
+    ownerLabelEl.textContent = departmentMode ? 'Department Owner' : 'Business Unit Admin';
+    ownerHelpEl.textContent = departmentMode
+      ? 'The assigned owner can maintain department context from their Settings page.'
+      : 'The assigned user can manage the departments and retained context for this business unit from their Settings page.';
     profileHelpEl.textContent = departmentMode
       ? 'Describe what this department owns, supports, or controls within the business.'
       : 'Capture public business profile, ownership context, strategic role, and major risk signals for this entity.';
@@ -827,6 +946,7 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
       parentId: parentId || null,
       websiteUrl: isDepartmentEntityType(selectedType) ? '' : websiteEl.value.trim(),
       profile: profileEl.value.trim(),
+      ownerUsername: ownerEl.value,
       contextSections: isDepartmentEntityType(selectedType) ? null : {
         companySummary: document.getElementById('org-section-summary').value.trim(),
         businessModel: document.getElementById('org-section-business-model').value.trim(),
@@ -861,6 +981,63 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
       }
     }
   };
+}
+
+function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), onSave, readOnlyIdentity = false }) {
+  if (!entity?.id) return null;
+  const existingLayer = getEntityLayerById(settings, entity.id) || {};
+  const modal = UI.modal({
+    title: `Manage Context: ${entity.name}`,
+    body: `
+      <div class="context-panel-copy" style="margin-bottom:12px">This context sits under <strong>${entity.name}</strong> and helps the platform retain what is unique about this ${isDepartmentEntityType(entity.type) ? 'department' : 'business unit'}.</div>
+      <div class="grid-2" style="gap:12px">
+        <div class="form-group">
+          <label class="form-label" for="entity-layer-name">Entity</label>
+          <input class="form-input" id="entity-layer-name" value="${entity.name}" ${readOnlyIdentity ? 'readonly' : ''}>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="entity-layer-geo">Geography</label>
+          <input class="form-input" id="entity-layer-geo" value="${existingLayer.geography || ''}" placeholder="e.g. UAE, GCC, Global">
+        </div>
+      </div>
+      <div class="form-group mt-4">
+        <label class="form-label" for="entity-layer-summary">Context Summary</label>
+        <textarea class="form-textarea" id="entity-layer-summary" rows="4" placeholder="Describe the remit, critical processes, dependencies, and regulatory exposure.">${existingLayer.contextSummary || entity.profile || ''}</textarea>
+      </div>
+      <div class="form-group mt-4">
+        <label class="form-label" for="entity-layer-appetite">Risk Appetite</label>
+        <textarea class="form-textarea" id="entity-layer-appetite" rows="3">${existingLayer.riskAppetiteStatement || ''}</textarea>
+      </div>
+      <div class="form-group mt-4">
+        <label class="form-label">Applicable Regulations</label>
+        <div class="tag-input-wrap" id="ti-entity-layer-regulations"></div>
+      </div>
+      <div class="form-group mt-4">
+        <label class="form-label" for="entity-layer-ai">AI Guidance</label>
+        <textarea class="form-textarea" id="entity-layer-ai" rows="3">${existingLayer.aiInstructions || ''}</textarea>
+      </div>
+      <div class="form-group mt-4">
+        <label class="form-label" for="entity-layer-benchmark">Benchmark Strategy</label>
+        <textarea class="form-textarea" id="entity-layer-benchmark" rows="3">${existingLayer.benchmarkStrategy || ''}</textarea>
+      </div>`,
+    footer: `<button class="btn btn--ghost" id="entity-layer-cancel">Cancel</button><button class="btn btn--primary" id="entity-layer-save">Save Context</button>`
+  });
+
+  const regsInput = UI.tagInput('ti-entity-layer-regulations', existingLayer.applicableRegulations || []);
+  document.getElementById('entity-layer-cancel').addEventListener('click', () => modal.close());
+  document.getElementById('entity-layer-save').addEventListener('click', () => {
+    onSave?.({
+      entityId: entity.id,
+      entityName: entity.name,
+      geography: document.getElementById('entity-layer-geo').value.trim(),
+      contextSummary: document.getElementById('entity-layer-summary').value.trim(),
+      riskAppetiteStatement: document.getElementById('entity-layer-appetite').value.trim(),
+      applicableRegulations: regsInput.getTags(),
+      aiInstructions: document.getElementById('entity-layer-ai').value.trim(),
+      benchmarkStrategy: document.getElementById('entity-layer-benchmark').value.trim()
+    }, modal);
+  });
+  return modal;
 }
 
 function getSessionLLMConfig() {
@@ -1540,6 +1717,16 @@ function renderWizard1() {
   const draft = AppState.draft;
   const settings = getEffectiveSettings();
   const buList = getBUList();
+  const preferredBusinessUnitId = settings.userProfile?.businessUnitEntityId || AppState.currentUser?.businessUnitEntityId || '';
+  if (!draft.buId && preferredBusinessUnitId) {
+    const preferredBU = buList.find(bu => bu.orgEntityId === preferredBusinessUnitId || bu.id === preferredBusinessUnitId);
+    if (preferredBU) {
+      draft.buId = preferredBU.id;
+      draft.buName = preferredBU.name;
+      draft.applicableRegulations = deriveApplicableRegulations(preferredBU, getSelectedRisks());
+      saveDraft();
+    }
+  }
   const selectedRisks = getSelectedRisks();
   const regs = draft.applicableRegulations?.length ? draft.applicableRegulations : settings.applicableRegulations;
 
@@ -2687,6 +2874,18 @@ function getDefaultRouteForCurrentUser() {
   return user?.role === 'admin' ? '/admin/settings' : '/settings';
 }
 
+function userNeedsOrganisationSelection(user = AuthService.getCurrentUser(), settings = getAdminSettings()) {
+  if (!user || user.role === 'admin') return false;
+  const companyStructure = Array.isArray(settings.companyStructure) ? settings.companyStructure : [];
+  const companies = getCompanyEntities(companyStructure);
+  if (!companies.length) return false;
+  const businessUnitEntityId = String(user.businessUnitEntityId || '').trim();
+  const departmentEntityId = String(user.departmentEntityId || '').trim();
+  if (!businessUnitEntityId) return true;
+  const departments = getDepartmentEntities(companyStructure, businessUnitEntityId);
+  return !!departments.length && !departmentEntityId;
+}
+
 function requireAuth() {
   const user = AuthService.getCurrentUser();
   if (!user) {
@@ -2698,9 +2897,117 @@ function requireAuth() {
   return true;
 }
 
+function renderLoginOrganisationSelection(currentUser, existingSettings = getUserSettings()) {
+  const adminSettings = getAdminSettings();
+  const companyStructure = Array.isArray(adminSettings.companyStructure) ? adminSettings.companyStructure : [];
+  const companies = getCompanyEntities(companyStructure);
+  if (!companies.length) {
+    Router.navigate('/settings');
+    return;
+  }
+  const selection = resolveUserOrganisationSelection(currentUser, existingSettings, adminSettings);
+  let selectedBusinessId = selection.businessUnitEntityId || companies[0]?.id || '';
+  const ownedDefault = getDefaultOrgAssignmentForUser(currentUser.username, adminSettings);
+  if (!selectedBusinessId && ownedDefault.businessUnitEntityId) {
+    selectedBusinessId = ownedDefault.businessUnitEntityId;
+  }
+  const settings = {
+    ...existingSettings,
+    userProfile: normaliseUserProfile(existingSettings.userProfile, currentUser)
+  };
+
+  function renderSelectionStep() {
+    const departmentOptions = getDepartmentEntities(companyStructure, selectedBusinessId);
+    let selectedDepartmentId = String(settings.userProfile.departmentEntityId || selection.departmentEntityId || ownedDefault.departmentEntityId || '').trim();
+    if (!departmentOptions.some(option => option.id === selectedDepartmentId)) {
+      selectedDepartmentId = departmentOptions.find(option => option.ownerUsername === currentUser.username)?.id || departmentOptions[0]?.id || '';
+    }
+    settings.userProfile.departmentEntityId = selectedDepartmentId;
+
+    setPage(`
+      <main class="page">
+        <div class="container container--narrow" style="padding:var(--sp-16) var(--sp-6);max-width:760px">
+          <div class="card card--elevated">
+            <div class="landing-badge">Sign In</div>
+            <h2 style="margin-top:var(--sp-4)">Choose where you sit in the organisation</h2>
+            <p style="margin-top:8px;color:var(--text-muted)">This sets your default business-unit and department context for this session. You can refine it later from Settings.</p>
+            <div class="form-group mt-6">
+              <label class="form-label" for="login-business-unit">Business unit / company</label>
+              <select class="form-select" id="login-business-unit">
+                ${companies.map(entity => `<option value="${entity.id}" ${entity.id === selectedBusinessId ? 'selected' : ''}>${entity.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group mt-4">
+              <label class="form-label" for="login-department">Function / department</label>
+              <select class="form-select" id="login-department" ${departmentOptions.length ? '' : 'disabled'}>
+                ${departmentOptions.length
+                  ? departmentOptions.map(entity => `<option value="${entity.id}" ${entity.id === selectedDepartmentId ? 'selected' : ''}>${entity.name}${entity.ownerUsername === currentUser.username ? ' · your department' : ''}</option>`).join('')
+                  : '<option value="">No departments configured yet</option>'}
+              </select>
+              <span class="form-help">${departmentOptions.length ? 'Choose the function you work within. Department owners can maintain this context from Settings.' : 'No department has been configured beneath this business yet. The admin can add one from Org Customisation.'}</span>
+            </div>
+            <div class="flex items-center justify-between mt-6" style="gap:var(--sp-4);flex-wrap:wrap">
+              <button class="btn btn--ghost" id="btn-login-switch-account">Switch Account</button>
+              <button class="btn btn--primary" id="btn-login-context-continue">Continue</button>
+            </div>
+          </div>
+        </div>
+      </main>`);
+
+    document.getElementById('login-business-unit').addEventListener('change', event => {
+      selectedBusinessId = event.target.value;
+      settings.userProfile.businessUnitEntityId = selectedBusinessId;
+      renderSelectionStep();
+    });
+    document.getElementById('btn-login-switch-account').addEventListener('click', () => {
+      AuthService.logout();
+      activateAuthenticatedState();
+      renderLogin();
+    });
+    document.getElementById('btn-login-context-continue').addEventListener('click', () => {
+      const businessUnitEntityId = document.getElementById('login-business-unit').value;
+      const departmentEntityId = document.getElementById('login-department').value;
+      const businessEntity = getEntityById(companyStructure, businessUnitEntityId);
+      const departmentEntity = getEntityById(companyStructure, departmentEntityId);
+      const availableDepartments = getDepartmentEntities(companyStructure, businessUnitEntityId);
+      if (!businessEntity) {
+        UI.toast('Choose a business unit first.', 'warning');
+        return;
+      }
+      if (availableDepartments.length && !departmentEntity) {
+        UI.toast('Choose a department or function for this sign-in session.', 'warning');
+        return;
+      }
+      saveUserSettings({
+        ...settings,
+        userProfile: {
+          ...settings.userProfile,
+          businessUnit: businessEntity.name,
+          businessUnitEntityId,
+          department: departmentEntity?.name || '',
+          departmentEntityId: departmentEntity?.id || ''
+        }
+      });
+      AuthService.updateSessionContext({
+        businessUnitEntityId,
+        departmentEntityId: departmentEntity?.id || ''
+      });
+      activateAuthenticatedState();
+      Router.navigate('/settings');
+    });
+  }
+
+  settings.userProfile.businessUnitEntityId = selectedBusinessId;
+  renderSelectionStep();
+}
+
 function renderLogin() {
   const currentUser = AuthService.getCurrentUser();
   if (currentUser) {
+    if (userNeedsOrganisationSelection(currentUser)) {
+      renderLoginOrganisationSelection(currentUser);
+      return;
+    }
     Router.navigate(getDefaultRouteForCurrentUser());
     return;
   }
@@ -2750,7 +3057,11 @@ function renderLogin() {
     if (result.success) {
       activateAuthenticatedState();
       UI.toast(`Logged in as ${result.user.displayName}.`, 'success');
-      Router.navigate(getDefaultRouteForCurrentUser());
+      if (userNeedsOrganisationSelection(AuthService.getCurrentUser())) {
+        renderLogin();
+      } else {
+        Router.navigate(getDefaultRouteForCurrentUser());
+      }
     }
     else {
       document.getElementById('login-err').classList.remove('hidden');
@@ -2822,6 +3133,8 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
   if (!requireAuth()) return;
   const globalSettings = getAdminSettings();
   const settings = getUserSettings();
+  const companyStructure = Array.isArray(globalSettings.companyStructure) ? globalSettings.companyStructure : [];
+  const companies = getCompanyEntities(companyStructure);
   const profile = normaliseUserProfile(existingSettings.userProfile || settings.userProfile);
   const draftSettings = {
     ...settings,
@@ -2857,12 +3170,15 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
         prompt: 'This helps the platform interpret scenarios using the right business context.',
         body: `
           <div class="form-group">
-            <label class="form-label" for="onboard-department">Department or function</label>
-            <input class="form-input" id="onboard-department" value="${draftSettings.userProfile.department || ''}" placeholder="e.g. Information Security, Operations, Legal">
+            <label class="form-label" for="onboard-bu">Business unit or entity</label>
+            <select class="form-select" id="onboard-bu">
+              <option value="">Choose your business unit</option>
+              ${companies.map(entity => `<option value="${entity.id}" ${entity.id === draftSettings.userProfile.businessUnitEntityId ? 'selected' : ''}>${entity.name}</option>`).join('')}
+            </select>
           </div>
           <div class="form-group mt-4">
-            <label class="form-label" for="onboard-bu">Business unit or entity</label>
-            <input class="form-input" id="onboard-bu" value="${draftSettings.userProfile.businessUnit || ''}" placeholder="e.g. Digital Platforms, Shared Services, Corporate">
+            <label class="form-label" for="onboard-department">Department or function</label>
+            <select class="form-select" id="onboard-department"></select>
           </div>`
       },
       {
@@ -2955,6 +3271,24 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
         });
       });
     }
+    if (currentStep === 1) {
+      const buEl = document.getElementById('onboard-bu');
+      const deptEl = document.getElementById('onboard-department');
+      const renderDepartmentOptions = () => {
+        const departments = getDepartmentEntities(companyStructure, buEl.value);
+        const selectedDepartmentId = draftSettings.userProfile.departmentEntityId;
+        deptEl.innerHTML = departments.length
+          ? departments.map(entity => `<option value="${entity.id}" ${entity.id === selectedDepartmentId ? 'selected' : ''}>${entity.name}</option>`).join('')
+          : '<option value="">No departments configured yet</option>';
+        deptEl.disabled = !departments.length;
+      };
+      buEl.addEventListener('change', () => {
+        draftSettings.userProfile.businessUnitEntityId = buEl.value;
+        draftSettings.userProfile.departmentEntityId = '';
+        renderDepartmentOptions();
+      });
+      renderDepartmentOptions();
+    }
 
     function captureStepValues() {
       if (currentStep === 0) {
@@ -2962,8 +3296,14 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
         draftSettings.userProfile.jobTitle = document.getElementById('onboard-title').value.trim();
       }
       if (currentStep === 1) {
-        draftSettings.userProfile.department = document.getElementById('onboard-department').value.trim();
-        draftSettings.userProfile.businessUnit = document.getElementById('onboard-bu').value.trim();
+        const businessUnitEntityId = document.getElementById('onboard-bu').value.trim();
+        const departmentEntityId = document.getElementById('onboard-department').value.trim();
+        const businessEntity = getEntityById(companyStructure, businessUnitEntityId);
+        const departmentEntity = getEntityById(companyStructure, departmentEntityId);
+        draftSettings.userProfile.businessUnitEntityId = businessUnitEntityId;
+        draftSettings.userProfile.businessUnit = businessEntity?.name || '';
+        draftSettings.userProfile.departmentEntityId = departmentEntityId;
+        draftSettings.userProfile.department = departmentEntity?.name || '';
       }
       if (currentStep === 2) {
         draftSettings.geography = document.getElementById('onboard-geo').value.trim() || globalSettings.geography;
@@ -3019,13 +3359,21 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
   }
   const globalSettings = getAdminSettings();
   const settings = existingSettings;
+  const profile = normaliseUserProfile(settings.userProfile);
+  const companyStructure = Array.isArray(globalSettings.companyStructure) ? globalSettings.companyStructure : [];
+  const companyOptions = getCompanyEntities(companyStructure);
+  const selectedBusinessId = profile.businessUnitEntityId || resolveUserOrganisationSelection(AppState.currentUser, settings, globalSettings).businessUnitEntityId;
+  const selectedBusinessEntity = getEntityById(companyStructure, selectedBusinessId);
+  const selectedBusinessDepartments = getDepartmentEntities(companyStructure, selectedBusinessId);
+  const businessOwner = selectedBusinessEntity?.ownerUsername === AppState.currentUser?.username;
+  const selectedDepartment = getEntityById(companyStructure, profile.departmentEntityId);
+  const departmentOwner = selectedDepartment?.ownerUsername === AppState.currentUser?.username;
   const companyContextSections = settings.companyContextSections || buildCompanyContextSections({
     companySummary: settings.adminContextSummary || '',
     businessProfile: settings.companyContextProfile || ''
   });
   const sessionLLM = getSessionLLMConfig();
   const directCompass = !sessionLLM.apiUrl || sessionLLM.apiUrl.includes('api.core42.ai');
-  const profile = normaliseUserProfile(settings.userProfile);
 
   setPage(`
     <main class="page">
@@ -3074,12 +3422,15 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
           </div>
           <div class="grid-2 mt-4">
             <div class="form-group">
-              <label class="form-label" for="user-department">Department or function</label>
-              <input class="form-input" id="user-department" value="${profile.department || ''}" placeholder="e.g. Information Security">
+              <label class="form-label" for="user-business-unit">Business unit or entity</label>
+              <select class="form-select" id="user-business-unit">
+                <option value="">Choose your business unit</option>
+                ${companyOptions.map(entity => `<option value="${entity.id}" ${entity.id === selectedBusinessId ? 'selected' : ''}>${entity.name}</option>`).join('')}
+              </select>
             </div>
             <div class="form-group">
-              <label class="form-label" for="user-business-unit">Business unit or entity</label>
-              <input class="form-input" id="user-business-unit" value="${profile.businessUnit || ''}" placeholder="e.g. Digital Platforms">
+              <label class="form-label" for="user-department">Department or function</label>
+              <select class="form-select" id="user-department"></select>
             </div>
           </div>
           <div class="form-group mt-4">
@@ -3152,6 +3503,40 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
             <span class="form-help">Builds a personal context draft for this account only.</span>
           </div>
         </div>
+
+        ${businessOwner ? `
+          <div class="card card--elevated mt-6">
+            <div class="context-panel-title">Business Unit Admin Controls</div>
+            <p class="context-panel-copy">You are the assigned BU admin for <strong>${selectedBusinessEntity?.name || profile.businessUnit}</strong>. You can add functions beneath this business unit and maintain their retained context.</p>
+            <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
+              <button class="btn btn--secondary" id="btn-user-add-department">Add Function / Department</button>
+            </div>
+            <div class="mt-4" style="display:flex;flex-direction:column;gap:12px">
+              ${selectedBusinessDepartments.length ? selectedBusinessDepartments.map(department => `
+                <div class="card" style="padding:var(--sp-4);background:var(--bg-canvas)">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                    <div>
+                      <div class="context-panel-title">${department.name}</div>
+                      <div class="form-help">${department.ownerUsername ? `Owner: ${department.ownerUsername}` : 'Owner not assigned yet'}</div>
+                      <div class="form-help">${getEntityLayerById(globalSettings, department.id)?.contextSummary || department.profile || 'No retained department context yet'}</div>
+                    </div>
+                    <div class="flex items-center gap-3" style="flex-wrap:wrap">
+                      <button class="btn btn--ghost btn--sm btn-user-edit-department" data-department-id="${department.id}" type="button">Edit Department</button>
+                      <button class="btn btn--secondary btn--sm btn-user-edit-department-context" data-department-id="${department.id}" type="button">Manage Context</button>
+                    </div>
+                  </div>
+                </div>`).join('') : '<div class="form-help">No functions or departments exist under this business unit yet.</div>'}
+            </div>
+          </div>` : ''}
+
+        ${departmentOwner ? `
+          <div class="card card--elevated mt-6">
+            <div class="context-panel-title">Department Context You Own</div>
+            <p class="context-panel-copy">You are the assigned owner for <strong>${selectedDepartment?.name || profile.department}</strong>. Use this to maintain the retained context for that function.</p>
+            <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
+              <button class="btn btn--secondary" id="btn-manage-owned-department">Manage Department Context</button>
+            </div>
+          </div>` : ''}
 
         <div class="card card--elevated mt-6">
           <div class="context-panel-title">Default Context for This User</div>
@@ -3230,6 +3615,20 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
   const focusInput = UI.tagInput('ti-user-focus-areas', profile.focusAreas || []);
   const profileEl = document.getElementById('user-company-profile');
   const websiteEl = document.getElementById('user-company-url');
+  const businessUnitEl = document.getElementById('user-business-unit');
+  const departmentEl = document.getElementById('user-department');
+
+  function renderUserDepartmentOptions() {
+    const departments = getDepartmentEntities(companyStructure, businessUnitEl.value);
+    const preferredDepartmentId = profile.departmentEntityId;
+    const fallbackDepartmentId = departments.some(entity => entity.id === preferredDepartmentId) ? preferredDepartmentId : (departments[0]?.id || '');
+    departmentEl.innerHTML = departments.length
+      ? departments.map(entity => `<option value="${entity.id}" ${entity.id === fallbackDepartmentId ? 'selected' : ''}>${entity.name}</option>`).join('')
+      : '<option value="">No departments configured yet</option>';
+    departmentEl.disabled = !departments.length;
+  }
+  businessUnitEl.addEventListener('change', renderUserDepartmentOptions);
+  renderUserDepartmentOptions();
 
   document.querySelectorAll('.user-focus-chip').forEach(button => {
     button.addEventListener('click', () => {
@@ -3239,6 +3638,10 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
   });
 
   document.getElementById('btn-save-user-settings').addEventListener('click', () => {
+    const businessUnitEntityId = businessUnitEl.value.trim();
+    const departmentEntityId = departmentEl.value.trim();
+    const businessEntity = getEntityById(companyStructure, businessUnitEntityId);
+    const departmentEntity = getEntityById(companyStructure, departmentEntityId);
     saveUserSettings({
       companyContextSections: {
         companySummary: document.getElementById('user-company-section-summary').value.trim(),
@@ -3263,8 +3666,10 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
       userProfile: {
         fullName: document.getElementById('user-full-name').value.trim() || AppState.currentUser?.displayName || '',
         jobTitle: document.getElementById('user-job-title').value.trim(),
-        department: document.getElementById('user-department').value.trim(),
-        businessUnit: document.getElementById('user-business-unit').value.trim(),
+        department: departmentEntity?.name || '',
+        businessUnit: businessEntity?.name || '',
+        departmentEntityId: departmentEntity?.id || '',
+        businessUnitEntityId,
         focusAreas: focusInput.getTags(),
         preferredOutputs: document.getElementById('user-preferred-outputs').value.trim(),
         workingContext: document.getElementById('user-working-context').value.trim()
@@ -3276,9 +3681,107 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
       benchmarkStrategy: document.getElementById('user-benchmark-strategy').value.trim() || globalSettings.benchmarkStrategy,
       adminContextSummary: document.getElementById('user-context-summary').value.trim() || globalSettings.adminContextSummary
     });
+    AuthService.updateSessionContext({
+      businessUnitEntityId,
+      departmentEntityId: departmentEntity?.id || ''
+    });
     if (!AppState.draft.geography) AppState.draft.geography = getEffectiveSettings().geography;
     saveDraft();
     UI.toast('Personal settings saved.', 'success');
+  });
+
+  document.getElementById('btn-user-add-department')?.addEventListener('click', () => {
+    if (!selectedBusinessEntity) return;
+    openOrgEntityEditor({
+      structure: companyStructure,
+      seed: {
+        type: 'Department / function',
+        parentId: selectedBusinessEntity.id
+      },
+      onSave: (node, modal) => {
+        const nextSettings = getAdminSettings();
+        const nextStructure = Array.isArray(nextSettings.companyStructure) ? [...nextSettings.companyStructure] : [];
+        nextStructure.push(node);
+        saveAdminSettings({
+          ...nextSettings,
+          companyStructure: nextStructure
+        });
+        modal.close();
+        UI.toast(`${node.name} added beneath ${selectedBusinessEntity.name}.`, 'success');
+        renderUserPreferences(getUserSettings());
+      }
+    });
+  });
+
+  document.querySelectorAll('.btn-user-edit-department').forEach(button => {
+    button.addEventListener('click', () => {
+      const department = getEntityById(companyStructure, button.dataset.departmentId || '');
+      if (!department) return;
+      openOrgEntityEditor({
+        structure: companyStructure,
+        existingNode: department,
+        onSave: (node, modal) => {
+          const nextSettings = getAdminSettings();
+          const nextStructure = Array.isArray(nextSettings.companyStructure) ? [...nextSettings.companyStructure] : [];
+          const index = nextStructure.findIndex(item => item.id === node.id);
+          if (index > -1) nextStructure[index] = node;
+          saveAdminSettings({
+            ...nextSettings,
+            companyStructure: nextStructure
+          });
+          modal.close();
+          UI.toast(`${node.name} updated.`, 'success');
+          renderUserPreferences(getUserSettings());
+        }
+      });
+    });
+  });
+
+  document.querySelectorAll('.btn-user-edit-department-context').forEach(button => {
+    button.addEventListener('click', () => {
+      const department = getEntityById(companyStructure, button.dataset.departmentId || '');
+      if (!department) return;
+      openEntityContextLayerEditor({
+        entity: department,
+        settings: globalSettings,
+        onSave: (nextLayer, modal) => {
+          const nextSettings = getAdminSettings();
+          const layers = Array.isArray(nextSettings.entityContextLayers) ? [...nextSettings.entityContextLayers] : [];
+          const index = layers.findIndex(item => item.entityId === nextLayer.entityId);
+          if (index > -1) layers[index] = nextLayer;
+          else layers.push(nextLayer);
+          saveAdminSettings({
+            ...nextSettings,
+            entityContextLayers: layers
+          });
+          modal.close();
+          UI.toast(`Saved context for ${department.name}.`, 'success');
+          renderUserPreferences(getUserSettings());
+        }
+      });
+    });
+  });
+
+  document.getElementById('btn-manage-owned-department')?.addEventListener('click', () => {
+    if (!selectedDepartment) return;
+    openEntityContextLayerEditor({
+      entity: selectedDepartment,
+      onSave: (nextLayer, modal) => {
+        const nextSettings = getAdminSettings();
+        const layers = Array.isArray(nextSettings.entityContextLayers) ? [...nextSettings.entityContextLayers] : [];
+        const index = layers.findIndex(item => item.entityId === nextLayer.entityId);
+        if (index > -1) layers[index] = nextLayer;
+        else layers.push(nextLayer);
+        saveAdminSettings({
+          ...nextSettings,
+          entityContextLayers: layers
+        });
+        modal.close();
+        UI.toast(`Saved context for ${selectedDepartment.name}.`, 'success');
+        renderUserPreferences(getUserSettings());
+      },
+      readOnlyIdentity: true
+    });
   });
 
   document.getElementById('btn-build-user-context').addEventListener('click', async () => {
@@ -3851,6 +4354,14 @@ function renderAdminSettings() {
   }
 
   function bindStructureActionHandlers() {
+    structureSummaryEl.querySelectorAll('.org-entity-add-department').forEach(button => {
+      button.addEventListener('click', () => {
+        openEntityEditor(null, {
+          type: 'Department / function',
+          parentId: button.dataset.orgId || ''
+        });
+      });
+    });
     structureSummaryEl.querySelectorAll('.org-entity-edit').forEach(button => {
       button.addEventListener('click', () => {
         const target = companyStructure.find(node => node.id === button.dataset.orgId);
@@ -4076,77 +4587,102 @@ function renderAdminSettings() {
 
 function renderAdminBU() {
   if (!requireAdmin()) return;
-  const buList = getBUList();
   const settings = getAdminSettings();
   const companyStructure = Array.isArray(settings.companyStructure) ? settings.companyStructure : [];
+  const buList = getBUList().filter(bu => bu.orgEntityId && getEntityById(companyStructure, bu.orgEntityId));
   const structureMap = new Map(companyStructure.map(node => [node.id, node]));
-  const unlinkedEntities = companyStructure.filter(node => !buList.some(bu => bu.orgEntityId === node.id));
-  const linkedCount = buList.filter(bu => bu.orgEntityId && structureMap.has(bu.orgEntityId)).length;
+  const companyEntities = getCompanyEntities(companyStructure);
+  const departmentEntities = getDepartmentEntities(companyStructure);
+  const managedAccounts = AuthService.getManagedAccounts();
+  const accountLabelByUsername = new Map(managedAccounts.map(account => [account.username, account.displayName]));
   setPage(adminLayout('bu', `
     <div class="flex items-center justify-between mb-6">
       <div>
         <h2>Organisation Customisation</h2>
-        <p style="margin-top:6px">Turn the organisation tree into assessment-ready business contexts. Each BU should map cleanly to a parent, subsidiary, business, or department you already created in Organisation Setup.</p>
+        <p style="margin-top:6px">Companies from Organisation Setup act as the assessment business units. Create functions and departments beneath them, retain context for each layer, and assign owners who can maintain their own function context.</p>
       </div>
       <div class="flex gap-3">
         <button class="btn btn--ghost btn--sm" id="btn-reset-bu">Reset Defaults</button>
-        <button class="btn btn--primary" id="btn-add-bu">+ Add BU</button>
+        <a class="btn btn--primary btn--sm" href="#/admin/settings">Open Organisation Setup</a>
       </div>
     </div>
     <div class="admin-overview-grid mb-6">
       <div class="admin-overview-card">
-        <div class="admin-overview-label">Total BUs</div>
-        <div class="admin-overview-value">${buList.length}</div>
-        <div class="admin-overview-foot">Used to pre-fill the first step of the assessment</div>
+        <div class="admin-overview-label">Business Units</div>
+        <div class="admin-overview-value">${companyEntities.length}</div>
+        <div class="admin-overview-foot">Every company entity becomes an assessment BU automatically</div>
       </div>
       <div class="admin-overview-card">
-        <div class="admin-overview-label">Linked to Org Tree</div>
-        <div class="admin-overview-value">${linkedCount}</div>
-        <div class="admin-overview-foot">BUs already mapped to a saved business or department</div>
+        <div class="admin-overview-label">Departments</div>
+        <div class="admin-overview-value">${departmentEntities.length}</div>
+        <div class="admin-overview-foot">Functions attached beneath those business units</div>
       </div>
       <div class="admin-overview-card">
-        <div class="admin-overview-label">Unlinked Org Entities</div>
-        <div class="admin-overview-value">${unlinkedEntities.length}</div>
-        <div class="admin-overview-foot">Entities in Organisation Setup that do not yet have a BU context</div>
+        <div class="admin-overview-label">Department Owners</div>
+        <div class="admin-overview-value">${departmentEntities.filter(entity => entity.ownerUsername).length}</div>
+        <div class="admin-overview-foot">Departments already delegated to a named user</div>
       </div>
       <div class="admin-overview-card">
         <div class="admin-overview-label">Average Regulatory Tags</div>
         <div class="admin-overview-value">${buList.length ? (buList.reduce((sum, bu) => sum + (bu.regulatoryTags?.length || 0), 0) / buList.length).toFixed(1) : '0.0'}</div>
-        <div class="admin-overview-foot">Signals how much context each BU carries</div>
+        <div class="admin-overview-foot">Signals how much retained context each business unit carries</div>
       </div>
     </div>
-    ${unlinkedEntities.length ? `
-      <div class="card card--elevated mb-6">
-        <div class="context-panel-title">Organisation Entities Ready for BU Context</div>
-        <p class="context-panel-copy">You already created these in Organisation Setup. Create an Org Customisation record from them instead of retyping the same structure again.</p>
-        <div class="grid-2 mt-4">
-          ${unlinkedEntities.map(entity => `
-            <div class="card" style="padding:var(--sp-4);background:var(--bg-canvas)">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+    ${companyEntities.length ? `
+      <div style="display:flex;flex-direction:column;gap:16px">
+        ${companyEntities.map(entity => {
+          const bu = buList.find(item => item.orgEntityId === entity.id) || buildBUFromOrgEntity(entity, settings);
+          const departments = getDepartmentEntities(companyStructure, entity.id);
+          return `
+            <div class="card card--elevated" style="padding:var(--sp-5)">
+              <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">
                 <div>
                   <div class="context-panel-title">${entity.name}</div>
-                  <div class="form-help">${getEntityLineageLabel(companyStructure, entity.id) || entity.name}</div>
                   <div class="form-help">${entity.type}</div>
+                  <div class="form-help">${getEntityLineageLabel(companyStructure, entity.id) || entity.name}</div>
                 </div>
-                <button class="btn btn--secondary btn--sm btn-create-bu-from-entity" data-entity-id="${entity.id}" type="button">Create BU</button>
+                <div class="flex items-center gap-3" style="flex-wrap:wrap">
+                  <button class="btn btn--secondary btn--sm btn-edit-company-context" data-bu-id="${bu.id}" type="button">Manage BU Context</button>
+                  <button class="btn btn--primary btn--sm btn-create-department" data-company-id="${entity.id}" type="button">Create Function / Department</button>
+                </div>
               </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>` : ''}
-    <div style="overflow-x:auto">
-      <table class="data-table">
-        <thead><tr><th>Name</th><th>Mapped Business / Department</th><th>Inherited Path</th><th>Critical Services</th><th>Regulatory</th><th>Actions</th></tr></thead>
-        <tbody>${buList.map(bu=>`<tr>
-          <td><strong style="color:var(--text-primary)">${bu.name}</strong><br><span style="font-size:.68rem;color:var(--text-muted)">${bu.id}</span></td>
-          <td style="font-size:.8rem">${bu.orgEntityId && structureMap.has(bu.orgEntityId) ? `${structureMap.get(bu.orgEntityId).name} (${structureMap.get(bu.orgEntityId).type})` : '<span style="color:var(--text-muted)">Not linked yet</span>'}</td>
-          <td style="font-size:.78rem">${bu.orgEntityId ? (getEntityLineageLabel(companyStructure, bu.orgEntityId) || '<span style="color:var(--text-muted)">—</span>') : '<span style="color:var(--text-muted)">—</span>'}</td>
-          <td style="font-size:.8rem">${bu.criticalServices.slice(0,2).join(', ')}${bu.criticalServices.length>2?'…':''}</td>
-          <td>${bu.regulatoryTags.map(t=>`<span class="badge badge--gold" style="font-size:.6rem;margin:2px">${t}</span>`).join('')}</td>
-          <td><button class="btn btn--ghost btn--sm" data-id="${bu.id}" id="edit-bu-${bu.id}">Edit</button> <button class="btn btn--ghost btn--sm" data-id="${bu.id}" id="del-bu-${bu.id}" style="color:var(--color-danger-400)">Delete</button></td>
-        </tr>`).join('')}</tbody>
-      </table>
-    </div>`));
+              <div class="grid-3 mt-4">
+                <div class="context-chip-panel">
+                  <div class="context-panel-title">Critical Services</div>
+                  <p class="context-panel-copy">${bu.criticalServices?.length ? bu.criticalServices.join(', ') : 'Not set yet'}</p>
+                </div>
+                <div class="context-chip-panel">
+                  <div class="context-panel-title">Regulatory Tags</div>
+                  <p class="context-panel-copy">${bu.regulatoryTags?.length ? bu.regulatoryTags.join(', ') : 'No regulatory tags yet'}</p>
+                </div>
+                <div class="context-chip-panel">
+                  <div class="context-panel-title">Functions / Departments</div>
+                  <p class="context-panel-copy">${departments.length ? `${departments.length} configured beneath this business unit` : 'No departments configured yet'}</p>
+                </div>
+              </div>
+              <div class="mt-4" style="display:flex;flex-direction:column;gap:12px">
+                ${departments.length ? departments.map(department => `
+                  <div class="card" style="padding:var(--sp-4);background:var(--bg-canvas)">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                      <div>
+                        <div class="context-panel-title">${department.name}</div>
+                        <div class="form-help">${department.ownerUsername ? `Owner: ${accountLabelByUsername.get(department.ownerUsername) || department.ownerUsername}` : 'Owner not assigned yet'}</div>
+                        <div class="form-help">${getEntityLayerById(settings, department.id)?.contextSummary || department.profile || 'No retained department context yet'}</div>
+                      </div>
+                      <div class="flex items-center gap-3" style="flex-wrap:wrap">
+                        <button class="btn btn--ghost btn--sm btn-edit-department" data-department-id="${department.id}" type="button">Edit Department</button>
+                        <button class="btn btn--secondary btn--sm btn-edit-department-context" data-department-id="${department.id}" type="button">Manage Context</button>
+                      </div>
+                    </div>
+                  </div>`).join('') : `<div class="form-help">No functions or departments exist under this business unit yet.</div>`}
+              </div>
+            </div>`;
+        }).join('')}
+      </div>` : `
+      <div class="card card--elevated">
+        <div class="context-panel-title">No business units yet</div>
+        <p class="context-panel-copy">Add company entities from Organisation Setup first. Those companies will automatically become the business units used across onboarding, sign-in, and assessments.</p>
+      </div>`}`));
 
   document.getElementById('btn-admin-logout').addEventListener('click', () => { AuthService.logout(); activateAuthenticatedState(); Router.navigate('/login'); });
   document.getElementById('btn-reset-bu').addEventListener('click', async () => {
@@ -4157,21 +4693,82 @@ function renderAdminBU() {
       Router.resolve(); UI.toast('Reset to defaults.','success');
     }
   });
-  document.getElementById('btn-add-bu').addEventListener('click', () => openBUEditor(null));
-  document.querySelectorAll('.btn-create-bu-from-entity').forEach(button => {
+  document.querySelectorAll('.btn-edit-company-context').forEach(button => {
     button.addEventListener('click', () => {
-      const entity = structureMap.get(button.dataset.entityId || '');
-      if (!entity) return;
-      openBUEditor(buildBUFromOrgEntity(entity, settings));
+      const bu = buList.find(item => item.id === button.dataset.buId);
+      if (bu) openBUEditor(bu);
     });
   });
-  buList.forEach(bu => {
-    document.getElementById('edit-bu-'+bu.id)?.addEventListener('click', () => openBUEditor(bu));
-    document.getElementById('del-bu-'+bu.id)?.addEventListener('click', async () => {
-      if (await UI.confirm(`Delete "${bu.name}"?`)) {
-        saveBUList(getBUList().filter(b=>b.id!==bu.id));
-        Router.resolve(); UI.toast('Deleted.','success');
-      }
+  document.querySelectorAll('.btn-create-department').forEach(button => {
+    button.addEventListener('click', () => {
+      const company = structureMap.get(button.dataset.companyId || '');
+      if (!company) return;
+      openOrgEntityEditor({
+        structure: companyStructure,
+        seed: {
+          type: 'Department / function',
+          parentId: company.id
+        },
+        onSave: (node, modal) => {
+          const nextSettings = getAdminSettings();
+          const nextStructure = Array.isArray(nextSettings.companyStructure) ? [...nextSettings.companyStructure] : [];
+          nextStructure.push(node);
+          saveAdminSettings({
+            ...nextSettings,
+            companyStructure: nextStructure
+          });
+          modal.close();
+          UI.toast(`${node.name} added beneath ${company.name}.`, 'success');
+          renderAdminBU();
+        }
+      });
+    });
+  });
+  document.querySelectorAll('.btn-edit-department').forEach(button => {
+    button.addEventListener('click', () => {
+      const department = structureMap.get(button.dataset.departmentId || '');
+      if (!department) return;
+      openOrgEntityEditor({
+        structure: companyStructure,
+        existingNode: department,
+        onSave: (node, modal) => {
+          const nextSettings = getAdminSettings();
+          const nextStructure = Array.isArray(nextSettings.companyStructure) ? [...nextSettings.companyStructure] : [];
+          const index = nextStructure.findIndex(item => item.id === node.id);
+          if (index > -1) nextStructure[index] = node;
+          saveAdminSettings({
+            ...nextSettings,
+            companyStructure: nextStructure
+          });
+          modal.close();
+          UI.toast(`${node.name} updated.`, 'success');
+          renderAdminBU();
+        }
+      });
+    });
+  });
+  document.querySelectorAll('.btn-edit-department-context').forEach(button => {
+    button.addEventListener('click', () => {
+      const department = structureMap.get(button.dataset.departmentId || '');
+      if (!department) return;
+      openEntityContextLayerEditor({
+        entity: department,
+        settings,
+        onSave: (nextLayer, modal) => {
+          const nextSettings = getAdminSettings();
+          const layers = Array.isArray(nextSettings.entityContextLayers) ? [...nextSettings.entityContextLayers] : [];
+          const index = layers.findIndex(item => item.entityId === nextLayer.entityId);
+          if (index > -1) layers[index] = nextLayer;
+          else layers.push(nextLayer);
+          saveAdminSettings({
+            ...nextSettings,
+            entityContextLayers: layers
+          });
+          modal.close();
+          UI.toast(`Saved context for ${department.name}.`, 'success');
+          renderAdminBU();
+        }
+      });
     });
   });
 }
@@ -4183,19 +4780,19 @@ function openBUEditor(bu) {
   const structureMap = new Map(companyStructure.map(node => [node.id, node]));
   let ti = {};
   const m = UI.modal({
-    title: isNew ? 'Add BU / Department Context' : `Edit: ${bu.name}`,
+    title: isNew ? 'Add Business Unit Context' : `Manage BU Context: ${bu.name}`,
     body: `<form id="bu-form"><div class="grid-2" style="gap:12px">
       <div class="form-group"><label class="form-label">ID</label><input class="form-input" id="bu-id" value="${bu?.id||''}" placeholder="bu-example" ${!isNew?'readonly':''}></div>
-      <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="bu-name" value="${bu?.name||''}"></div>
+      <div class="form-group"><label class="form-label">Business Unit Name</label><input class="form-input" id="bu-name" value="${bu?.name||''}"></div>
     </div>
     <div class="grid-2 mt-4" style="gap:12px">
       <div class="form-group">
-        <label class="form-label">Mapped Business / Department</label>
+        <label class="form-label">Mapped Company Entity</label>
         <select class="form-select" id="bu-org-entity">
           <option value="">Not linked yet</option>
-          ${companyStructure.map(node => `<option value="${node.id}" ${bu?.orgEntityId === node.id ? 'selected' : ''}>${node.name} (${node.type})</option>`).join('')}
+          ${getCompanyEntities(companyStructure).map(node => `<option value="${node.id}" ${bu?.orgEntityId === node.id ? 'selected' : ''}>${node.name} (${node.type})</option>`).join('')}
         </select>
-        <span class="form-help">Link this BU to a saved business or department from Organisation Setup. Linked entity context can be pulled in below.</span>
+        <span class="form-help">Link this business unit to the company entity it represents in Organisation Setup.</span>
       </div>
       <div class="form-group">
         <label class="form-label">BU Geography Override</label>
@@ -4204,18 +4801,18 @@ function openBUEditor(bu) {
     </div>
     <div class="card mt-4" style="padding:var(--sp-4);background:var(--bg-canvas)">
       <div class="context-panel-title">Linked Entity Context</div>
-      <div id="bu-linked-entity-summary" class="form-help">Select a mapped business or department to see inherited organisation context.</div>
+      <div id="bu-linked-entity-summary" class="form-help">Select a mapped company entity to see inherited organisation context.</div>
       <div class="flex items-center gap-3 mt-3" style="flex-wrap:wrap">
         <button class="btn btn--ghost btn--sm" id="btn-apply-linked-context" type="button">Apply Linked Context</button>
-        <span class="form-help">Fills empty or default BU fields from the linked organisation entity and its context layer.</span>
+        <span class="form-help">Fills empty or default business-unit fields from the linked company entity and its context layer.</span>
       </div>
     </div>
     <div class="form-group mt-4"><label class="form-label">Critical Services</label><div class="tag-input-wrap" id="ti-services"></div></div>
     <div class="form-group mt-4"><label class="form-label">Key Systems</label><div class="tag-input-wrap" id="ti-systems"></div></div>
     <div class="form-group mt-4"><label class="form-label">Data Types</label><div class="tag-input-wrap" id="ti-datatypes"></div></div>
     <div class="form-group mt-4"><label class="form-label">Regulatory Tags</label><div class="tag-input-wrap" id="ti-regtags"></div></div>
-    <div class="form-group mt-4"><label class="form-label">BU Context Summary</label><textarea class="form-textarea" id="bu-context" rows="3">${bu?.contextSummary||''}</textarea></div>
-    <div class="form-group mt-4"><label class="form-label">BU AI Guidance</label><textarea class="form-textarea" id="bu-ai-guidance" rows="3">${bu?.aiGuidance||''}</textarea></div>
+    <div class="form-group mt-4"><label class="form-label">Business Unit Context Summary</label><textarea class="form-textarea" id="bu-context" rows="3">${bu?.contextSummary||''}</textarea></div>
+    <div class="form-group mt-4"><label class="form-label">Business Unit AI Guidance</label><textarea class="form-textarea" id="bu-ai-guidance" rows="3">${bu?.aiGuidance||''}</textarea></div>
     <div class="form-group mt-4"><label class="form-label">Notes</label><textarea class="form-textarea" id="bu-notes" rows="2">${bu?.notes||''}</textarea></div>
     </form>`,
     footer: `<button class="btn btn--ghost" id="bu-cancel">Cancel</button><button class="btn btn--primary" id="bu-save">Save</button>`
@@ -4233,7 +4830,7 @@ function openBUEditor(bu) {
     const entity = structureMap.get(entityId);
     const layer = getEntityLayerById(settings, entityId);
     if (!entity || !summaryEl) {
-      summaryEl.innerHTML = 'Select a mapped business or department to see inherited organisation context.';
+      summaryEl.innerHTML = 'Select a mapped company entity to see inherited organisation context.';
       return;
     }
     const parts = [
