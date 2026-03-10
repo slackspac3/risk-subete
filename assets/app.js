@@ -167,6 +167,12 @@ const ORG_ENTITY_TYPES = [
   'Department / function'
 ];
 
+const DEPARTMENT_RELATIONSHIP_TYPES = [
+  'In-house',
+  'Outsourced',
+  'Hybrid'
+];
+
 const TYPICAL_DEPARTMENTS = [
   'Information Security',
   'Technology',
@@ -733,6 +739,7 @@ function buildCompanyStructureContext(structure = []) {
     ];
     if (node.websiteUrl) parts.push(`website: ${node.websiteUrl}`);
     if (node.departmentHint) parts.push(`department family: ${node.departmentHint}`);
+    if (node.departmentRelationshipType) parts.push(`delivery model: ${node.departmentRelationshipType}`);
     if (node.profile) parts.push(`context: ${truncateText(node.profile, 220)}`);
     return `- ${parts.join(' | ')}`;
   }).join('\n');
@@ -809,7 +816,9 @@ function buildOrgParentOptions(structure = [], type = '', excludeId = '') {
 
 function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, onSave }) {
   const node = existingNode || {};
-  const defaultType = node.type || seed.type || 'Holding company';
+  const isSeedDepartment = isDepartmentEntityType(node.type || seed.type || '');
+  const defaultType = isSeedDepartment ? 'Department / function' : (node.type || seed.type || 'Holding company');
+  const defaultDepartmentRelationshipType = node.departmentRelationshipType || seed.departmentRelationshipType || 'In-house';
   const defaultName = node.name || seed.name || '';
   const defaultWebsite = node.websiteUrl || seed.websiteUrl || '';
   const defaultProfile = node.profile || seed.profile || '';
@@ -823,7 +832,9 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
       <div class="form-group">
         <label class="form-label" for="org-entity-type">Relationship Type</label>
         <select class="form-select" id="org-entity-type">
-          ${ORG_ENTITY_TYPES.map(type => `<option value="${type}" ${type === defaultType ? 'selected' : ''}>${type}</option>`).join('')}
+          ${isSeedDepartment
+            ? DEPARTMENT_RELATIONSHIP_TYPES.map(type => `<option value="${type}" ${type === defaultDepartmentRelationshipType ? 'selected' : ''}>${type}</option>`).join('')
+            : ORG_ENTITY_TYPES.filter(type => !isDepartmentEntityType(type)).map(type => `<option value="${type}" ${type === defaultType ? 'selected' : ''}>${type}</option>`).join('')}
         </select>
       </div>
       <div class="form-group">
@@ -903,6 +914,7 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
     footer: `<button class="btn btn--ghost" id="org-cancel">Cancel</button><button class="btn btn--primary" id="org-save">Save Entity</button>`
   });
 
+  const departmentEditorMode = isSeedDepartment;
   const typeEl = document.getElementById('org-entity-type');
   const nameEl = document.getElementById('org-entity-name');
   const parentEl = document.getElementById('org-parent-id');
@@ -920,33 +932,36 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
   const contextActionsEl = document.getElementById('org-context-actions');
   const contextSectionsWrapEl = document.getElementById('org-context-sections-wrap');
 
+  function getSelectedNodeType() {
+    return departmentEditorMode ? 'Department / function' : typeEl.value;
+  }
+
   function refreshEntityEditorState() {
-    const selectedType = typeEl.value;
-    const parentOptions = buildOrgParentOptions(structure, selectedType, node.id);
+    const selectedNodeType = getSelectedNodeType();
+    const parentOptions = buildOrgParentOptions(structure, selectedNodeType, node.id);
     const currentParentId = node.parentId || seed.parentId || '';
     parentEl.innerHTML = parentOptions.map(option => `<option value="${option.id}" ${option.id === currentParentId ? 'selected' : ''}>${option.name}</option>`).join('');
     parentEl.disabled = !parentOptions.length;
-    parentHelpEl.textContent = isDepartmentEntityType(selectedType)
+    parentHelpEl.textContent = departmentEditorMode
       ? 'Departments and functions must be attached to a business entity.'
-      : requiresParentEntity(selectedType)
+      : requiresParentEntity(selectedNodeType)
         ? 'This relationship should sit under an existing business or holding entity.'
         : 'Use a parent when this entity sits within a wider group. Leave top level for the main holding business.';
-    const departmentMode = isDepartmentEntityType(selectedType);
-    departmentWrapEl.style.display = departmentMode ? '' : 'none';
-    ownerWrapEl.style.display = isCompanyEntityType(selectedType) || departmentMode ? '' : 'none';
-    websiteWrapEl.style.display = departmentMode ? 'none' : '';
-    contextActionsEl.style.display = departmentMode ? 'none' : '';
-    contextSectionsWrapEl.style.display = departmentMode ? 'none' : '';
-    ownerLabelEl.textContent = departmentMode ? 'Department Owner' : 'Business Unit Admin';
-    ownerHelpEl.textContent = departmentMode
+    departmentWrapEl.style.display = departmentEditorMode ? '' : 'none';
+    ownerWrapEl.style.display = isCompanyEntityType(selectedNodeType) || departmentEditorMode ? '' : 'none';
+    websiteWrapEl.style.display = departmentEditorMode ? 'none' : '';
+    contextActionsEl.style.display = departmentEditorMode ? 'none' : '';
+    contextSectionsWrapEl.style.display = departmentEditorMode ? 'none' : '';
+    ownerLabelEl.textContent = departmentEditorMode ? 'Department Owner' : 'Business Unit Admin';
+    ownerHelpEl.textContent = departmentEditorMode
       ? 'The assigned owner can maintain department context from their Settings page.'
       : 'The assigned user can manage the departments and retained context for this business unit from their Settings page.';
-    profileHelpEl.textContent = departmentMode
+    profileHelpEl.textContent = departmentEditorMode
       ? 'Describe what this department owns, supports, or controls within the business.'
       : 'Capture public business profile, ownership context, strategic role, and major risk signals for this entity.';
   }
 
-  typeEl.addEventListener('change', refreshEntityEditorState);
+  if (!departmentEditorMode) typeEl.addEventListener('change', refreshEntityEditorState);
   departmentTemplateEl.addEventListener('change', () => {
     if (departmentTemplateEl.value && (!nameEl.value.trim() || TYPICAL_DEPARTMENTS.includes(nameEl.value.trim()))) {
       nameEl.value = departmentTemplateEl.value;
@@ -954,27 +969,28 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
   });
   document.getElementById('org-cancel').addEventListener('click', () => modal.close());
   document.getElementById('org-save').addEventListener('click', () => {
-    const selectedType = typeEl.value;
+    const selectedNodeType = getSelectedNodeType();
     const parentId = parentEl.value;
-    if (requiresParentEntity(selectedType) && !parentId) {
-      UI.toast(isDepartmentEntityType(selectedType) ? 'Choose the business this department sits under.' : 'Choose the parent business for this entity.', 'warning');
+    if (requiresParentEntity(selectedNodeType) && !parentId) {
+      UI.toast(departmentEditorMode ? 'Choose the business this department sits under.' : 'Choose the parent business for this entity.', 'warning');
       return;
     }
     const name = nameEl.value.trim();
     if (!name) {
-      UI.toast(isDepartmentEntityType(selectedType) ? 'Enter the department or function name.' : 'Enter the entity name.', 'warning');
+      UI.toast(departmentEditorMode ? 'Enter the department or function name.' : 'Enter the entity name.', 'warning');
       return;
     }
     onSave?.({
       ...node,
       id: node.id || `org_${Date.now()}`,
-      type: selectedType,
+      type: selectedNodeType,
       name,
       parentId: parentId || null,
-      websiteUrl: isDepartmentEntityType(selectedType) ? '' : websiteEl.value.trim(),
+      websiteUrl: departmentEditorMode ? '' : websiteEl.value.trim(),
       profile: profileEl.value.trim(),
       ownerUsername: ownerEl.value,
-      contextSections: isDepartmentEntityType(selectedType) ? null : {
+      departmentRelationshipType: departmentEditorMode ? typeEl.value : '',
+      contextSections: departmentEditorMode ? null : {
         companySummary: document.getElementById('org-section-summary').value.trim(),
         businessModel: document.getElementById('org-section-business-model').value.trim(),
         operatingModel: document.getElementById('org-section-operating-model').value.trim(),
@@ -983,7 +999,7 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
         obligations: document.getElementById('org-section-obligations').value.trim(),
         sources: document.getElementById('org-section-sources').value.trim()
       },
-      departmentHint: isDepartmentEntityType(selectedType) ? (departmentTemplateEl.value || name) : ''
+      departmentHint: departmentEditorMode ? (departmentTemplateEl.value || name) : ''
     }, modal);
   });
   refreshEntityEditorState();
@@ -1002,7 +1018,14 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
     setWebsite(value) { websiteEl.value = value || ''; },
     setName(value) { nameEl.value = value || ''; },
     setType(value) {
-      if (ORG_ENTITY_TYPES.includes(value)) {
+      if (departmentEditorMode) {
+        if (DEPARTMENT_RELATIONSHIP_TYPES.includes(value)) {
+          typeEl.value = value;
+          refreshEntityEditorState();
+        }
+        return;
+      }
+      if (ORG_ENTITY_TYPES.includes(value) && !isDepartmentEntityType(value)) {
         typeEl.value = value;
         refreshEntityEditorState();
       }
@@ -4674,7 +4697,7 @@ function renderAdminBU() {
         <div class="org-related-card__head">
           <div>
             <div class="context-panel-title">${department.name}</div>
-            <div class="form-help">${department.ownerUsername ? `Owner: ${accountLabelByUsername.get(department.ownerUsername) || department.ownerUsername}` : 'Owner not assigned yet'}</div>
+            <div class="form-help">${department.departmentRelationshipType || 'In-house'} · ${department.ownerUsername ? `Owner: ${accountLabelByUsername.get(department.ownerUsername) || department.ownerUsername}` : 'Owner not assigned yet'}</div>
             <div class="form-help">${getEntityLayerById(settings, department.id)?.contextSummary || department.profile || 'No retained department context yet'}</div>
           </div>
           <div class="flex items-center gap-3" style="flex-wrap:wrap">
