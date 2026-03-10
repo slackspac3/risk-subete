@@ -1,8 +1,8 @@
 /**
  * llmService.js — LLM service (Core42 Compass + local stub)
  *
- * Compass API (OpenAI-compatible):
- *   POST https://api.core42.ai/v1/chat/completions
+ * Compass API (proxied through Vercel by default):
+ *   POST https://risk-calculator-eight.vercel.app/api/compass
  *   Authorization: Bearer <COMPASS_API_KEY>
  *
  * Do not hard-code real keys in this file.
@@ -10,7 +10,7 @@
  */
 
 const LLMService = (() => {
-  const DEFAULT_COMPASS_API_URL = 'https://api.core42.ai/v1/chat/completions';
+  const DEFAULT_COMPASS_API_URL = 'https://risk-calculator-eight.vercel.app/api/compass';
   const DEFAULT_COMPASS_MODEL = 'gpt-5.1';
   let _compassApiUrl = DEFAULT_COMPASS_API_URL;
   let _compassModel = DEFAULT_COMPASS_MODEL;

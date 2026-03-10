@@ -99,7 +99,7 @@ Applied to **per-event P90 (LM)** vs **$5,000,000 USD threshold** (configurable 
 ```javascript
 LLMService.setCompassConfig({
   apiKey: 'your-compass-key',
-  apiUrl: 'https://api.core42.ai/v1/chat/completions',
+  apiUrl: 'https://risk-calculator-eight.vercel.app/api/compass',
   model: 'gpt-5.1'
 });
 ```
@@ -127,11 +127,11 @@ This repo now includes a minimal Vercel serverless proxy in [`api/compass.js`](.
 7. Deploy the project.
 8. Vercel will give you a site URL such as:
 ```text
-https://risk-calculator-proxy.vercel.app
+https://risk-calculator-eight.vercel.app
 ```
 
-7. In the app, go to `Admin -> Settings -> Compass Session Access` and set:
-- `Compass URL`: `https://your-vercel-project.vercel.app/api/compass`
+9. In the app, go to `Admin -> Settings -> Compass Session Access` and set:
+- `Compass URL`: `https://risk-calculator-eight.vercel.app/api/compass`
 - `Model`: `gpt-5.1`
 - `Compass API Key`: leave blank when using Vercel
 

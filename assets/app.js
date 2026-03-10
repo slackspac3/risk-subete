@@ -7,6 +7,13 @@
 
 const TOLERANCE_THRESHOLD = 5_000_000;
 const DEFAULT_FX_RATE = 3.6725;
+const DEFAULT_COMPASS_PROXY_URL = 'https://risk-calculator-eight.vercel.app/api/compass';
+const GLOBAL_ADMIN_STORAGE_KEY = 'rq_admin_settings';
+const USER_SETTINGS_STORAGE_PREFIX = 'rq_user_settings';
+const ASSESSMENTS_STORAGE_PREFIX = 'rq_assessments';
+const LEARNING_STORAGE_PREFIX = 'rq_learning_store';
+const DRAFT_STORAGE_PREFIX = 'rq_draft';
+const SESSION_LLM_STORAGE_PREFIX = 'rq_llm_session';
 const DEFAULT_ADMIN_SETTINGS = {
   geography: 'United Arab Emirates',
   companyWebsiteUrl: '',
@@ -30,10 +37,51 @@ const AppState = {
   currency: 'USD',
   fxRate: DEFAULT_FX_RATE,
   mode: 'basic',
+  currentUser: null,
   draft: {},
   buList: [],
   docList: []
 };
+
+const USER_SETTINGS_KEYS = [
+  'geography',
+  'companyWebsiteUrl',
+  'companyContextProfile',
+  'companyContextSections',
+  'riskAppetiteStatement',
+  'applicableRegulations',
+  'aiInstructions',
+  'benchmarkStrategy',
+  'defaultLinkMode',
+  'adminContextSummary'
+];
+
+function getCurrentUserOrThrow() {
+  const user = AuthService.getCurrentUser();
+  if (!user?.username) {
+    throw new Error('No authenticated user session found.');
+  }
+  return user;
+}
+
+function buildUserStorageKey(prefix, username = getCurrentUserOrThrow().username) {
+  return `${prefix}__${username}`;
+}
+
+function getUserSettingsDefaults(globalSettings = getAdminSettings()) {
+  return {
+    geography: globalSettings.geography,
+    companyWebsiteUrl: globalSettings.companyWebsiteUrl,
+    companyContextProfile: globalSettings.companyContextProfile,
+    companyContextSections: globalSettings.companyContextSections,
+    riskAppetiteStatement: globalSettings.riskAppetiteStatement,
+    applicableRegulations: [...globalSettings.applicableRegulations],
+    aiInstructions: globalSettings.aiInstructions,
+    benchmarkStrategy: globalSettings.benchmarkStrategy,
+    defaultLinkMode: globalSettings.defaultLinkMode,
+    adminContextSummary: globalSettings.adminContextSummary
+  };
+}
 
 const LEARNING_PARAM_KEYS = [
   'tefLikely',
@@ -74,13 +122,13 @@ const TYPICAL_DEPARTMENTS = [
 ];
 
 function getAssessments() {
-  try { return JSON.parse(localStorage.getItem('rq_assessments') || '[]'); } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(buildUserStorageKey(ASSESSMENTS_STORAGE_PREFIX)) || '[]'); } catch { return []; }
 }
 function saveAssessment(a) {
   const list = getAssessments();
   const idx = list.findIndex(x => x.id === a.id);
   if (idx > -1) list[idx] = a; else list.unshift(a);
-  localStorage.setItem('rq_assessments', JSON.stringify(list));
+  localStorage.setItem(buildUserStorageKey(ASSESSMENTS_STORAGE_PREFIX), JSON.stringify(list));
 }
 function getAssessmentById(id) {
   return getAssessments().find(a => a.id === id) || null;
@@ -88,14 +136,14 @@ function getAssessmentById(id) {
 
 function getLearningStore() {
   try {
-    return JSON.parse(localStorage.getItem('rq_learning_store') || '{"templates":{}}');
+    return JSON.parse(localStorage.getItem(buildUserStorageKey(LEARNING_STORAGE_PREFIX)) || '{"templates":{}}');
   } catch {
     return { templates: {} };
   }
 }
 
 function saveLearningStore(store) {
-  localStorage.setItem('rq_learning_store', JSON.stringify(store));
+  localStorage.setItem(buildUserStorageKey(LEARNING_STORAGE_PREFIX), JSON.stringify(store));
 }
 
 function getTemplateLearningProfile(templateId) {
@@ -151,11 +199,11 @@ function applyLearnedTemplateDraft(tmpl) {
 }
 
 function saveDraft() {
-  try { sessionStorage.setItem('rq_draft', JSON.stringify(AppState.draft)); } catch {}
+  try { sessionStorage.setItem(buildUserStorageKey(DRAFT_STORAGE_PREFIX), JSON.stringify(AppState.draft)); } catch {}
 }
 function loadDraft() {
   try {
-    const d = JSON.parse(sessionStorage.getItem('rq_draft') || 'null');
+    const d = JSON.parse(sessionStorage.getItem(buildUserStorageKey(DRAFT_STORAGE_PREFIX)) || 'null');
     if (d) Object.assign(AppState.draft, d);
   } catch {}
 }
@@ -191,6 +239,33 @@ function resetDraft() {
     }
   };
   saveDraft();
+}
+
+function activateAuthenticatedState() {
+  AppState.currentUser = AuthService.getCurrentUser();
+  if (!AppState.currentUser) {
+    AppState.draft = {};
+    LLMService.clearCompassConfig();
+    renderAppBar();
+    return;
+  }
+
+  AppState.draft = {};
+  loadDraft();
+  if (!AppState.draft.id) resetDraft();
+  ensureDraftShape();
+  if (!AppState.draft.applicableRegulations?.length) {
+    AppState.draft.applicableRegulations = [...getEffectiveSettings().applicableRegulations];
+  }
+
+  const sessionLLM = getSessionLLMConfig();
+  if (sessionLLM.apiUrl || sessionLLM.apiKey || sessionLLM.model) {
+    LLMService.setCompassConfig(sessionLLM);
+  } else {
+    LLMService.clearCompassConfig();
+  }
+
+  renderAppBar();
 }
 
 function ensureDraftShape() {
@@ -257,7 +332,7 @@ function saveDocList(list) {
 
 function getAdminSettings() {
   try {
-    const saved = JSON.parse(localStorage.getItem('rq_admin_settings') || 'null') || {};
+    const saved = JSON.parse(localStorage.getItem(GLOBAL_ADMIN_STORAGE_KEY) || 'null') || {};
     return {
       ...DEFAULT_ADMIN_SETTINGS,
       ...saved,
@@ -277,7 +352,59 @@ function saveAdminSettings(settings) {
     companyStructure: Array.isArray(settings.companyStructure) ? settings.companyStructure : [],
     entityContextLayers: Array.isArray(settings.entityContextLayers) ? settings.entityContextLayers : []
   };
-  localStorage.setItem('rq_admin_settings', JSON.stringify(merged));
+  localStorage.setItem(GLOBAL_ADMIN_STORAGE_KEY, JSON.stringify(merged));
+}
+
+function getUserSettings() {
+  const globalSettings = getAdminSettings();
+  const defaults = getUserSettingsDefaults(globalSettings);
+  try {
+    const saved = JSON.parse(localStorage.getItem(buildUserStorageKey(USER_SETTINGS_STORAGE_PREFIX)) || 'null') || {};
+    return {
+      ...defaults,
+      ...saved,
+      applicableRegulations: Array.isArray(saved.applicableRegulations) ? saved.applicableRegulations : [...defaults.applicableRegulations],
+      companyContextSections: saved.companyContextSections && typeof saved.companyContextSections === 'object'
+        ? saved.companyContextSections
+        : defaults.companyContextSections
+    };
+  } catch {
+    return {
+      ...defaults,
+      applicableRegulations: [...defaults.applicableRegulations]
+    };
+  }
+}
+
+function saveUserSettings(settings) {
+  const globalSettings = getAdminSettings();
+  const defaults = getUserSettingsDefaults(globalSettings);
+  const merged = {
+    ...defaults,
+    ...settings,
+    applicableRegulations: Array.isArray(settings.applicableRegulations) ? settings.applicableRegulations : [...defaults.applicableRegulations],
+    companyContextSections: settings.companyContextSections && typeof settings.companyContextSections === 'object'
+      ? settings.companyContextSections
+      : defaults.companyContextSections
+  };
+  localStorage.setItem(buildUserStorageKey(USER_SETTINGS_STORAGE_PREFIX), JSON.stringify(merged));
+}
+
+function getEffectiveSettings() {
+  const globalSettings = getAdminSettings();
+  const user = AuthService.getCurrentUser();
+  if (!user || user.role === 'admin') {
+    return globalSettings;
+  }
+  const userSettings = getUserSettings();
+  return {
+    ...globalSettings,
+    ...userSettings,
+    applicableRegulations: Array.isArray(userSettings.applicableRegulations) ? userSettings.applicableRegulations : [...globalSettings.applicableRegulations],
+    companyContextSections: userSettings.companyContextSections && typeof userSettings.companyContextSections === 'object'
+      ? userSettings.companyContextSections
+      : globalSettings.companyContextSections
+  };
 }
 
 function getToleranceThreshold() {
@@ -625,14 +752,19 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
 
 function getSessionLLMConfig() {
   try {
-    return JSON.parse(sessionStorage.getItem('rq_llm_session') || 'null') || {};
+    const config = JSON.parse(sessionStorage.getItem(buildUserStorageKey(SESSION_LLM_STORAGE_PREFIX)) || 'null') || {};
+    if (typeof config.apiUrl === 'string' && config.apiUrl.includes('api.core42.ai/v1/chat/completions')) {
+      config.apiUrl = DEFAULT_COMPASS_PROXY_URL;
+      sessionStorage.setItem(buildUserStorageKey(SESSION_LLM_STORAGE_PREFIX), JSON.stringify(config));
+    }
+    return config;
   } catch {
     return {};
   }
 }
 
 function saveSessionLLMConfig(config) {
-  sessionStorage.setItem('rq_llm_session', JSON.stringify(config));
+  sessionStorage.setItem(buildUserStorageKey(SESSION_LLM_STORAGE_PREFIX), JSON.stringify(config));
 }
 
 function fmtCurrency(usdValue) {
@@ -779,7 +911,7 @@ function getScenarioMultipliers() {
 }
 
 function deriveApplicableRegulations(bu, selectedRisks = []) {
-  const settings = getAdminSettings();
+  const settings = getEffectiveSettings();
   const tags = [
     ...settings.applicableRegulations,
     ...(AppState.draft.applicableRegulations || []),
@@ -1035,6 +1167,8 @@ function composeGuidedNarrative(guidedInput = {}) {
 
 // ─── APP BAR ──────────────────────────────────────────────────
 function renderAppBar() {
+  const currentUser = AuthService.getCurrentUser();
+  const settingsHref = currentUser?.role === 'admin' ? '#/admin/settings' : '#/settings';
   const bar = document.getElementById('app-bar');
   bar.innerHTML = `
     <div class="bar-inner">
@@ -1043,7 +1177,11 @@ function renderAppBar() {
         <a href="#/" class="bar-nav-link">Home</a>
       </nav>
       <div class="bar-spacer"></div>
-      <a href="#/admin" class="bar-nav-link bar-nav-link--admin">Admin</a>
+      ${currentUser ? `
+        <a href="${settingsHref}" class="bar-nav-link bar-nav-link--admin">${currentUser.role === 'admin' ? 'Global Admin' : 'Settings'}</a>
+        <span class="bar-nav-link" style="pointer-events:none">${currentUser.displayName}</span>
+        <button type="button" class="btn btn--ghost btn--sm" id="btn-sign-out">Sign Out</button>
+      ` : `<a href="#/login" class="bar-nav-link bar-nav-link--admin">Sign In</a>`}
       <div class="currency-toggle" role="group" aria-label="Currency">
         <button id="cur-usd" class="${AppState.currency==='USD'?'active':''}">USD</button>
         <button id="cur-aed" class="${AppState.currency==='AED'?'active':''}">AED</button>
@@ -1052,6 +1190,11 @@ function renderAppBar() {
     </div>`;
   document.getElementById('cur-usd').addEventListener('click', () => { AppState.currency='USD'; renderAppBar(); Router.resolve(); });
   document.getElementById('cur-aed').addEventListener('click', () => { AppState.currency='AED'; renderAppBar(); Router.resolve(); });
+  document.getElementById('btn-sign-out')?.addEventListener('click', () => {
+    AuthService.logout();
+    activateAuthenticatedState();
+    Router.navigate('/login');
+  });
 }
 
 // ─── LANDING ──────────────────────────────────────────────────
@@ -1243,7 +1386,7 @@ function renderLanding() {
 
   document.getElementById('btn-clear-all')?.addEventListener('click', async () => {
     if (await UI.confirm('Clear all saved assessments from this browser?')) {
-      localStorage.removeItem('rq_assessments');
+      localStorage.removeItem(buildUserStorageKey(ASSESSMENTS_STORAGE_PREFIX));
       Router.resolve();
     }
   });
@@ -1282,7 +1425,7 @@ function loadTemplate(tmpl) {
 function renderWizard1() {
   ensureDraftShape();
   const draft = AppState.draft;
-  const settings = getAdminSettings();
+  const settings = getEffectiveSettings();
   const buList = getBUList();
   const selectedRisks = getSelectedRisks();
   const regs = draft.applicableRegulations?.length ? draft.applicableRegulations : settings.applicableRegulations;
@@ -1605,7 +1748,7 @@ async function runIntakeAssist() {
       applicableRegulations: deriveApplicableRegulations(bu, getSelectedRisks()),
       citations,
       adminSettings: {
-        ...getAdminSettings(),
+        ...getEffectiveSettings(),
         companyStructureContext: buildOrganisationContextSummary(getAdminSettings())
       }
     });
@@ -1646,7 +1789,7 @@ async function analyseUploadedRegister() {
       geography: AppState.draft.geography,
       applicableRegulations: AppState.draft.applicableRegulations || [],
       adminSettings: {
-        ...getAdminSettings(),
+        ...getEffectiveSettings(),
         companyStructureContext: buildOrganisationContextSummary(getAdminSettings())
       }
     });
@@ -1774,8 +1917,8 @@ async function runLLMAssist() {
       ...bu,
       regulatoryTags: deriveApplicableRegulations(bu, getSelectedRisks()),
       geography: AppState.draft.geography,
-      benchmarkStrategy: getAdminSettings().benchmarkStrategy,
-      companyContextProfile: getAdminSettings().companyContextProfile,
+      benchmarkStrategy: getEffectiveSettings().benchmarkStrategy,
+      companyContextProfile: getEffectiveSettings().companyContextProfile,
       companyStructureContext: buildOrganisationContextSummary(getAdminSettings())
     }, citations);
     AppState.draft.scenarioTitle = result.scenarioTitle;
@@ -2308,7 +2451,7 @@ function renderResults(id, isShared) {
               </div>
               <div>
                 <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Escalation guidance</div>
-                <div class="context-panel-copy" style="margin-top:6px">${getAdminSettings().escalationGuidance}</div>
+                <div class="context-panel-copy" style="margin-top:6px">${getEffectiveSettings().escalationGuidance}</div>
               </div>
             </div>
           </div>
@@ -2425,41 +2568,109 @@ function renderResults(id, isShared) {
   document.getElementById('btn-new-assess').addEventListener('click', () => { resetDraft(); Router.navigate('/wizard/1'); });
 }
 
-// ─── ADMIN ────────────────────────────────────────────────────
-function renderAdminLogin() {
+// ─── AUTH & SETTINGS ──────────────────────────────────────────
+function getDefaultRouteForCurrentUser() {
+  const user = AuthService.getCurrentUser();
+  return user?.role === 'admin' ? '/admin/settings' : '/settings';
+}
+
+function requireAuth() {
+  const user = AuthService.getCurrentUser();
+  if (!user) {
+    AppState.currentUser = null;
+    Router.navigate('/login');
+    return false;
+  }
+  AppState.currentUser = user;
+  return true;
+}
+
+function renderLogin() {
+  const currentUser = AuthService.getCurrentUser();
+  if (currentUser) {
+    Router.navigate(getDefaultRouteForCurrentUser());
+    return;
+  }
+  const accounts = AuthService.getSeededAccounts();
   setPage(`
     <main class="page">
-      <div class="container container--narrow" style="padding:var(--sp-16) var(--sp-6);max-width:440px">
-        <div class="banner banner--poc mb-6"><span class="banner-icon">⚠</span><span class="banner-text"><strong>PoC Security:</strong> Shared password only. Replace with Microsoft Entra ID before production. [ENTRA-INTEGRATION]</span></div>
+      <div class="container container--narrow" style="padding:var(--sp-16) var(--sp-6);max-width:720px">
+        <div class="banner banner--poc mb-6"><span class="banner-icon">⚠</span><span class="banner-text"><strong>PoC Security:</strong> Local test accounts only. Replace with Microsoft Entra ID before production. [ENTRA-INTEGRATION]</span></div>
         <div class="card card--elevated">
-          <h2 style="margin-bottom:var(--sp-6)">Admin Login</h2>
-          <div class="form-group mb-4">
-            <label class="form-label" for="admin-pass">Password</label>
-            <input class="form-input" id="admin-pass" type="password" placeholder="Enter admin password" autocomplete="current-password">
-            <span class="form-error hidden" id="admin-err">⚠ Incorrect password</span>
+          <h2 style="margin-bottom:var(--sp-2)">Sign In</h2>
+          <p style="margin-bottom:var(--sp-6);color:var(--text-muted)">Each test account keeps its own draft state, saved assessments, AI session settings, and personal context. The <strong>admin</strong> account also has access to the global backend.</p>
+          <div class="grid-2" style="gap:var(--sp-6);align-items:start">
+            <div>
+              <div class="form-group mb-4">
+                <label class="form-label" for="login-user">Username</label>
+                <input class="form-input" id="login-user" type="text" placeholder="Enter username" autocomplete="username">
+              </div>
+              <div class="form-group mb-4">
+                <label class="form-label" for="login-pass">Password</label>
+                <input class="form-input" id="login-pass" type="password" placeholder="Enter password" autocomplete="current-password">
+                <span class="form-error hidden" id="login-err">⚠ Invalid username or password</span>
+              </div>
+              <button class="btn btn--primary w-full" id="btn-login" style="justify-content:center">Sign In</button>
+            </div>
+            <div class="card" style="padding:var(--sp-4);background:var(--bg-elevated)">
+              <div class="context-panel-title">Test Accounts</div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+                ${accounts.map(account => `
+                  <div class="assessment-item" data-username="${account.username}" data-password="${account.password}" role="button" tabindex="0">
+                    <div class="assessment-meta">
+                      <div class="assessment-title">${account.displayName}</div>
+                      <div class="assessment-detail">${account.username} · ${account.role === 'admin' ? 'Global Admin' : 'User Settings'}</div>
+                    </div>
+                  </div>`).join('')}
+              </div>
+              <div class="form-help" style="margin-top:12px">Click an account to auto-fill the sign-in form for local testing.</div>
+            </div>
           </div>
-          <button class="btn btn--primary w-full" id="btn-admin-login" style="justify-content:center">Sign In</button>
-          <div style="margin-top:var(--sp-4);text-align:center"><a href="#/" class="btn btn--ghost btn--sm">← Back</a></div>
         </div>
       </div>
     </main>`);
 
   const login = () => {
-    const pw = document.getElementById('admin-pass').value;
-    const result = AuthService.adminLogin(pw);
-    if (result.success) { UI.toast('Logged in.','success'); Router.navigate('/admin/settings'); }
+    const username = document.getElementById('login-user').value;
+    const pw = document.getElementById('login-pass').value;
+    const result = AuthService.login(username, pw);
+    if (result.success) {
+      activateAuthenticatedState();
+      UI.toast(`Logged in as ${result.user.displayName}.`, 'success');
+      Router.navigate(getDefaultRouteForCurrentUser());
+    }
     else {
-      document.getElementById('admin-err').classList.remove('hidden');
-      document.getElementById('admin-pass').classList.add('error');
+      document.getElementById('login-err').classList.remove('hidden');
+      document.getElementById('login-user').classList.add('error');
+      document.getElementById('login-pass').classList.add('error');
     }
   };
-  document.getElementById('btn-admin-login').addEventListener('click', login);
-  document.getElementById('admin-pass').addEventListener('keydown', e => { if (e.key==='Enter') login(); });
+
+  document.getElementById('btn-login').addEventListener('click', login);
+  document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key==='Enter') login(); });
+  document.getElementById('login-user').addEventListener('keydown', e => { if (e.key==='Enter') login(); });
+  document.querySelectorAll('[data-username]').forEach(node => {
+    node.addEventListener('click', () => {
+      document.getElementById('login-user').value = node.dataset.username || '';
+      document.getElementById('login-pass').value = node.dataset.password || '';
+      document.getElementById('login-err').classList.add('hidden');
+      document.getElementById('login-user').classList.remove('error');
+      document.getElementById('login-pass').classList.remove('error');
+    });
+  });
 }
 
 function requireAdmin() {
-  if (!AuthService.isAdminAuthenticated()) { Router.navigate('/admin'); return false; }
+  if (!requireAuth()) return false;
+  if (!AuthService.isAdminAuthenticated()) { Router.navigate('/settings'); return false; }
   return true;
+}
+
+function withAuth(renderer) {
+  return (params, hash) => {
+    if (!requireAuth()) return;
+    renderer(params, hash);
+  };
 }
 
 function adminLayout(active, content) {
@@ -2477,6 +2688,292 @@ function adminLayout(active, content) {
     </nav>
     <div style="flex:1;padding:var(--sp-8);overflow-y:auto">${content}</div>
   </div>`;
+}
+
+function renderUserSettings() {
+  if (!requireAuth()) return;
+  if (AuthService.isAdminAuthenticated()) {
+    Router.navigate('/admin/settings');
+    return;
+  }
+  const globalSettings = getAdminSettings();
+  const settings = getUserSettings();
+  const companyContextSections = settings.companyContextSections || buildCompanyContextSections({
+    companySummary: settings.adminContextSummary || '',
+    businessProfile: settings.companyContextProfile || ''
+  });
+  const sessionLLM = getSessionLLMConfig();
+  const directCompass = !sessionLLM.apiUrl || sessionLLM.apiUrl.includes('api.core42.ai');
+
+  setPage(`
+    <main class="page">
+      <div class="container container--narrow" style="padding:var(--sp-10) var(--sp-6);max-width:960px">
+        <div class="flex items-center justify-between mb-6" style="gap:var(--sp-4);flex-wrap:wrap">
+          <div>
+            <h2>Personal Settings</h2>
+            <p style="margin-top:6px;color:var(--text-muted)">These settings apply only to <strong>${AppState.currentUser?.displayName || 'your account'}</strong>. Global thresholds, organisation structure, BU customisation, and document library remain controlled by the global admin.</p>
+          </div>
+          <button class="btn btn--secondary" id="btn-reset-user-settings">Reset My Settings</button>
+        </div>
+
+        <div class="card card--elevated">
+          <div class="context-panel-title">Personal Company Context</div>
+          <p class="context-panel-copy">Set the business context, AI guidance, and default assumptions you want this account to carry into assessments.</p>
+          <div class="grid-2 mt-4">
+            <div class="form-group">
+              <label class="form-label" for="user-company-url">Company Website URL</label>
+              <input class="form-input" id="user-company-url" value="${settings.companyWebsiteUrl || ''}" placeholder="https://example.com">
+              <span class="form-help">This is your personal context override. It does not overwrite the global admin baseline.</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="user-company-profile">Company Risk Context Profile</label>
+              <textarea class="form-textarea" id="user-company-profile" rows="6">${settings.companyContextProfile || ''}</textarea>
+            </div>
+          </div>
+
+          <div class="card mt-4" style="padding:var(--sp-4);background:var(--bg-canvas)">
+            <div class="context-panel-title">Editable Company Brief</div>
+            <div class="form-group mt-3">
+              <label class="form-label" for="user-company-section-summary">Company Summary</label>
+              <textarea class="form-textarea" id="user-company-section-summary" rows="3">${companyContextSections.companySummary || ''}</textarea>
+            </div>
+            <div class="form-group mt-3">
+              <label class="form-label" for="user-company-section-business-model">Business Model</label>
+              <textarea class="form-textarea" id="user-company-section-business-model" rows="3">${companyContextSections.businessModel || ''}</textarea>
+            </div>
+            <div class="form-group mt-3">
+              <label class="form-label" for="user-company-section-operating-model">Operating Model</label>
+              <textarea class="form-textarea" id="user-company-section-operating-model" rows="3">${companyContextSections.operatingModel || ''}</textarea>
+            </div>
+            <div class="form-group mt-3">
+              <label class="form-label" for="user-company-section-commitments">Public Commitments</label>
+              <textarea class="form-textarea" id="user-company-section-commitments" rows="4">${companyContextSections.publicCommitments || ''}</textarea>
+            </div>
+            <div class="form-group mt-3">
+              <label class="form-label" for="user-company-section-risks">Key Risk Signals</label>
+              <textarea class="form-textarea" id="user-company-section-risks" rows="4">${companyContextSections.keyRiskSignals || ''}</textarea>
+            </div>
+            <div class="form-group mt-3">
+              <label class="form-label" for="user-company-section-obligations">Obligations and Exposures</label>
+              <textarea class="form-textarea" id="user-company-section-obligations" rows="4">${companyContextSections.obligations || ''}</textarea>
+            </div>
+            <div class="form-group mt-3">
+              <label class="form-label" for="user-company-section-sources">Sources Reviewed</label>
+              <textarea class="form-textarea" id="user-company-section-sources" rows="4">${companyContextSections.sources || ''}</textarea>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
+            <button class="btn btn--secondary" id="btn-build-user-context">Build from Website</button>
+            <span class="form-help">Builds a personal context draft for this account only.</span>
+          </div>
+        </div>
+
+        <div class="card card--elevated mt-6">
+          <div class="context-panel-title">Default Context for This User</div>
+          <div class="grid-2 mt-4">
+            <div class="form-group">
+              <label class="form-label" for="user-geo">Default Geography</label>
+              <input class="form-input" id="user-geo" value="${settings.geography}">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="user-link-mode">Default Linked-Risk Mode</label>
+              <select class="form-select" id="user-link-mode">
+                <option value="yes" ${settings.defaultLinkMode ? 'selected' : ''}>Enabled</option>
+                <option value="no" ${!settings.defaultLinkMode ? 'selected' : ''}>Disabled</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group mt-4">
+            <label class="form-label" for="user-context-summary">Personal Context Summary</label>
+            <textarea class="form-textarea" id="user-context-summary" rows="3">${settings.adminContextSummary || ''}</textarea>
+          </div>
+          <div class="form-group mt-4">
+            <label class="form-label" for="user-appetite">Risk Appetite Statement</label>
+            <textarea class="form-textarea" id="user-appetite" rows="4">${settings.riskAppetiteStatement || ''}</textarea>
+          </div>
+          <div class="form-group mt-4">
+            <label class="form-label">Applicable Regulations</label>
+            <div class="tag-input-wrap" id="ti-user-regulations"></div>
+          </div>
+          <div class="form-group mt-4">
+            <label class="form-label" for="user-ai-instructions">AI Guidance</label>
+            <textarea class="form-textarea" id="user-ai-instructions" rows="3">${settings.aiInstructions || ''}</textarea>
+          </div>
+          <div class="form-group mt-4">
+            <label class="form-label" for="user-benchmark-strategy">Benchmark Strategy</label>
+            <textarea class="form-textarea" id="user-benchmark-strategy" rows="3">${settings.benchmarkStrategy || ''}</textarea>
+          </div>
+        </div>
+
+        <div class="card mt-6" style="padding:var(--sp-5);background:var(--bg-elevated)">
+          <div class="context-panel-title">System Access for This Session</div>
+          <p class="context-panel-copy">${directCompass ? 'Use direct Compass access for temporary testing only. For production, prefer the hosted Vercel proxy URL.' : 'A hosted proxy URL is configured for this user session. Leave the browser key blank and test through the proxy.'}</p>
+          <div class="grid-2 mt-4">
+            <div class="form-group">
+              <label class="form-label" for="user-compass-url">Compass URL</label>
+              <input class="form-input" id="user-compass-url" value="${sessionLLM.apiUrl || DEFAULT_COMPASS_PROXY_URL}">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="user-compass-model">Model</label>
+              <input class="form-input" id="user-compass-model" value="${sessionLLM.model || 'gpt-5.1'}">
+            </div>
+          </div>
+          <div class="form-group mt-4">
+            <label class="form-label" for="user-compass-key">Compass API Key</label>
+            <input class="form-input" id="user-compass-key" type="password" value="${sessionLLM.apiKey || ''}" placeholder="Paste key for this browser session">
+          </div>
+          <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
+            <button class="btn btn--secondary" id="btn-save-user-session-llm">Save Session Key</button>
+            <button class="btn btn--secondary" id="btn-test-user-session-llm">Test Connection</button>
+            <button class="btn btn--ghost" id="btn-clear-user-session-llm">Clear Session Key</button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 mt-6" style="flex-wrap:wrap">
+          <button class="btn btn--primary" id="btn-save-user-settings">Save My Settings</button>
+          <span class="form-help">These values will be used as your personal defaults in future assessments.</span>
+        </div>
+
+        <div class="banner banner--poc mt-6">
+          <span class="banner-icon">ℹ</span>
+          <span class="banner-text">Global admin context still applies underneath your personal overrides for organisation structure, BU definitions, document library, thresholds, and escalation logic.</span>
+        </div>
+      </div>
+    </main>`);
+
+  const regsInput = UI.tagInput('ti-user-regulations', settings.applicableRegulations);
+  const profileEl = document.getElementById('user-company-profile');
+  const websiteEl = document.getElementById('user-company-url');
+
+  document.getElementById('btn-save-user-settings').addEventListener('click', () => {
+    saveUserSettings({
+      companyContextSections: {
+        companySummary: document.getElementById('user-company-section-summary').value.trim(),
+        businessModel: document.getElementById('user-company-section-business-model').value.trim(),
+        operatingModel: document.getElementById('user-company-section-operating-model').value.trim(),
+        publicCommitments: document.getElementById('user-company-section-commitments').value.trim(),
+        keyRiskSignals: document.getElementById('user-company-section-risks').value.trim(),
+        obligations: document.getElementById('user-company-section-obligations').value.trim(),
+        sources: document.getElementById('user-company-section-sources').value.trim()
+      },
+      geography: document.getElementById('user-geo').value.trim() || globalSettings.geography,
+      companyWebsiteUrl: websiteEl.value.trim(),
+      companyContextProfile: serialiseCompanyContextSections({
+        companySummary: document.getElementById('user-company-section-summary').value.trim(),
+        businessModel: document.getElementById('user-company-section-business-model').value.trim(),
+        operatingModel: document.getElementById('user-company-section-operating-model').value.trim(),
+        publicCommitments: document.getElementById('user-company-section-commitments').value.trim(),
+        keyRiskSignals: document.getElementById('user-company-section-risks').value.trim(),
+        obligations: document.getElementById('user-company-section-obligations').value.trim(),
+        sources: document.getElementById('user-company-section-sources').value.trim()
+      }),
+      defaultLinkMode: document.getElementById('user-link-mode').value === 'yes',
+      riskAppetiteStatement: document.getElementById('user-appetite').value.trim() || globalSettings.riskAppetiteStatement,
+      applicableRegulations: regsInput.getTags(),
+      aiInstructions: document.getElementById('user-ai-instructions').value.trim(),
+      benchmarkStrategy: document.getElementById('user-benchmark-strategy').value.trim() || globalSettings.benchmarkStrategy,
+      adminContextSummary: document.getElementById('user-context-summary').value.trim() || globalSettings.adminContextSummary
+    });
+    if (!AppState.draft.geography) AppState.draft.geography = getEffectiveSettings().geography;
+    saveDraft();
+    UI.toast('Personal settings saved.', 'success');
+  });
+
+  document.getElementById('btn-build-user-context').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-build-user-context');
+    const websiteUrl = websiteEl.value.trim();
+    const llmConfig = {
+      apiUrl: document.getElementById('user-compass-url').value.trim() || DEFAULT_COMPASS_PROXY_URL,
+      model: document.getElementById('user-compass-model').value.trim() || 'gpt-5.1',
+      apiKey: document.getElementById('user-compass-key').value.trim()
+    };
+    if (!websiteUrl) {
+      UI.toast('Enter a company website URL first.', 'warning');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Building context…';
+    try {
+      LLMService.setCompassConfig(llmConfig);
+      const result = await LLMService.buildCompanyContext(websiteUrl);
+      const sections = buildCompanyContextSections(result);
+      const profileText = serialiseCompanyContextSections(sections);
+      profileEl.value = profileText;
+      document.getElementById('user-company-section-summary').value = sections.companySummary || '';
+      document.getElementById('user-company-section-business-model').value = sections.businessModel || '';
+      document.getElementById('user-company-section-operating-model').value = sections.operatingModel || '';
+      document.getElementById('user-company-section-commitments').value = sections.publicCommitments || '';
+      document.getElementById('user-company-section-risks').value = sections.keyRiskSignals || '';
+      document.getElementById('user-company-section-obligations').value = sections.obligations || '';
+      document.getElementById('user-company-section-sources').value = sections.sources || '';
+      if (!document.getElementById('user-context-summary').value.trim()) {
+        document.getElementById('user-context-summary').value = result.companySummary || '';
+      }
+      if (result.aiGuidance) {
+        document.getElementById('user-ai-instructions').value = result.aiGuidance;
+      }
+      if (result.suggestedGeography && !document.getElementById('user-geo').value.trim()) {
+        document.getElementById('user-geo').value = result.suggestedGeography;
+      }
+      if (Array.isArray(result.regulatorySignals) && result.regulatorySignals.length) {
+        regsInput.setTags(Array.from(new Set([...regsInput.getTags(), ...result.regulatorySignals])));
+      }
+      UI.toast('Personal company context built from public sources.', 'success', 5000);
+    } catch (error) {
+      UI.toast('Company context build failed: ' + error.message, 'danger', 6000);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Build from Website';
+    }
+  });
+
+  document.getElementById('btn-save-user-session-llm').addEventListener('click', () => {
+    const config = {
+      apiUrl: document.getElementById('user-compass-url').value.trim() || DEFAULT_COMPASS_PROXY_URL,
+      model: document.getElementById('user-compass-model').value.trim() || 'gpt-5.1',
+      apiKey: document.getElementById('user-compass-key').value.trim()
+    };
+    saveSessionLLMConfig(config);
+    LLMService.setCompassConfig(config);
+    UI.toast(config.apiKey ? 'Compass session key loaded for this user.' : 'Compass proxy/session settings loaded for this user.', 'success');
+  });
+
+  document.getElementById('btn-test-user-session-llm').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-test-user-session-llm');
+    const config = {
+      apiUrl: document.getElementById('user-compass-url').value.trim() || DEFAULT_COMPASS_PROXY_URL,
+      model: document.getElementById('user-compass-model').value.trim() || 'gpt-5.1',
+      apiKey: document.getElementById('user-compass-key').value.trim()
+    };
+    btn.disabled = true;
+    btn.textContent = 'Testing…';
+    try {
+      LLMService.setCompassConfig(config);
+      const result = await LLMService.testCompassConnection();
+      UI.toast(result.message || 'Compass connection successful.', 'success', 5000);
+    } catch (e) {
+      UI.toast('Compass test failed: ' + e.message, 'danger', 6000);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Test Connection';
+    }
+  });
+
+  document.getElementById('btn-clear-user-session-llm').addEventListener('click', () => {
+    sessionStorage.removeItem(buildUserStorageKey(SESSION_LLM_STORAGE_PREFIX));
+    LLMService.clearCompassConfig();
+    renderUserSettings();
+    UI.toast('Compass session key cleared for this user.', 'success');
+  });
+
+  document.getElementById('btn-reset-user-settings').addEventListener('click', async () => {
+    if (await UI.confirm('Reset your personal settings to the global admin defaults?')) {
+      localStorage.removeItem(buildUserStorageKey(USER_SETTINGS_STORAGE_PREFIX));
+      UI.toast('Your personal settings were reset.', 'success');
+      renderUserSettings();
+    }
+  });
 }
 
 function renderAdminSettings() {
@@ -2736,7 +3233,7 @@ function renderAdminSettings() {
         <div class="grid-2 mt-4">
           <div class="form-group">
             <label class="form-label" for="admin-compass-url">Compass URL</label>
-            <input class="form-input" id="admin-compass-url" value="${sessionLLM.apiUrl || 'https://api.core42.ai/v1/chat/completions'}">
+            <input class="form-input" id="admin-compass-url" value="${sessionLLM.apiUrl || 'https://risk-calculator-eight.vercel.app/api/compass'}">
             <span class="form-help">Use <code>https://risk-calculator-eight.vercel.app/api/compass</code> for the hosted proxy path.</span>
           </div>
           <div class="form-group">
@@ -2762,7 +3259,7 @@ function renderAdminSettings() {
       </div>
     </div>`));
 
-  document.getElementById('btn-admin-logout').addEventListener('click', () => { AuthService.adminLogout(); Router.navigate('/admin'); });
+  document.getElementById('btn-admin-logout').addEventListener('click', () => { AuthService.logout(); activateAuthenticatedState(); Router.navigate('/login'); });
   const regsInput = UI.tagInput('ti-admin-regulations', settings.applicableRegulations);
   const layerRegsInput = companyStructure.length ? UI.tagInput('ti-admin-layer-regulations', []) : null;
   const structureSummaryEl = document.getElementById('admin-company-structure-summary');
@@ -2878,7 +3375,7 @@ function renderAdminSettings() {
     if (buildContextBtn) {
       buildContextBtn.addEventListener('click', async () => {
         const llmConfig = {
-          apiUrl: document.getElementById('admin-compass-url').value.trim() || 'https://api.core42.ai/v1/chat/completions',
+          apiUrl: document.getElementById('admin-compass-url').value.trim() || 'https://risk-calculator-eight.vercel.app/api/compass',
           model: document.getElementById('admin-compass-model').value.trim() || 'gpt-5.1',
           apiKey: document.getElementById('admin-compass-key').value.trim()
         };
@@ -3038,7 +3535,7 @@ function renderAdminSettings() {
     const btn = document.getElementById('btn-build-company-context');
     const websiteUrl = websiteEl.value.trim();
     const llmConfig = {
-      apiUrl: document.getElementById('admin-compass-url').value.trim() || 'https://api.core42.ai/v1/chat/completions',
+      apiUrl: document.getElementById('admin-compass-url').value.trim() || 'https://risk-calculator-eight.vercel.app/api/compass',
       model: document.getElementById('admin-compass-model').value.trim() || 'gpt-5.1',
       apiKey: document.getElementById('admin-compass-key').value.trim()
     };
@@ -3090,7 +3587,7 @@ function renderAdminSettings() {
   });
   document.getElementById('btn-save-session-llm').addEventListener('click', () => {
     const config = {
-      apiUrl: document.getElementById('admin-compass-url').value.trim() || 'https://api.core42.ai/v1/chat/completions',
+      apiUrl: document.getElementById('admin-compass-url').value.trim() || 'https://risk-calculator-eight.vercel.app/api/compass',
       model: document.getElementById('admin-compass-model').value.trim() || 'gpt-5.1',
       apiKey: document.getElementById('admin-compass-key').value.trim()
     };
@@ -3101,7 +3598,7 @@ function renderAdminSettings() {
   document.getElementById('btn-test-session-llm').addEventListener('click', async () => {
     const btn = document.getElementById('btn-test-session-llm');
     const config = {
-      apiUrl: document.getElementById('admin-compass-url').value.trim() || 'https://api.core42.ai/v1/chat/completions',
+      apiUrl: document.getElementById('admin-compass-url').value.trim() || 'https://risk-calculator-eight.vercel.app/api/compass',
       model: document.getElementById('admin-compass-model').value.trim() || 'gpt-5.1',
       apiKey: document.getElementById('admin-compass-key').value.trim()
     };
@@ -3119,14 +3616,14 @@ function renderAdminSettings() {
     }
   });
   document.getElementById('btn-clear-session-llm').addEventListener('click', () => {
-    sessionStorage.removeItem('rq_llm_session');
+    sessionStorage.removeItem(buildUserStorageKey(SESSION_LLM_STORAGE_PREFIX));
     LLMService.clearCompassConfig();
     renderAdminSettings();
     UI.toast('Compass session key cleared.', 'success');
   });
   document.getElementById('btn-reset-settings').addEventListener('click', async () => {
     if (await UI.confirm('Reset platform settings to defaults?')) {
-      localStorage.removeItem('rq_admin_settings');
+      localStorage.removeItem(GLOBAL_ADMIN_STORAGE_KEY);
       UI.toast('Settings reset.', 'success');
       renderAdminSettings();
     }
@@ -3181,7 +3678,7 @@ function renderAdminBU() {
       </table>
     </div>`));
 
-  document.getElementById('btn-admin-logout').addEventListener('click', () => { AuthService.adminLogout(); Router.navigate('/admin'); });
+  document.getElementById('btn-admin-logout').addEventListener('click', () => { AuthService.logout(); activateAuthenticatedState(); Router.navigate('/login'); });
   document.getElementById('btn-reset-bu').addEventListener('click', async () => {
     if (await UI.confirm('Reset BU data to defaults?')) {
       localStorage.removeItem('rq_bu_override');
@@ -3309,7 +3806,7 @@ function renderAdminDocs() {
       </table>
     </div>`));
 
-  document.getElementById('btn-admin-logout').addEventListener('click', () => { AuthService.adminLogout(); Router.navigate('/admin'); });
+  document.getElementById('btn-admin-logout').addEventListener('click', () => { AuthService.logout(); activateAuthenticatedState(); Router.navigate('/login'); });
   document.getElementById('btn-reindex').addEventListener('click', () => { RAGService.init(getDocList(), getBUList()); UI.toast('Index rebuilt.','success'); });
   document.getElementById('btn-reset-docs').addEventListener('click', async () => {
     if (await UI.confirm('Reset docs to defaults?')) {
@@ -3371,31 +3868,28 @@ async function init() {
     AppState.buList = []; AppState.docList = [];
   }
   RAGService.init(getDocList(), getBUList());
-  loadDraft();
-  if (!AppState.draft.id) resetDraft();
-  ensureDraftShape();
-  if (!AppState.draft.applicableRegulations?.length) {
-    AppState.draft.applicableRegulations = [...getAdminSettings().applicableRegulations];
-  }
-  const sessionLLM = getSessionLLMConfig();
-  if (sessionLLM.apiKey) {
-    LLMService.setCompassConfig(sessionLLM);
-  }
-
-  renderAppBar();
+  activateAuthenticatedState();
 
   Router
-    .on('/', renderLanding)
-    .on('/wizard/1', renderWizard1)
-    .on('/wizard/2', renderWizard2)
-    .on('/wizard/3', renderWizard3)
-    .on('/wizard/4', renderWizard4)
-    .on('/results/:id', params => renderResults(params.id))
-    .on('/admin', renderAdminLogin)
+    .on('/login', renderLogin)
+    .on('/', withAuth(renderLanding))
+    .on('/wizard/1', withAuth(renderWizard1))
+    .on('/wizard/2', withAuth(renderWizard2))
+    .on('/wizard/3', withAuth(renderWizard3))
+    .on('/wizard/4', withAuth(renderWizard4))
+    .on('/results/:id', withAuth(params => renderResults(params.id)))
+    .on('/settings', renderUserSettings)
+    .on('/admin', renderLogin)
     .on('/admin/settings', renderAdminSettings)
     .on('/admin/bu', renderAdminBU)
     .on('/admin/docs', renderAdminDocs)
-    .notFound(() => { setPage(`<div class="container" style="padding:var(--sp-12)"><h2>Page Not Found</h2><a href="#/" class="btn btn--primary" style="margin-top:var(--sp-4)">← Home</a></div>`); });
+    .notFound(() => {
+      if (!AuthService.isAuthenticated()) {
+        Router.navigate('/login');
+        return;
+      }
+      setPage(`<div class="container" style="padding:var(--sp-12)"><h2>Page Not Found</h2><a href="#/" class="btn btn--primary" style="margin-top:var(--sp-4)">← Home</a></div>`);
+    });
 
   Router.init();
 }

@@ -72,6 +72,14 @@ function extractCompanySearchTerm(canonicalUrl) {
   return root.replace(/[-_]+/g, ' ').trim();
 }
 
+function titleCase(value) {
+  return String(value || '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 function extractCompanyAliases(canonicalUrl, rootHtml) {
   const aliases = new Set();
   aliases.add(extractCompanySearchTerm(canonicalUrl));
@@ -83,6 +91,60 @@ function extractCompanyAliases(canonicalUrl, rootHtml) {
     .filter(value => value && value.length > 2 && value.length < 80)
     .forEach(value => aliases.add(value));
   return Array.from(aliases).slice(0, 4);
+}
+
+function inferProfileHints(canonicalUrl, pages, newsItems = []) {
+  const combined = pages.map(page => page.content).join(' ').toLowerCase();
+  const alias = titleCase(extractCompanySearchTerm(canonicalUrl));
+
+  const sectors = [
+    { label: 'cloud and infrastructure services', patterns: [/cloud/, /data cent(?:er|re)/, /infrastructure/, /hosting/, /compute/] },
+    { label: 'software and digital platforms', patterns: [/software/, /platform/, /saas/, /application/, /digital platform/] },
+    { label: 'cybersecurity services', patterns: [/cyber/, /security operations/, /managed security/, /threat/] },
+    { label: 'financial services or fintech offerings', patterns: [/bank/, /payments?/, /fintech/, /lending/, /insurance/] },
+    { label: 'healthcare or life sciences services', patterns: [/health/, /clinical/, /patient/, /pharma/, /hospital/] },
+    { label: 'industrial, energy, or infrastructure operations', patterns: [/energy/, /industrial/, /plant/, /manufactur/, /logistics/, /utilities?/] },
+    { label: 'public-sector or government-facing services', patterns: [/government/, /public sector/, /ministry/, /sovereign/, /national/] },
+    { label: 'retail, commerce, or consumer services', patterns: [/retail/, /commerce/, /consumer/, /shop/, /marketplace/] },
+    { label: 'consulting or professional services', patterns: [/consulting/, /advisory/, /professional services/, /managed services/] }
+  ]
+    .filter(item => item.patterns.some(pattern => pattern.test(combined)))
+    .map(item => item.label);
+
+  const customerTypes = [
+    /government|public sector|ministry|sovereign/.test(combined) ? 'government and public-sector clients' : '',
+    /enterprise|businesses|corporate/.test(combined) ? 'enterprise customers' : '',
+    /consumer|customer|member|patient|user/.test(combined) ? 'consumer or end-user populations' : '',
+    /partner|channel|reseller|ecosystem/.test(combined) ? 'partner and supplier ecosystems' : ''
+  ].filter(Boolean);
+
+  const obligations = [];
+  if (/personal data|privacy|customer data|user data|patient data/.test(combined)) obligations.push('privacy, personal-data handling, and breach-response obligations');
+  if (/cloud|platform|data cent(?:er|re)|infrastructure|uptime|availability/.test(combined)) obligations.push('availability, resilience, business continuity, and service-recovery expectations');
+  if (/government|public sector|sovereign|national security/.test(combined)) obligations.push('heightened access control, auditability, and sovereign or public-sector assurance expectations');
+  if (/supplier|vendor|partner|third[- ]party/.test(combined)) obligations.push('third-party oversight, dependency management, and supplier resilience obligations');
+  if (/health|clinical|patient|medical/.test(combined)) obligations.push('safety-sensitive and health-data governance expectations');
+  if (/financial|payments|bank|aml|sanctions/.test(combined)) obligations.push('financial-crime, sanctions, and regulated transaction-control expectations');
+
+  const commitments = [];
+  if (/sustainab|net zero|esg/.test(combined)) commitments.push('public sustainability or ESG commitments');
+  if (/trust|responsible ai|responsible use|safe ai/.test(combined)) commitments.push('public commitments around trusted, safe, or responsible technology use');
+  if (/security|secure by design|privacy/.test(combined)) commitments.push('public commitments around security, privacy, or secure-by-design delivery');
+  if (/innovation|growth|expansion|regional|global/.test(combined)) commitments.push('public commitments around growth, innovation, or international expansion');
+
+  const riskSignals = [];
+  if (customerTypes.length) riskSignals.push(`${alias} appears to serve ${customerTypes.join(', ')}, which can increase service continuity, compliance, and reputational exposure.`);
+  if (sectors.length) riskSignals.push(`${alias} appears to operate in ${sectors.join(', ')}, which increases dependence on technology resilience, cyber controls, and third-party delivery.`);
+  if (newsItems.length) riskSignals.push('Recent public news was available and should be reviewed alongside the website narrative for partnership, incident, expansion, and regulatory signals.');
+
+  return {
+    alias,
+    sectors,
+    customerTypes,
+    obligations,
+    commitments,
+    riskSignals
+  };
 }
 
 function decodeXml(text) {
@@ -148,28 +210,16 @@ async function fetchNewsContext(canonicalUrl, rootHtml = '') {
 }
 
 function buildFallbackProfile(canonicalUrl, pages, newsItems = []) {
-  const combined = pages.map(page => page.content).join(' ').toLowerCase();
-  const signals = [];
-  const commitments = [];
-  const obligations = [];
-  if (/cloud|platform|software|digital|data/.test(combined)) signals.push('Material dependence on digital platforms, data flows, or cloud services.');
-  if (/customer|consumer|client|member|patient|user/.test(combined)) signals.push('Potential exposure to personal, customer, or regulated data handling obligations.');
-  if (/partner|supplier|vendor|ecosystem/.test(combined)) signals.push('Third-party and supplier dependence may be relevant to the operating model.');
-  if (/global|regional|international|middle east|uae|gcc/.test(combined)) signals.push('Cross-border operations or regional footprint may change regulatory and resilience expectations.');
-  if (newsItems.length) signals.push('Recent public news coverage was also reviewed to widen the context beyond the corporate website.');
-  if (/healthcare|genome|clinical|hospital/.test(combined)) obligations.push('Healthcare and health-data handling likely increase sensitivity around privacy, resilience, safety, and regulated service continuity.');
-  if (/government|public services|national security|sovereign|digital embassies/.test(combined)) obligations.push('Government, sovereign, or public-sector work likely increases expectations around data sovereignty, access control, auditability, and national-security-aligned governance.');
-  if (/cloud|data center|compute|infrastructure/.test(combined)) obligations.push('Cloud, compute, and data-centre operations likely increase obligations around availability, physical security, supply chain resilience, and service continuity.');
-  if (/responsible ai|trust|safety|governance|compliance/.test(combined)) commitments.push('Public messaging suggests commitments around responsible, trusted, and secure AI deployment.');
-  if (/global south|countries|operating globally|international/.test(combined)) commitments.push('Public messaging suggests a commitment to international expansion and cross-border delivery.');
-  if (/sovereign|data sovereignty|legal authority|control over their data/.test(combined)) commitments.push('Public messaging suggests a commitment to sovereignty-preserving AI and cloud deployment models.');
+  const hints = inferProfileHints(canonicalUrl, pages, newsItems);
+  const sectorText = hints.sectors.length ? hints.sectors.join(', ') : 'technology-enabled products or services';
+  const customerText = hints.customerTypes.length ? hints.customerTypes.join(', ') : 'enterprise, institutional, or end-user stakeholders';
   return {
-    companySummary: `Public context was gathered for ${canonicalUrl}, but the AI response could not be parsed cleanly. This fallback summary is based on the website content${newsItems.length ? ' and public news coverage' : ''} that was fetched.`,
-    businessProfile: `Review the fetched public context manually and refine the profile before saving. The company appears to operate as an AI, cloud, and digital infrastructure group with cross-sector solutions and a partner-led delivery model.${newsItems.length ? ' Public news coverage may provide additional signals on growth, partnerships, incidents, regulation, or strategic direction.' : ''}`,
-    operatingModel: 'Likely operating model: combines AI platforms, cloud or data-centre infrastructure, partner ecosystems, and sector-specific solutions for enterprise, government, and other regulated environments.',
-    publicCommitments: commitments.length ? commitments : ['Public materials suggest commitments to trusted AI, secure digital infrastructure, and international growth.'],
-    riskSignals: signals.length ? signals : ['Public website content suggests a need to assess technology reliance, data handling, third-party dependencies, and resilience requirements.'],
-    likelyObligations: obligations.length ? obligations : ['Likely obligations include data protection, cloud and service resilience, third-party oversight, and governance over high-impact AI use cases.'],
+    companySummary: `Public context was gathered for ${canonicalUrl}, but the AI response could not be parsed cleanly. This fallback summary is based on public website content${newsItems.length ? ' and public news coverage' : ''} only.`,
+    businessProfile: `${hints.alias} appears to provide ${sectorText} to ${customerText}. Review the extracted public context manually and refine the profile before saving it into the admin baseline.`,
+    operatingModel: `${hints.alias} likely operates through a mix of internally delivered capabilities, digital platforms, operational teams, and third-party partners or suppliers where relevant. Public materials should be checked for geographic footprint, regulated customers, and service criticality before relying on this summary.`,
+    publicCommitments: hints.commitments.length ? hints.commitments : ['Public materials suggest commitments that should be validated manually before being used in the platform context.'],
+    riskSignals: hints.riskSignals.length ? hints.riskSignals : ['Public website content suggests a need to assess technology reliance, data handling, third-party dependencies, and resilience requirements.'],
+    likelyObligations: hints.obligations.length ? hints.obligations : ['Likely obligations include data protection, service resilience, third-party oversight, and governance over material technology dependencies.'],
     regulatorySignals: [],
     aiGuidance: 'Use the public website material as a starting point, then refine the business profile, likely regulations, and technology exposure manually before relying on it in assessments.',
     suggestedGeography: '',
@@ -326,6 +376,8 @@ Instructions:
 - mention that this is based on public website and public news context only
 - prefer concrete, company-specific statements over generic technology-company language
 - if the company appears to serve governments, healthcare, energy, cloud, sovereign infrastructure, or regulated environments, make that explicit
+- do not describe the company as an AI or cloud provider unless the supplied sources clearly support that statement
+- avoid generic filler such as "cross-sector solutions" or "partner-led delivery model" unless those ideas are explicitly supported by the supplied sources
 - use British English`;
 
     const upstream = await fetch(compassApiUrl, {
