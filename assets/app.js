@@ -3123,8 +3123,10 @@ function userNeedsOrganisationSelection(user = AuthService.getCurrentUser(), set
   const companyStructure = Array.isArray(settings.companyStructure) ? settings.companyStructure : [];
   const companies = getCompanyEntities(companyStructure);
   if (!companies.length) return false;
-  const businessUnitEntityId = String(user.businessUnitEntityId || '').trim();
-  const departmentEntityId = String(user.departmentEntityId || '').trim();
+  const storedSettings = getUserSettings();
+  const selection = resolveUserOrganisationSelection(user, storedSettings, settings);
+  const businessUnitEntityId = String(selection.businessUnitEntityId || '').trim();
+  const departmentEntityId = String(selection.departmentEntityId || '').trim();
   if (!businessUnitEntityId) return true;
   const departments = getDepartmentEntities(companyStructure, businessUnitEntityId);
   return !!departments.length && !departmentEntityId;
@@ -3231,6 +3233,10 @@ function renderLoginOrganisationSelection(currentUser, existingSettings = getUse
           department: departmentEntity?.name || '',
           departmentEntityId: departmentEntity?.id || ''
         }
+      });
+      AuthService.updateManagedAccount(currentUser.username, {
+        businessUnitEntityId,
+        departmentEntityId: departmentEntity?.id || ''
       });
       AuthService.updateSessionContext({
         businessUnitEntityId,
@@ -3584,6 +3590,10 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
         ...draftSettings,
         onboardedAt: new Date().toISOString(),
         adminContextSummary: draftSettings.userProfile.workingContext || draftSettings.adminContextSummary || globalSettings.adminContextSummary
+      });
+      AuthService.updateManagedAccount(AppState.currentUser?.username, {
+        businessUnitEntityId: draftSettings.userProfile.businessUnitEntityId || '',
+        departmentEntityId: draftSettings.userProfile.departmentEntityId || ''
       });
       if (!AppState.draft.geography) AppState.draft.geography = draftSettings.geography || globalSettings.geography;
       saveDraft();
@@ -4436,32 +4446,62 @@ function renderAdminSettings() {
   });
   const userControlsSection = renderSettingsSection({
     title: 'User Account Control',
-    description: 'Reset any standard user account back to a first-time state in this browser.',
+    description: 'Create PoC users, assign them to a BU and function, and reset their browser-stored state when needed.',
     meta: `${managedAccounts.length} managed accounts`,
-    body: `<div class="table-wrap">
+    body: `<div class="card" style="padding:var(--sp-4);background:var(--bg-canvas)">
+      <div class="context-panel-title">Add User</div>
+      <div class="grid-3 mt-3">
+        <div class="form-group">
+          <label class="form-label" for="admin-new-user-name">Display name</label>
+          <input class="form-input" id="admin-new-user-name" placeholder="e.g. Sara Finance">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="admin-new-user-bu">Business unit</label>
+          <select class="form-select" id="admin-new-user-bu">
+            <option value="">Choose BU</option>
+            ${companyEntities.map(entity => `<option value="${entity.id}">${entity.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="admin-new-user-department">Function / department</label>
+          <select class="form-select" id="admin-new-user-department"><option value="">Choose function</option></select>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
+        <button class="btn btn--secondary" id="btn-admin-add-user">Add User</button>
+        <span class="form-help" id="admin-new-user-result">A dummy username and password will be generated automatically for this PoC.</span>
+      </div>
+    </div>
+    <div class="table-wrap mt-4">
       <table>
         <thead>
           <tr>
             <th>User</th>
             <th>Username</th>
-            <th>Role</th>
+            <th>Assigned BU</th>
+            <th>Assigned Function</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          ${managedAccounts.map(account => `
+          ${managedAccounts.map(account => {
+            const assignedBU = getEntityById(companyStructure, account.businessUnitEntityId || '')?.name || 'Not assigned';
+            const assignedDepartment = getEntityById(companyStructure, account.departmentEntityId || '')?.name || 'Not assigned';
+            return `
             <tr>
               <td>${account.displayName}</td>
               <td><code>${account.username}</code></td>
-              <td>${account.role}</td>
+              <td>${assignedBU}</td>
+              <td>${assignedDepartment}</td>
               <td style="text-align:right">
                 <button class="btn btn--ghost btn--sm btn-reset-user-account" data-username="${account.username}" data-display-name="${account.displayName}" type="button">Reset User</button>
               </td>
-            </tr>`).join('')}
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
     </div>
-    <div class="form-help mt-3">This only affects data stored in the current browser profile.</div>`
+    <div class="form-help mt-3">Reset only affects browser-stored state. Account creation and assignment are stored locally in this PoC.</div>`
   });
   setPage(adminLayout('settings', `
     <div class="settings-shell">
@@ -4913,6 +4953,33 @@ function renderAdminSettings() {
       renderAdminSettings();
     });
   });
+  function renderAdminNewUserDepartments() {
+    const buId = document.getElementById('admin-new-user-bu')?.value || '';
+    const departmentEl = document.getElementById('admin-new-user-department');
+    if (!departmentEl) return;
+    const departments = getDepartmentEntities(companyStructure, buId);
+    departmentEl.innerHTML = departments.length
+      ? `<option value="">Choose function</option>${departments.map(entity => `<option value="${entity.id}">${entity.name}</option>`).join('')}`
+      : '<option value="">No functions configured</option>';
+    departmentEl.disabled = !departments.length;
+  }
+
+  document.getElementById('admin-new-user-bu')?.addEventListener('change', renderAdminNewUserDepartments);
+  renderAdminNewUserDepartments();
+  document.getElementById('btn-admin-add-user')?.addEventListener('click', () => {
+    const displayName = document.getElementById('admin-new-user-name').value.trim();
+    const businessUnitEntityId = document.getElementById('admin-new-user-bu').value.trim();
+    const departmentEntityId = document.getElementById('admin-new-user-department').value.trim();
+    if (!displayName) {
+      UI.toast('Enter a display name for the new user.', 'warning');
+      return;
+    }
+    const account = AuthService.createManagedAccount({ displayName, businessUnitEntityId, departmentEntityId });
+    document.getElementById('admin-new-user-result').textContent = `Created ${account.displayName}: username ${account.username} / password ${account.password}`;
+    UI.toast(`Created ${account.username}.`, 'success');
+    renderAdminSettings();
+  });
+
   document.getElementById('btn-reset-settings').addEventListener('click', async () => {
     if (await UI.confirm('Reset platform settings to defaults?')) {
       localStorage.removeItem(GLOBAL_ADMIN_STORAGE_KEY);
