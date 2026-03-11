@@ -1855,11 +1855,20 @@ function getSelectedRisks() {
   return syncRiskSelection().filter(Boolean);
 }
 
+const GENERIC_RISK_TITLES = new Set([
+  'material technology and cyber risk requiring structured assessment',
+  'technology outage affecting core business services'
+]);
+
 function appendRiskCandidates(incoming, { selectNew = true } = {}) {
   const incomingRisks = mergeRisks([], incoming || []);
-  const merged = mergeRisks(getRiskCandidates(), incomingRisks);
-  const existingIds = new Set(Array.isArray(AppState.draft.selectedRiskIds) ? AppState.draft.selectedRiskIds : []);
   const incomingTitles = new Set(incomingRisks.map(risk => risk.title.toLowerCase()));
+  const hasSpecificIncoming = incomingRisks.some(risk => !GENERIC_RISK_TITLES.has(risk.title.toLowerCase()));
+  const baseCandidates = hasSpecificIncoming
+    ? getRiskCandidates().filter(risk => !GENERIC_RISK_TITLES.has(String(risk.title || '').toLowerCase()))
+    : getRiskCandidates();
+  const merged = mergeRisks(baseCandidates, incomingRisks);
+  const existingIds = new Set(Array.isArray(AppState.draft.selectedRiskIds) ? AppState.draft.selectedRiskIds : []);
   const selectedIds = merged
     .filter(risk => existingIds.has(risk.id) || (selectNew && incomingTitles.has(risk.title.toLowerCase())))
     .map(risk => risk.id);
@@ -2900,6 +2909,7 @@ function renderWizard1() {
 function renderSelectedRiskCards(riskCandidates, selectedRisks, regulations) {
   const cleanedRisks = (riskCandidates || []).filter(risk => !isNoiseRiskText(risk.title) && risk.title !== '-');
   const selectedIds = new Set((selectedRisks || []).map(risk => risk.id));
+  const sourceLabel = risk => risk.source === 'manual' ? 'Manual entry' : risk.source === 'register' || risk.source === 'ai+register' ? 'From upload' : 'AI suggested';
   if (!cleanedRisks.length) {
     return `<div class="empty-state">No candidate risks yet. Use AI enhancement, upload a register, or add risks manually.</div>`;
   }
@@ -2918,14 +2928,14 @@ function renderSelectedRiskCards(riskCandidates, selectedRisks, regulations) {
             <input type="checkbox" class="risk-select-checkbox" data-risk-id="${risk.id}" ${selectedIds.has(risk.id) ? 'checked' : ''} style="margin-top:4px">
             <div>
               <div class="risk-pick-title">${risk.title}</div>
-              <div class="risk-pick-meta">${risk.category}${risk.source ? ` · ${risk.source}` : ''}</div>
+              <div class="risk-pick-meta">${risk.category} · ${sourceLabel(risk)}</div>
             </div>
           </label>
           <button class="btn btn--ghost btn--sm btn-remove-risk" data-risk-id="${risk.id}" type="button">Remove</button>
         </div>
         ${risk.description ? `<p class="risk-pick-desc">${risk.description}</p>` : ''}
         <div class="citation-chips">
-          ${Array.from(new Set([...(risk.regulations || []), ...regulations.slice(0, 2)])).slice(0, 4).map(tag => `<span class="badge badge--neutral">${tag}</span>`).join('')}
+          ${(risk.regulations || []).length ? risk.regulations.slice(0, 4).map(tag => `<span class="badge badge--neutral">${tag}</span>`).join('') : regulations.slice(0, 2).map(tag => `<span class="badge badge--neutral">${tag}</span>`).join('')}
         </div>
       </div>`).join('')}
   </div>`;
