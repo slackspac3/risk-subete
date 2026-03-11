@@ -4794,7 +4794,7 @@ function renderAdminSettings(activeSection = 'org') {
       <button class="btn btn--secondary" id="btn-save-session-llm">Save Session Key</button>
       <button class="btn btn--secondary" id="btn-test-session-llm">Test Connection</button>
       <button class="btn btn--ghost" id="btn-clear-session-llm">Clear Session Key</button>
-      <span class="form-help">This does not persist across browser sessions.</span>
+      <span class="form-help">Stored in this admin browser for the PoC until you clear it.</span>
     </div>`
   });
   const auditCache = AppState.auditLogCache || { loaded: false, loading: false, entries: [], summary: null, error: '' };
@@ -5388,11 +5388,12 @@ function renderAdminSettings(activeSection = 'org') {
     }
   });
   document.getElementById('btn-clear-session-llm').addEventListener('click', () => {
+    localStorage.removeItem(buildUserStorageKey(SESSION_LLM_STORAGE_PREFIX));
     sessionStorage.removeItem(buildUserStorageKey(SESSION_LLM_STORAGE_PREFIX));
     LLMService.clearCompassConfig();
     rememberSettingsScroll('admin-settings');
       renderAdminSettings();
-    UI.toast('Compass session key cleared.', 'success');
+    UI.toast('Compass browser key cleared.', 'success');
   });
 
   document.querySelectorAll('.btn-reset-user-account').forEach(button => {
