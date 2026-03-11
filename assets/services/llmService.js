@@ -141,82 +141,187 @@ const LLMService = (() => {
   }
 
   // ─── Stub generator ──────────────────────────────────────
-  function _generateStub(narrative, buContext, citations) {
-    const n = (narrative || '').toLowerCase();
+  function _dedupeSentences(text = '') {
+    const raw = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return '';
+    const sentences = raw.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
+    const seen = new Set();
+    return sentences.filter((sentence) => {
+      const key = sentence.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).join(' ').trim();
+  }
 
-    // Detect scenario type from narrative keywords
+  function _classifyScenario(narrative = '') {
+    const n = String(narrative || '').toLowerCase();
     const isRansomware = n.includes('ransomware') || n.includes('encrypt') || n.includes('ransom');
-    const isDataBreach = n.includes('breach') || n.includes('data theft') || n.includes('exfil');
-    const isPhishing   = n.includes('phish') || n.includes('bec') || n.includes('email');
-    const isIdentity   = n.includes('azure ad') || n.includes('active directory') || n.includes('entra') || n.includes('identity') || n.includes('sso');
-    const isCloud      = !isIdentity && (n.includes('cloud') || n.includes('misconfigur') || n.includes('s3') || n.includes('azure'));
-    const isInsider    = n.includes('insider') || n.includes('employee') || n.includes('privilege');
-
-    let scenarioType = 'General Cyber Threat';
-    let tef   = { min: 0.5, likely: 2, max: 8 };
-    let cs    = { min: 0.5, likely: 0.68, max: 0.85 };
-    let tc    = { min: 0.45, likely: 0.62, max: 0.82 };
-    let recommendations = [];
+    const isIdentity = n.includes('azure ad') || n.includes('active directory') || n.includes('entra') || n.includes('identity') || n.includes('sso') || n.includes('directory service');
+    const isPhishing = !isIdentity && (n.includes('phish') || n.includes('bec') || n.includes('email compromise') || n.includes('spoof'));
+    const isDataBreach = n.includes('breach') || n.includes('data theft') || n.includes('exfil') || n.includes('data exposure');
+    const isThirdParty = n.includes('supplier') || n.includes('vendor') || n.includes('third-party') || n.includes('third party') || n.includes('outsourc');
+    const isInsider = n.includes('insider') || n.includes('employee misuse') || n.includes('malicious insider') || n.includes('privilege abuse');
+    const isCloud = !isIdentity && (n.includes('cloud') || n.includes('misconfigur') || n.includes('s3') || n.includes('bucket') || n.includes('storage exposure') || n.includes('public exposure') || n.includes('azure'));
 
     if (isRansomware) {
-      scenarioType = 'Ransomware / Extortion Attack';
-      tef  = { min: 0.3, likely: 1.5, max: 5 };
-      tc   = { min: 0.55, likely: 0.72, max: 0.90 };
+      return {
+        key: 'ransomware',
+        scenarioType: 'Ransomware / Extortion Attack',
+        threatCommunity: 'Organised cybercriminal groups (ransomware-as-a-service)',
+        attackType: 'Ransomware deployment via initial access broker',
+        effect: 'Encryption of critical data and systems; service unavailability; potential data leak for double-extortion',
+        tef: { min: 0.3, likely: 1.5, max: 5 },
+        tc: { min: 0.55, likely: 0.72, max: 0.9 }
+      };
+    }
+    if (isIdentity) {
+      return {
+        key: 'identity',
+        scenarioType: 'Identity Platform Compromise',
+        threatCommunity: 'Credential theft and account-takeover specialists',
+        attackType: 'Credential theft, token hijack, or federated identity abuse',
+        effect: 'Compromise of core identity services leading to account takeover, privilege abuse, mailbox compromise, and disruption across federated business systems',
+        tef: { min: 1, likely: 4, max: 14 },
+        tc: { min: 0.45, likely: 0.68, max: 0.86 }
+      };
+    }
+    if (isDataBreach) {
+      return {
+        key: 'data-breach',
+        scenarioType: 'Data Breach / Unauthorised Data Disclosure',
+        threatCommunity: 'External threat actors (mixed motivation)',
+        attackType: 'Data exfiltration after credential compromise',
+        effect: 'Unauthorised access to and exfiltration of sensitive or regulated data',
+        tef: { min: 0.5, likely: 2, max: 8 },
+        tc: { min: 0.5, likely: 0.68, max: 0.88 }
+      };
+    }
+    if (isCloud) {
+      return {
+        key: 'cloud',
+        scenarioType: 'Cloud Misconfiguration / Exposure',
+        threatCommunity: 'External threat actors (mixed motivation)',
+        attackType: 'Exploitation of cloud misconfiguration',
+        effect: 'Loss of confidentiality, integrity, or availability through exposed or weakly controlled cloud services',
+        tef: { min: 1, likely: 4, max: 15 },
+        tc: { min: 0.35, likely: 0.55, max: 0.78 }
+      };
+    }
+    if (isThirdParty) {
+      return {
+        key: 'third-party',
+        scenarioType: 'Third-Party / Supply Chain Disruption',
+        threatCommunity: 'External counterparties or attacker-enabled supplier failures',
+        attackType: 'Third-party service, access, or dependency failure',
+        effect: 'Operational disruption, inherited control weakness, or data exposure through critical supplier relationships',
+        tef: { min: 0.4, likely: 1.8, max: 6 },
+        tc: { min: 0.4, likely: 0.6, max: 0.8 }
+      };
+    }
+    if (isPhishing) {
+      return {
+        key: 'phishing',
+        scenarioType: 'Phishing / Business Email Compromise (BEC)',
+        threatCommunity: 'Opportunistic threat actors / BEC specialists',
+        attackType: 'Spear-phishing / adversary-in-the-middle phishing kit',
+        effect: 'Compromise of user accounts, email trust channels, and payment or approval workflows',
+        tef: { min: 3, likely: 10, max: 35 },
+        tc: { min: 0.35, likely: 0.55, max: 0.78 }
+      };
+    }
+    if (isInsider) {
+      return {
+        key: 'insider',
+        scenarioType: 'Insider Misuse / Privileged Abuse',
+        threatCommunity: 'Malicious or negligent insider',
+        attackType: 'Insider data theft / sabotage',
+        effect: 'Compromise of confidentiality, integrity, or service continuity by a trusted user or administrator',
+        tef: { min: 0.3, likely: 1.2, max: 4 },
+        tc: { min: 0.4, likely: 0.6, max: 0.82 }
+      };
+    }
+    return {
+      key: 'general',
+      scenarioType: 'General Cyber Threat',
+      threatCommunity: 'External threat actors (mixed motivation)',
+      attackType: 'Multi-vector cyber attack',
+      effect: 'Loss of confidentiality, integrity, or availability of critical assets',
+      tef: { min: 0.5, likely: 2, max: 8 },
+      tc: { min: 0.45, likely: 0.62, max: 0.82 }
+    };
+  }
+
+  function _normaliseGuidance(items = []) {
+    return Array.from(new Set((Array.isArray(items) ? items : []).map((item) => String(item || '').trim()).filter(Boolean))).slice(0, 5);
+  }
+
+  function _normaliseRiskCards(risks = []) {
+    const seen = new Set();
+    return (Array.isArray(risks) ? risks : []).filter((risk) => {
+      const key = String(risk?.title || '').trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).map((risk) => ({
+      ...risk,
+      title: String(risk.title || '').trim(),
+      category: String(risk.category || 'Cyber').trim(),
+      description: _dedupeSentences(String(risk.description || '').trim()),
+      regulations: Array.from(new Set((risk.regulations || []).map(String).filter(Boolean))).slice(0, 5)
+    }));
+  }
+
+  function _generateStub(narrative, buContext, citations) {
+    const classification = _classifyScenario(narrative);
+
+    let scenarioType = classification.scenarioType;
+    let tef = { ...classification.tef };
+    let cs = { min: 0.5, likely: 0.68, max: 0.85 };
+    let tc = { ...classification.tc };
+    let recommendations = [];
+
+    if (classification.key === 'ransomware') {
       recommendations = [
         { title: 'Immutable Offline Backups', why: 'Ransomware relies on destroying recovery options. Offline backups with verified restore tests eliminate the primary leverage attackers hold.', impact: 'Reduces recovery time from 18+ days to <5 days; eliminates ransom leverage.' },
-        { title: 'MFA on All Privileged Accounts', why: 'Ransomware actors consistently abuse compromised credentials. Phishing-resistant MFA (hardware keys/FIDO2) prevents lateral movement.', impact: 'Estimated 80% reduction in successful credential-based lateral movement.' },
-        { title: 'Endpoint Detection & Response (EDR)', why: 'Behavioural EDR detects ransomware staging (large-scale file enumeration, shadow copy deletion) before encryption begins.', impact: 'Average dwell time reduction from 9 days to <24 hours with mature EDR.' },
-        { title: 'Network Segmentation', why: 'Flat networks allow ransomware to spread across all BUs. Segmentation limits blast radius to the initially compromised zone.', impact: 'Can reduce impacted systems by 60–80% in a ransomware event.' },
-        { title: 'Tabletop Exercise — Ransomware Scenario', why: 'Decision latency under pressure is a primary cost driver. Regular exercises reduce average decision time and improve coordination.', impact: 'Typically reduces response costs by 15–25% through preparedness.' },
-        { title: 'Cyber Insurance Review', why: 'Ransomware claims have driven changes in policy terms. Ensure policy covers extortion, business interruption, and regulatory notification costs.', impact: 'Risk transfer; coverage gap identification before an event is critical.' }
+        { title: 'MFA on All Privileged Accounts', why: 'Ransomware actors consistently abuse compromised credentials. Phishing-resistant MFA prevents privileged expansion after initial access.', impact: 'Estimated 80% reduction in successful credential-based lateral movement.' },
+        { title: 'Endpoint Detection & Response (EDR)', why: 'Behavioural EDR detects ransomware staging before encryption begins.', impact: 'Average dwell time reduction from days to under 24 hours with mature EDR.' },
+        { title: 'Network Segmentation', why: 'Segmentation limits blast radius and prevents a single compromise from taking out multiple business services.', impact: 'Can reduce impacted systems by 60–80% in a ransomware event.' }
       ];
-    } else if (isDataBreach) {
-      scenarioType = 'Data Breach / Unauthorised Data Disclosure';
-      tc   = { min: 0.50, likely: 0.68, max: 0.88 };
+    } else if (classification.key === 'data-breach') {
       recommendations = [
-        { title: 'Data Loss Prevention (DLP)', why: 'Exfiltration of Restricted data is the primary breach vector. DLP on email, cloud uploads, and USB prevents unauthorised egress.', impact: 'Reduces exfiltration window from days to hours; blocks opportunistic theft.' },
-        { title: 'Data Classification Enforcement', why: 'Without clear classification, users handle Restricted data with insufficient controls. Automated classification reduces human error.', impact: 'Directly reduces scope of breach; limits regulatory notification obligations.' },
-        { title: 'Zero Trust Network Access (ZTNA)', why: 'Lateral movement to data stores post-compromise is the typical path. ZTNA enforces least-privilege access per session.', impact: 'Limits attacker reach to one data zone; reduces breach scope by ~70%.' },
-        { title: 'Encryption at Rest for All Restricted Data', why: 'Encryption renders stolen data unreadable, potentially exempting the organisation from breach notification requirements.', impact: 'May eliminate regulatory notification obligation; reduces reputational impact.' },
-        { title: 'Breach Notification Runbook', why: 'UAE, GDPR, and PCI notification windows are tight (24–72 hours). A pre-tested runbook reduces costly delays and regulator friction.', impact: 'Avoids late-notification fines; reduces legal costs by 20–30%.' }
+        { title: 'Data Loss Prevention (DLP)', why: 'Exfiltration control is a primary lever in data breach scenarios.', impact: 'Reduces exfiltration window and narrows breach scope.' },
+        { title: 'Data Classification Enforcement', why: 'Classification improves handling controls and reduces accidental exposure.', impact: 'Directly reduces the scale of data-at-risk and notification burden.' },
+        { title: 'Zero Trust Access Controls', why: 'Least-privilege access reduces the attacker path to sensitive data stores.', impact: 'Lowers breach scope and slows attacker progression.' },
+        { title: 'Breach Notification Runbook', why: 'Prepared regulatory and legal response reduces late-notification and escalation risk.', impact: 'Cuts legal friction and response delay after confirmed exposure.' }
       ];
-    } else if (isIdentity) {
-      scenarioType = 'Identity Platform Compromise';
-      tef = { min: 1, likely: 4, max: 14 };
-      tc  = { min: 0.45, likely: 0.68, max: 0.86 };
+    } else if (classification.key === 'identity') {
       recommendations = [
-        { title: 'Phishing-Resistant MFA for All Privileged Identities', why: 'Identity compromise usually begins with token theft, credential phishing, or session hijacking. Phishing-resistant MFA materially reduces that path.', impact: 'Significantly lowers the chance of privileged account takeover through credential theft.' },
-        { title: 'Conditional Access and Impossible-Travel Detection Tuning', why: 'Strong access policies and anomaly detection help contain account takeover before it becomes broader tenant compromise.', impact: 'Improves early detection and reduces attacker dwell time inside core identity services.' },
-        { title: 'Privileged Identity Management', why: 'Just-in-time privileged access reduces standing admin exposure if Azure AD or Entra credentials are compromised.', impact: 'Limits blast radius from a single compromised administrator account.' },
-        { title: 'Mailbox and Identity Recovery Runbook', why: 'Identity-led incidents often turn into email compromise, fraud, and lockout. Recovery speed directly affects operational and financial loss.', impact: 'Reduces disruption time and lowers downstream fraud and recovery costs.' }
+        { title: 'Phishing-Resistant MFA for Privileged Identities', why: 'Identity compromise commonly begins with credential or token theft. Strong MFA materially reduces that entry path.', impact: 'Significantly lowers the chance of privileged account takeover.' },
+        { title: 'Conditional Access and Anomalous Sign-In Tuning', why: 'Identity-led incidents are contained faster when risk-based access controls and sign-in detections are tuned well.', impact: 'Improves early detection and reduces attacker dwell time.' },
+        { title: 'Privileged Identity Management', why: 'Just-in-time admin access reduces standing privilege exposure inside the identity tier.', impact: 'Limits blast radius from a compromised administrator account.' },
+        { title: 'Mailbox and Identity Recovery Runbook', why: 'Identity incidents often spill into email compromise, fraud, and user lockout.', impact: 'Reduces disruption time and downstream financial loss.' }
       ];
-    } else if (isCloud) {
-      scenarioType = 'Cloud Misconfiguration / Exposure';
-      tef = { min: 1, likely: 4, max: 15 };
-      tc  = { min: 0.35, likely: 0.55, max: 0.78 };
+    } else if (classification.key === 'cloud') {
       recommendations = [
-        { title: 'Cloud Security Posture Management (CSPM)', why: 'Misconfigurations are the leading cause of cloud breaches. CSPM provides continuous visibility and automated remediation.', impact: 'Reduces misconfiguration dwell time from weeks to hours.' },
-        { title: 'Infrastructure as Code (IaC) Security Scanning', why: 'Misconfigurations introduced at deployment cannot be caught post-hoc. Pre-deployment scanning prevents the issue.', impact: 'Shift-left approach; prevents ~40% of common cloud misconfigs.' },
-        { title: 'Privileged Access Management for Cloud Consoles', why: 'Cloud console access with overly permissive roles is a catastrophic single point of failure.', impact: 'Limits blast radius of compromised credentials to specific workloads.' },
-        { title: 'Real-time Alert on Public Exposure', why: 'Storage buckets and compute instances exposed publicly are often exploited within minutes of exposure.', impact: 'Reduces exploitation window from days to <30 minutes.' }
+        { title: 'Cloud Security Posture Management (CSPM)', why: 'Misconfigurations remain a leading driver of cloud exposure events.', impact: 'Reduces misconfiguration dwell time from weeks to hours.' },
+        { title: 'Infrastructure as Code Security Scanning', why: 'Pre-deployment controls prevent repeat configuration drift.', impact: 'Prevents a large share of common cloud misconfigurations.' },
+        { title: 'Privileged Access Management for Cloud Consoles', why: 'Over-permissive console access is a catastrophic single point of failure.', impact: 'Limits blast radius of compromised cloud credentials.' },
+        { title: 'Real-Time Alerting on Public Exposure', why: 'Publicly exposed services are often discovered and abused quickly.', impact: 'Reduces exploitation windows materially.' }
       ];
-    } else if (isPhishing) {
-      scenarioType = 'Phishing / Business Email Compromise (BEC)';
-      tef = { min: 3, likely: 10, max: 35 };
-      tc  = { min: 0.35, likely: 0.55, max: 0.78 };
+    } else if (classification.key === 'phishing') {
       recommendations = [
-        { title: 'Phishing-Resistant MFA (FIDO2)', why: 'Traditional MFA is increasingly bypassed via adversary-in-the-middle toolkits. FIDO2/passkeys are not susceptible to real-time phishing.', impact: 'Near-elimination of credential-based account takeover from phishing.' },
-        { title: 'Email Security Gateway Enhancement', why: 'Advanced AI-based email filtering significantly reduces volume of phishing reaching users.', impact: 'Reduces phishing volume reaching inboxes by 85–95%.' },
-        { title: 'BEC / Wire Fraud Controls', why: 'BEC attacks focus on large financial transfers. Dual-approval workflows and out-of-band verification prevent fraudulent payments.', impact: 'Eliminates primary BEC financial loss vector.' },
-        { title: 'Security Awareness Training', why: 'Human detection remains a last line of defence. Regular, realistic simulations improve detection rates significantly.', impact: 'Typical 60–70% reduction in click rate after 12 months of training.' }
+        { title: 'Phishing-Resistant MFA', why: 'Phishing and session hijack campaigns increasingly bypass weak MFA patterns.', impact: 'Near-elimination of credential takeover from basic phishing paths.' },
+        { title: 'Advanced Email Security Controls', why: 'Reducing malicious messages reaching users remains one of the strongest volume controls.', impact: 'Substantially lowers phishing exposure at inbox level.' },
+        { title: 'BEC Payment Verification Controls', why: 'Out-of-band verification and approval hardening reduce direct fraud loss.', impact: 'Eliminates the main financial loss path in many BEC cases.' },
+        { title: 'Security Awareness and Simulation Programme', why: 'Human detection remains an important last line of defence.', impact: 'Reduces click-through and improves early reporting.' }
       ];
     } else {
       recommendations = [
-        { title: 'Risk-Based Vulnerability Management', why: 'Unpatched critical vulnerabilities are the leading breach enabler. Prioritising by exploitability and asset criticality maximises ROI.', impact: 'Addresses the cause of ~45% of significant incidents.' },
-        { title: 'Zero Trust Architecture', why: 'Implicit trust in networks and applications enables lateral movement. Zero trust limits blast radius of any compromise.', impact: 'Industry average: 50–60% reduction in breach scope under zero trust.' },
-        { title: 'Third-Party Security Assessment Programme', why: 'Supply chain attacks are a growing vector. Structured assessments identify high-risk suppliers before incidents occur.', impact: 'Early identification reduces third-party incident frequency and costs.' },
-        { title: 'Security Operations Maturity', why: 'Faster detection and response is the primary lever for reducing loss magnitude. Every hour of dwell time increases costs exponentially.', impact: 'Reducing MTTD by 50% typically reduces breach cost by 25–35%.' },
-        { title: 'Cyber Insurance Alignment', why: 'Risk transfer through cyber insurance is a valid financial control. Ensuring coverage terms match your actual risk profile is critical.', impact: 'Transfers tail risk; reduces P90 exposure by the coverage amount.' }
+        { title: 'Risk-Based Vulnerability Management', why: 'Exploitability-led prioritisation reduces the most likely technical entry paths.', impact: 'Addresses a major driver of severe incidents.' },
+        { title: 'Zero Trust Architecture', why: 'Reducing implicit trust limits lateral movement and blast radius.', impact: 'Can materially reduce breach scope and recovery effort.' },
+        { title: 'Third-Party Security Assessment Programme', why: 'Supplier and dependency risks often amplify core scenarios.', impact: 'Improves identification of inherited exposure.' },
+        { title: 'Security Operations Maturity', why: 'Faster detection and response remains one of the strongest levers on loss magnitude.', impact: 'Reduces dwell time and downstream business loss.' }
       ];
     }
 
@@ -238,29 +343,16 @@ const LLMService = (() => {
       scenarioTitle: scenarioType,
       structuredScenario: {
         assetService: buContext?.criticalServices?.[0] || 'Core application platform',
-        threatCommunity: isRansomware ? 'Organised cybercriminal groups (ransomware-as-a-service)' :
-          isIdentity ? 'Credential theft and account-takeover specialists' :
-          isPhishing ? 'Opportunistic threat actors / BEC specialists' :
-          isInsider  ? 'Malicious or negligent insider' :
-          'External threat actors (mixed motivation)',
-        attackType: isRansomware ? 'Ransomware deployment via initial access broker' :
-          isIdentity   ? 'Credential theft, token hijack, or federated identity abuse' :
-          isDataBreach ? 'Data exfiltration after credential compromise' :
-          isPhishing   ? 'Spear-phishing / adversary-in-the-middle phishing kit' :
-          isCloud      ? 'Exploitation of cloud misconfiguration' :
-          isInsider    ? 'Insider data theft / sabotage' :
-          'Multi-vector cyber attack',
-        effect: isRansomware ? 'Encryption of critical data and systems; service unavailability; potential data leak for double-extortion' :
-          isIdentity ? 'Compromise of core identity services leading to account takeover, privilege abuse, mailbox compromise, and disruption across federated business systems' :
-          isDataBreach ? 'Unauthorised access to and exfiltration of sensitive/regulated data' :
-          'Loss of confidentiality, integrity, or availability of critical assets'
+        threatCommunity: classification.threatCommunity,
+        attackType: classification.attackType,
+        effect: classification.effect
       },
       workflowGuidance: [
         'Confirm that the selected risks and narrative describe one coherent assessment scope.',
-        'Review the suggested FAIR ranges against any internal incident history, loss data, or control evidence you already have.',
-        'Prefer GCC and UAE assumptions where available, and document any global fallback used for the scenario.'
+        'Review the suggested FAIR ranges against internal incident history, control evidence, and business criticality before accepting them.',
+        'Validate any benchmark-based assumptions against FAIR logic, NIST CSF style control expectations, and your organisation-specific operating context.'
       ],
-      benchmarkBasis: 'The suggested values prioritise GCC and UAE cyber and operational resilience benchmarks where they are likely to exist. Where a local reference is thin, the ranges fall back to mature global cyber loss patterns and should be validated by the user.',
+      benchmarkBasis: 'The suggested values are intended as FAIR-style starting points. They prioritise relevant GCC and UAE cyber, privacy, and operational resilience context where credible local comparators are available, and otherwise fall back to mature global incident, control, and loss patterns that should be validated by the user.',
       inputRationale: {
         tef: 'Threat event frequency is anchored to the scenario type and then aligned to the business unit default assumptions where available.',
         vulnerability: 'Threat capability and control strength are balanced to reflect the expected attacker sophistication against the current control environment.',
@@ -305,6 +397,7 @@ const LLMService = (() => {
       if (/^a likely progression is/i.test(sentence)) return false;
       if (/^in practice, this can drive/i.test(sentence)) return false;
       if (/^given the stated urgency/i.test(sentence)) return false;
+      if (/^current urgency is assessed as /i.test(sentence)) return false;
       return true;
     });
     const cleaned = filtered.join(' ').trim();
@@ -392,6 +485,7 @@ const LLMService = (() => {
    * [LLM-INTEGRATION] Replace stub body with real API call + JSON parsing
    */
   async function generateScenarioAndInputs(narrative, buContext, retrievedDocs) {
+    const classification = _classifyScenario(narrative);
     // Simulate LLM latency
     await new Promise(r => setTimeout(r, 2200 + Math.random() * 800));
 
@@ -400,7 +494,7 @@ const LLMService = (() => {
       try {
         const systemPrompt = `You are a senior cyber risk analyst specialising in FAIR methodology. 
 Given a risk scenario narrative and business context, provide structured FAIR inputs and recommendations.
-Prefer GCC and UAE benchmark references where relevant. If those are unavailable for a specific assumption, use the best available global benchmark and explain the fallback logic.
+Prefer GCC and UAE benchmark references where relevant. If those are unavailable for a specific assumption, use the best available global benchmark and explain the fallback logic. Keep the output aligned to FAIR reasoning and consistent with broadly recognised risk management expectations such as clear threat, vulnerability, and loss logic.
 Respond ONLY with valid JSON matching this exact schema:
 {
   "scenarioTitle": "string",
@@ -460,9 +554,22 @@ ${retrievedDocs.map(d => `- ${d.title}: ${d.excerpt}`).join('\
             likely: value?.likely ?? fallbackRange?.likely ?? 0,
             max: value?.max ?? fallbackRange?.max ?? 0,
           });
+          const cleanedTitle = String(parsed.scenarioTitle || '').trim();
+          const keepFallbackClassification = classification.key === 'identity' && /cloud|misconfig/i.test(cleanedTitle);
           return {
             ...fallback,
             ...parsed,
+            scenarioTitle: keepFallbackClassification ? fallback.scenarioTitle : (cleanedTitle || fallback.scenarioTitle),
+            structuredScenario: {
+              ...fallback.structuredScenario,
+              ...(keepFallbackClassification ? {} : (parsed.structuredScenario || {}))
+            },
+            workflowGuidance: _normaliseGuidance(parsed.workflowGuidance?.length ? parsed.workflowGuidance : fallback.workflowGuidance),
+            benchmarkBasis: String(parsed.benchmarkBasis || fallback.benchmarkBasis || '').trim(),
+            inputRationale: {
+              ...fallback.inputRationale,
+              ...(parsed.inputRationale || {})
+            },
             suggestedInputs: {
               ...fallbackInputs,
               ...parsedInputs,
@@ -480,6 +587,7 @@ ${retrievedDocs.map(d => `- ${d.title}: ${d.excerpt}`).join('\
                 reputationContract: ensureRange(parsedLoss.reputationContract, fallbackLoss.reputationContract),
               }
             },
+            recommendations: _normaliseRiskCards((parsed.recommendations || fallback.recommendations || []).map((rec) => ({ title: rec.title, category: 'Recommendation', description: rec.why, regulations: [], impact: rec.impact }))).map((rec) => ({ title: rec.title, why: rec.description, impact: rec.impact || '' })),
             citations: retrievedDocs
           };
         }
@@ -539,11 +647,22 @@ Instructions:
 - include business and operational consequences, not just the technical failure
 - reflect the stated urgency where provided
 - if the scenario involves identity, directory, SSO, or Azure AD/Entra compromise, include plausible knock-on effects such as mailbox compromise, privileged misuse, tenant changes, service disruption, fraud, and data exposure where relevant
-- produce concise but concrete candidate risks that a user can choose from`;
+- produce concise but concrete candidate risks that a user can choose from
+- classify the scenario using credible cyber risk taxonomy; do not label identity-control compromise as cloud misconfiguration unless the core failure is genuinely cloud exposure`;
         const raw = await _callLLM(systemPrompt, userPrompt);
         if (raw) {
           const parsed = JSON.parse(raw.replace(/```json\n?|```/g, '').trim());
-          return { ...parsed, citations: input.citations || [] };
+          return {
+            ...parsed,
+            enhancedStatement: _buildScenarioExpansion({ ...input, riskStatement: parsed.enhancedStatement || input.riskStatement }).scenarioExpansion,
+            summary: _dedupeSentences(parsed.summary || ''),
+            linkAnalysis: _dedupeSentences(parsed.linkAnalysis || ''),
+            workflowGuidance: _normaliseGuidance(parsed.workflowGuidance),
+            benchmarkBasis: String(parsed.benchmarkBasis || 'Use FAIR-aligned assumptions, test them against control evidence, and prefer local regulatory or operational comparators where credible before falling back to mature global incident patterns.').trim(),
+            risks: _normaliseRiskCards(parsed.risks),
+            regulations: Array.from(new Set((parsed.regulations || []).map(String).filter(Boolean))),
+            citations: input.citations || []
+          };
         }
       } catch (e) {
         console.warn('enhanceRiskContext fallback:', e.message);
