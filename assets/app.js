@@ -310,6 +310,43 @@ const USER_FOCUS_OPTIONS = [
   'Executive reporting'
 ];
 
+const GEOGRAPHY_OPTIONS = [
+  'United Arab Emirates',
+  'Abu Dhabi',
+  'Dubai',
+  'GCC',
+  'Saudi Arabia',
+  'Qatar',
+  'Kuwait',
+  'Bahrain',
+  'Oman',
+  'Middle East',
+  'North Africa',
+  'Europe',
+  'United Kingdom',
+  'United States',
+  'India',
+  'Asia Pacific',
+  'Global'
+];
+
+function normaliseUserGeographies(settings = {}, globalSettings = getAdminSettings()) {
+  const primary = String(settings.geographyPrimary || settings.geography || globalSettings.geography || DEFAULT_ADMIN_SETTINGS.geography).trim() || DEFAULT_ADMIN_SETTINGS.geography;
+  return {
+    geographyPrimary: primary,
+    geographySecondary: String(settings.geographySecondary || '').trim(),
+    geographyTertiary: String(settings.geographyTertiary || '').trim(),
+    geography: primary
+  };
+}
+
+function renderGeographySelect(id, selected = '', placeholder = 'Choose geography', optional = false) {
+  return `<select class="form-select" id="${id}">
+    <option value="">${optional ? placeholder : 'Choose geography'}</option>
+    ${GEOGRAPHY_OPTIONS.map(option => `<option value="${option}" ${option === selected ? 'selected' : ''}>${option}</option>`).join('')}
+  </select>`;
+}
+
 function getCurrentUserOrThrow() {
   const user = AuthService.getCurrentUser();
   if (!user?.username) {
@@ -339,6 +376,9 @@ function clearUserPersistentState(username) {
 function getUserSettingsDefaults(globalSettings = getAdminSettings()) {
   return {
     geography: globalSettings.geography,
+    geographyPrimary: globalSettings.geography,
+    geographySecondary: '',
+    geographyTertiary: '',
     companyWebsiteUrl: globalSettings.companyWebsiteUrl,
     companyContextProfile: globalSettings.companyContextProfile,
     companyContextSections: globalSettings.companyContextSections,
@@ -835,6 +875,7 @@ function getUserSettings() {
     return {
       ...defaults,
       ...saved,
+      ...normaliseUserGeographies(saved, globalSettings),
       applicableRegulations: Array.isArray(saved.applicableRegulations) ? saved.applicableRegulations : [...defaults.applicableRegulations],
       userProfile: normaliseUserProfile(saved.userProfile || defaults.userProfile),
       companyContextSections: saved.companyContextSections && typeof saved.companyContextSections === 'object'
@@ -856,6 +897,7 @@ function saveUserSettings(settings) {
   const merged = {
     ...defaults,
     ...settings,
+    ...normaliseUserGeographies(settings, globalSettings),
     applicableRegulations: Array.isArray(settings.applicableRegulations) ? settings.applicableRegulations : [...defaults.applicableRegulations],
     userProfile: normaliseUserProfile(settings.userProfile || defaults.userProfile),
     companyContextSections: settings.companyContextSections && typeof settings.companyContextSections === 'object'
@@ -3791,9 +3833,19 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
         title: 'What do you care about most?',
         prompt: 'Choose the themes that should influence how the platform frames analysis for you.',
         body: `
-          <div class="form-group">
-            <label class="form-label" for="onboard-geo">Primary geography</label>
-            <input class="form-input" id="onboard-geo" value="${draftSettings.geography || globalSettings.geography}" placeholder="e.g. UAE, GCC, Global">
+          <div class="grid-3" style="gap:12px">
+            <div class="form-group">
+              <label class="form-label" for="onboard-geo-primary">Primary geography</label>
+              ${renderGeographySelect('onboard-geo-primary', draftSettings.geographyPrimary || draftSettings.geography || globalSettings.geography)}
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="onboard-geo-secondary">Secondary geography</label>
+              ${renderGeographySelect('onboard-geo-secondary', draftSettings.geographySecondary || '', 'Optional', true)}
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="onboard-geo-tertiary">Tertiary geography</label>
+              ${renderGeographySelect('onboard-geo-tertiary', draftSettings.geographyTertiary || '', 'Optional', true)}
+            </div>
           </div>
           <div class="form-group mt-4">
             <label class="form-label">Focus areas</label>
@@ -3989,7 +4041,10 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
         draftSettings.userProfile.department = departmentEntity?.name || '';
       }
       if (currentStep === 2) {
-        draftSettings.geography = document.getElementById('onboard-geo').value.trim() || globalSettings.geography;
+        draftSettings.geographyPrimary = document.getElementById('onboard-geo-primary').value.trim() || globalSettings.geography;
+        draftSettings.geographySecondary = document.getElementById('onboard-geo-secondary').value.trim();
+        draftSettings.geographyTertiary = document.getElementById('onboard-geo-tertiary').value.trim();
+        draftSettings.geography = draftSettings.geographyPrimary;
         draftSettings.userProfile.focusAreas = focusInput?.getTags() || [];
       }
       if (currentStep === 3) {
@@ -4289,8 +4344,8 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
     body: `
       <div class="grid-2">
         <div class="form-group">
-          <label class="form-label" for="user-geo">Default Geography</label>
-          <input class="form-input" id="user-geo" value="${settings.geography}">
+          <label class="form-label" for="user-geo-primary">Primary Geography</label>
+          ${renderGeographySelect('user-geo-primary', settings.geographyPrimary || settings.geography || globalSettings.geography)}
         </div>
         <div class="form-group">
           <label class="form-label" for="user-link-mode">Default Linked-Risk Mode</label>
@@ -4298,6 +4353,16 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
             <option value="yes" ${settings.defaultLinkMode ? 'selected' : ''}>Enabled</option>
             <option value="no" ${!settings.defaultLinkMode ? 'selected' : ''}>Disabled</option>
           </select>
+        </div>
+      </div>
+      <div class="grid-2 mt-4">
+        <div class="form-group">
+          <label class="form-label" for="user-geo-secondary">Secondary Geography</label>
+          ${renderGeographySelect('user-geo-secondary', settings.geographySecondary || '', 'Optional', true)}
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="user-geo-tertiary">Tertiary Geography</label>
+          ${renderGeographySelect('user-geo-tertiary', settings.geographyTertiary || '', 'Optional', true)}
         </div>
       </div>
       <div class="form-group mt-4">
@@ -4462,7 +4527,10 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
           obligations: document.getElementById('user-company-section-obligations').value.trim(),
           sources: document.getElementById('user-company-section-sources').value.trim()
         },
-        geography: document.getElementById('user-geo').value.trim() || globalSettings.geography,
+        geographyPrimary: document.getElementById('user-geo-primary').value.trim() || globalSettings.geography,
+        geographySecondary: document.getElementById('user-geo-secondary').value.trim(),
+        geographyTertiary: document.getElementById('user-geo-tertiary').value.trim(),
+        geography: document.getElementById('user-geo-primary').value.trim() || globalSettings.geography,
         companyWebsiteUrl: websiteEl.value.trim(),
         companyContextProfile: serialiseCompanyContextSections({
           companySummary: document.getElementById('user-company-section-summary').value.trim(),
