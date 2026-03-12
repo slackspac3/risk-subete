@@ -6318,7 +6318,7 @@ function renderAdminSettings(activeSection = 'org') {
               </td>
               <td><code>${AppState.adminVisiblePasswords[account.username] || 'Reset to issue'}</code></td>
               <td style="text-align:right">
-                <button class="btn btn--secondary btn--sm btn-apply-user-access" data-username="${account.username}" data-display-name="${account.displayName}" type="button">Apply</button>
+                <button class="btn btn--secondary btn--sm btn-apply-user-access" data-username="${account.username}" data-display-name="${account.displayName}" type="button">Apply Access</button>
                 <button class="btn btn--ghost btn--sm btn-reset-user-account" data-username="${account.username}" data-display-name="${account.displayName}" type="button">Reset User</button>
                 <button class="btn btn--secondary btn--sm btn-reset-user-password" data-username="${account.username}" data-display-name="${account.displayName}" type="button">Reset Password</button>
               </td>
@@ -6690,7 +6690,62 @@ function renderAdminSettings(activeSection = 'org') {
   const adminSettingsRoot = document.querySelector('.settings-shell');
   bindAutosave(adminSettingsRoot, () => persistAdminSettings(false));
 
-  document.getElementById('btn-save-settings').addEventListener('click', () => {
+  async function applyManagedAccountAccess(button) {
+    const username = button.dataset.username || '';
+    const displayName = button.dataset.displayName || username;
+    const row = button.closest('.managed-account-row');
+    if (!row) return false;
+    const role = row.querySelector('.account-role-select')?.value || 'user';
+    const businessUnitEntityId = row.querySelector('.account-bu-select')?.value || '';
+    const departmentEntityId = row.querySelector('.account-department-select')?.value || '';
+    if (!businessUnitEntityId) {
+      UI.toast(role === 'bu_admin' ? 'Choose the business unit this BU admin will manage.' : 'Choose a business unit for this user.', 'warning');
+      return false;
+    }
+    if (role !== 'bu_admin' && !departmentEntityId) {
+      UI.toast('Choose a function or department for this standard user.', 'warning');
+      return false;
+    }
+    button.disabled = true;
+    button.textContent = 'Applying…';
+    try {
+      const currentAccount = AuthService.getManagedAccounts().find(account => account.username === username) || { username, role: 'user', businessUnitEntityId: '', departmentEntityId: '' };
+      const updatedAccount = await AuthService.adminUpdateManagedAccount(username, {
+        role,
+        businessUnitEntityId,
+        departmentEntityId: role === 'bu_admin' ? '' : departmentEntityId
+      });
+      const nextSettings = applyManagedAccountAssignmentToSettings(currentAccount, {
+        role: updatedAccount?.role || role,
+        businessUnitEntityId: updatedAccount?.businessUnitEntityId || businessUnitEntityId
+      }, getAdminSettings());
+      saveAdminSettings(nextSettings);
+      row.dataset.dirty = 'false';
+      button.textContent = 'Applied';
+      AppState.adminNewUserStatus = `Applied ${role === 'bu_admin' ? 'BU admin' : 'standard user'} access for ${displayName}.`;
+      return true;
+    } catch (error) {
+      AppState.adminNewUserStatus = `User update failed: ${error instanceof Error ? error.message : String(error)}`;
+      document.getElementById('admin-new-user-result').textContent = AppState.adminNewUserStatus;
+      UI.toast('User update failed.', 'danger');
+      button.disabled = false;
+      button.textContent = 'Apply Access';
+      return false;
+    }
+  }
+
+  async function applyPendingManagedAccountChanges() {
+    const rows = Array.from(document.querySelectorAll('.managed-account-row')).filter(row => row.dataset.dirty === 'true');
+    for (const row of rows) {
+      const button = row.querySelector('.btn-apply-user-access');
+      if (!button) continue;
+      const ok = await applyManagedAccountAccess(button);
+      if (!ok) return false;
+    }
+    return true;
+  }
+
+  document.getElementById('btn-save-settings').addEventListener('click', async () => {
     const { warningThresholdUsd, toleranceThresholdUsd, annualReviewThresholdUsd } = buildAdminSettingsPayload();
     if (warningThresholdUsd > toleranceThresholdUsd) {
       UI.toast('Warning trigger must be less than or equal to the tolerance threshold.', 'warning');
@@ -6700,6 +6755,8 @@ function renderAdminSettings(activeSection = 'org') {
       UI.toast('Annual review trigger should be greater than or equal to the tolerance threshold.', 'warning');
       return;
     }
+    const accessSaved = await applyPendingManagedAccountChanges();
+    if (!accessSaved) return;
     persistAdminSettings(true);
   });
   document.getElementById('btn-build-company-context').addEventListener('click', async () => {
@@ -6830,46 +6887,11 @@ function renderAdminSettings(activeSection = 'org') {
 
   document.querySelectorAll('.btn-apply-user-access').forEach(button => {
     button.addEventListener('click', async () => {
-      const username = button.dataset.username || '';
-      const displayName = button.dataset.displayName || username;
-      const row = button.closest('.managed-account-row');
-      if (!row) return;
-      const role = row.querySelector('.account-role-select')?.value || 'user';
-      const businessUnitEntityId = row.querySelector('.account-bu-select')?.value || '';
-      const departmentEntityId = row.querySelector('.account-department-select')?.value || '';
-      if (!businessUnitEntityId) {
-        UI.toast(role === 'bu_admin' ? 'Choose the business unit this BU admin will manage.' : 'Choose a business unit for this user.', 'warning');
-        return;
-      }
-      if (role !== 'bu_admin' && !departmentEntityId) {
-        UI.toast('Choose a function or department for this standard user.', 'warning');
-        return;
-      }
-      button.disabled = true;
-      button.textContent = 'Applying…';
-      try {
-        const currentAccount = AuthService.getManagedAccounts().find(account => account.username === username) || { username, role: 'user', businessUnitEntityId: '', departmentEntityId: '' };
-        const updatedAccount = await AuthService.adminUpdateManagedAccount(username, {
-          role,
-          businessUnitEntityId,
-          departmentEntityId: role === 'bu_admin' ? '' : departmentEntityId
-        });
-        const nextSettings = applyManagedAccountAssignmentToSettings(currentAccount, {
-          role: updatedAccount?.role || role,
-          businessUnitEntityId: updatedAccount?.businessUnitEntityId || businessUnitEntityId
-        }, getAdminSettings());
-        saveAdminSettings(nextSettings);
-        AppState.adminNewUserStatus = `Applied ${role === 'bu_admin' ? 'BU admin' : 'standard user'} access for ${displayName}.`;
-        UI.toast(`Updated access for ${displayName}.`, 'success');
-        rememberSettingsScroll('admin-settings');
-        renderAdminSettings();
-      } catch (error) {
-        AppState.adminNewUserStatus = `User update failed: ${error instanceof Error ? error.message : String(error)}`;
-        document.getElementById('admin-new-user-result').textContent = AppState.adminNewUserStatus;
-        UI.toast('User update failed.', 'danger');
-        button.disabled = false;
-        button.textContent = 'Apply';
-      }
+      const ok = await applyManagedAccountAccess(button);
+      if (!ok) return;
+      UI.toast(`Updated access for ${button.dataset.displayName || button.dataset.username || 'user'}.`, 'success');
+      rememberSettingsScroll('admin-settings');
+      renderAdminSettings();
     });
   });
   function renderAdminNewUserDepartments() {
@@ -6901,8 +6923,18 @@ function renderAdminSettings(activeSection = 'org') {
   document.getElementById('admin-new-user-role')?.addEventListener('change', renderAdminNewUserDepartments);
   renderAdminNewUserDepartments();
   document.querySelectorAll('.managed-account-row').forEach(row => {
-    row.querySelector('.account-bu-select')?.addEventListener('change', () => renderManagedAccountDepartmentOptions(row));
-    row.querySelector('.account-role-select')?.addEventListener('change', () => renderManagedAccountDepartmentOptions(row));
+    const markDirty = () => {
+      row.dataset.dirty = 'true';
+      const button = row.querySelector('.btn-apply-user-access');
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'Apply Access';
+      }
+    };
+    row.querySelector('.account-bu-select')?.addEventListener('change', () => { renderManagedAccountDepartmentOptions(row); markDirty(); });
+    row.querySelector('.account-role-select')?.addEventListener('change', () => { renderManagedAccountDepartmentOptions(row); markDirty(); });
+    row.querySelector('.account-department-select')?.addEventListener('change', markDirty);
+    row.dataset.dirty = 'false';
     renderManagedAccountDepartmentOptions(row);
   });
   document.getElementById('btn-save-admin-secret')?.addEventListener('click', async () => {

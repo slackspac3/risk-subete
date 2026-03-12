@@ -54,6 +54,15 @@ function isAdminSecretValid(req) {
   return !!ADMIN_API_SECRET && req.headers['x-admin-secret'] === ADMIN_API_SECRET;
 }
 
+function isAdminSessionValid(req) {
+  const payload = verifySessionToken(req.headers['x-session-token']);
+  return !!payload && payload.role === 'admin';
+}
+
+function isAdminRequest(req) {
+  return isAdminSecretValid(req) || isAdminSessionValid(req);
+}
+
 function getSessionSigningSecret() {
   return ADMIN_API_SECRET || getKvToken() || 'risk-calculator-poc-session-secret';
 }
@@ -232,8 +241,8 @@ module.exports = async function handler(req, res) {
         return;
       }
 
-      if (!isAdminSecretValid(req)) {
-        res.status(403).json({ error: 'Admin secret required.' });
+      if (!isAdminRequest(req)) {
+        res.status(403).json({ error: 'Admin authentication required.' });
         return;
       }
 
@@ -278,8 +287,8 @@ module.exports = async function handler(req, res) {
         res.status(200).json({ accounts: accounts.map(sanitiseAccount) });
         return;
       }
-      if (!isAdminSecretValid(req)) {
-        res.status(403).json({ error: 'Admin secret required.' });
+      if (!isAdminRequest(req)) {
+        res.status(403).json({ error: 'Admin authentication required.' });
         return;
       }
       if (body.action === 'reset-password') {

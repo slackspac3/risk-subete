@@ -88,6 +88,9 @@ function resolveApiUrl(path) {
     if (includeAdminSecret && getAdminApiSecret()) {
       headers['x-admin-secret'] = getAdminApiSecret();
     }
+    if (getApiSessionToken()) {
+      headers['x-session-token'] = getApiSessionToken();
+    }
     const res = await fetch(getUsersApiUrl(), {
       method,
       headers,
