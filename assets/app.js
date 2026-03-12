@@ -641,14 +641,17 @@ function updateAssessmentRecord(id, updater) {
   return next;
 }
 function deleteAssessment(id) {
-  const list = getAssessments().slice().filter(item => item.id !== id);
+  const existing = getAssessments().slice();
+  const list = existing.filter(item => item.id !== id);
+  if (list.length === existing.length) return false;
   const cache = ensureUserStateCache();
   cache.assessments = list;
   localStorage.setItem(buildUserStorageKey(ASSESSMENTS_STORAGE_PREFIX), JSON.stringify(list));
   queueSharedUserStateSync();
+  return true;
 }
 function archiveAssessment(id) {
-  return updateAssessmentRecord(id, assessment => ({ ...assessment, archivedAt: new Date().toISOString() }));
+  return Boolean(updateAssessmentRecord(id, assessment => ({ ...assessment, archivedAt: new Date().toISOString() })));
 }
 function unarchiveAssessment(id) {
   return updateAssessmentRecord(id, assessment => {
@@ -671,10 +674,12 @@ function archiveCurrentDraft() {
   };
   saveAssessment(archived);
   resetDraft();
+  saveDraft();
   return archived;
 }
 function deleteCurrentDraft() {
   resetDraft();
+  saveDraft();
 }
 function restoreArchivedDraftToWorkspace(id) {
   const archived = getAssessmentById(id);
@@ -2934,20 +2939,22 @@ function renderUserDashboard() {
   });
   document.querySelectorAll('.dashboard-archive-assessment').forEach(button => {
     button.addEventListener('click', async () => {
-      const id = button.dataset.assessmentId;
+      const row = button.closest('.dashboard-assessment-row');
+      const id = button.dataset.assessmentId || row?.dataset.assessmentId;
       if (!id) return;
       if (!await UI.confirm('Archive this assessment? It will be removed from your main dashboard.')) return;
-      archiveAssessment(id);
+      if (!archiveAssessment(id)) { UI.toast('Could not find that assessment to archive.', 'warning'); return; }
       UI.toast('Assessment archived.', 'success');
       renderUserDashboard();
     });
   });
   document.querySelectorAll('.dashboard-delete-assessment').forEach(button => {
     button.addEventListener('click', async () => {
-      const id = button.dataset.assessmentId;
+      const row = button.closest('.dashboard-assessment-row');
+      const id = button.dataset.assessmentId || row?.dataset.assessmentId;
       if (!id) return;
       if (!await UI.confirm('Delete this assessment permanently from your workspace?')) return;
-      deleteAssessment(id);
+      if (!deleteAssessment(id)) { UI.toast('Could not find that assessment to delete.', 'warning'); return; }
       UI.toast('Assessment deleted.', 'success');
       renderUserDashboard();
     });
@@ -2974,7 +2981,8 @@ function renderUserDashboard() {
   });
   document.querySelectorAll('.dashboard-restore-assessment').forEach(button => {
     button.addEventListener('click', () => {
-      const id = button.dataset.assessmentId;
+      const row = button.closest('.dashboard-assessment-row');
+      const id = button.dataset.assessmentId || row?.dataset.assessmentId;
       if (!id) return;
       const assessment = getAssessmentById(id);
       if (!assessment) return;
