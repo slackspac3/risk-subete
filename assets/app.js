@@ -543,13 +543,45 @@ function getCompanyEntityForDepartment(structure = getAdminSettings().companyStr
 }
 
 function getDefaultOrgAssignmentForUser(username = '', settings = getAdminSettings()) {
+  const safeUsername = String(username || '').trim().toLowerCase();
   const structure = Array.isArray(settings.companyStructure) ? settings.companyStructure : [];
-  const ownedDepartment = structure.find(node => isDepartmentEntityType(node.type) && node.ownerUsername === username);
+  const ownedBusiness = structure.find(node => isCompanyEntityType(node.type) && String(node.ownerUsername || '').trim().toLowerCase() === safeUsername);
+  if (ownedBusiness) {
+    return {
+      businessUnitEntityId: ownedBusiness.id,
+      departmentEntityId: ''
+    };
+  }
+  const ownedDepartment = structure.find(node => isDepartmentEntityType(node.type) && String(node.ownerUsername || '').trim().toLowerCase() === safeUsername);
   if (!ownedDepartment) return { businessUnitEntityId: '', departmentEntityId: '' };
   return {
     businessUnitEntityId: ownedDepartment.parentId || '',
     departmentEntityId: ownedDepartment.id
   };
+}
+
+function getManagedAccountsForAdmin(settings = getAdminSettings()) {
+  const structure = Array.isArray(settings.companyStructure) ? settings.companyStructure : [];
+  return AuthService.getManagedAccounts().map(account => {
+    const ownedBusiness = structure.find(node => isCompanyEntityType(node.type) && String(node.ownerUsername || '').trim().toLowerCase() === account.username);
+    const ownedDepartment = structure.find(node => isDepartmentEntityType(node.type) && String(node.ownerUsername || '').trim().toLowerCase() === account.username);
+    if (ownedBusiness) {
+      return {
+        ...account,
+        role: 'bu_admin',
+        businessUnitEntityId: ownedBusiness.id,
+        departmentEntityId: ''
+      };
+    }
+    if (ownedDepartment) {
+      return {
+        ...account,
+        businessUnitEntityId: account.businessUnitEntityId || ownedDepartment.parentId || '',
+        departmentEntityId: account.departmentEntityId || ownedDepartment.id
+      };
+    }
+    return account;
+  });
 }
 
 function resolveUserOrganisationSelection(user = AuthService.getCurrentUser(), userSettings = getUserSettings(), settings = getAdminSettings()) {
@@ -1021,7 +1053,7 @@ function renderCompanyStructureSummary(structure = []) {
   if (!structure.length) {
     return `<div class="form-help">No organisation structure saved yet. Add a top-level entity such as a holding company or operating company, then attach subsidiaries, portfolio companies, partners, and departments beneath it.</div>`;
   }
-  const managedAccounts = AuthService.getManagedAccounts();
+  const managedAccounts = getManagedAccountsForAdmin(settings);
   const accountLabelByUsername = new Map(managedAccounts.map(account => [account.username, account.displayName]));
   const byParent = new Map();
   const settings = getAdminSettings();
@@ -6731,30 +6763,33 @@ function renderAdminSettings(activeSection = 'org') {
     }
     button.disabled = true;
     button.textContent = 'Applying…';
+    const currentAccount = getManagedAccountsForAdmin(getAdminSettings()).find(account => account.username === username) || { username, role: 'user', businessUnitEntityId: '', departmentEntityId: '' };
+    const nextSettings = applyManagedAccountAssignmentToSettings(currentAccount, {
+      role,
+      businessUnitEntityId
+    }, getAdminSettings());
+    saveAdminSettings(nextSettings);
     try {
-      const currentAccount = AuthService.getManagedAccounts().find(account => account.username === username) || { username, role: 'user', businessUnitEntityId: '', departmentEntityId: '' };
-      const updatedAccount = await AuthService.adminUpdateManagedAccount(username, {
+      await AuthService.adminUpdateManagedAccount(username, {
         role,
         businessUnitEntityId,
         departmentEntityId: role === 'bu_admin' ? '' : departmentEntityId
       });
-      const nextSettings = applyManagedAccountAssignmentToSettings(currentAccount, {
-        role: updatedAccount?.role || role,
-        businessUnitEntityId: updatedAccount?.businessUnitEntityId || businessUnitEntityId
-      }, getAdminSettings());
-      saveAdminSettings(nextSettings);
-      row.dataset.dirty = 'false';
-      button.textContent = 'Applied';
-      AppState.adminNewUserStatus = `Applied ${role === 'bu_admin' ? 'BU admin' : 'standard user'} access for ${displayName}.`;
-      return true;
     } catch (error) {
-      AppState.adminNewUserStatus = `User update failed: ${error instanceof Error ? error.message : String(error)}`;
-      document.getElementById('admin-new-user-result').textContent = AppState.adminNewUserStatus;
-      UI.toast('User update failed.', 'danger');
-      button.disabled = false;
-      button.textContent = 'Apply Access';
-      return false;
+      if (role !== 'bu_admin') {
+        AppState.adminNewUserStatus = `User update failed: ${error instanceof Error ? error.message : String(error)}`;
+        document.getElementById('admin-new-user-result').textContent = AppState.adminNewUserStatus;
+        UI.toast('User update failed.', 'danger');
+        button.disabled = false;
+        button.textContent = 'Apply Access';
+        return false;
+      }
     }
+    row.dataset.dirty = 'false';
+    button.textContent = 'Applied';
+    AppState.adminNewUserStatus = `Applied ${role === 'bu_admin' ? 'BU admin' : 'standard user'} access for ${displayName}.`;
+    document.getElementById('admin-new-user-result').textContent = AppState.adminNewUserStatus;
+    return true;
   }
 
   async function applyPendingManagedAccountChanges() {
