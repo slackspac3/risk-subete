@@ -3877,7 +3877,6 @@ async function runSimulation() {
 
 // ─── RESULTS ──────────────────────────────────────────────────
 function renderResults(id, isShared) {
-  // Check for shared payload in URL first
   if (!isShared) {
     const shared = ShareService.parseShareFromURL();
     if (shared && shared.id === id && shared.results) {
@@ -3890,47 +3889,231 @@ function renderResults(id, isShared) {
     setPage(`<div class="container" style="padding:var(--sp-12)"><h2>Assessment not found</h2><p style="margin-top:var(--sp-4);color:var(--text-muted)">ID "${id}" not found in local storage.</p><a href="#/" class="btn btn--primary" style="margin-top:var(--sp-6)">← Home</a></div>`);
     return;
   }
+
   const sharedBanner = (isShared || assessment._shared) ? `
     <div class="banner banner--info mb-6" style="font-size:.82rem">
       <span class="banner-icon">🔗</span>
       <span class="banner-text"><strong>Shared view.</strong> This assessment was shared with you. <a href="#/" style="color:var(--color-accent-300)">Start your own →</a></span>
     </div>` : '';
+
   const r = assessment.results;
+  const activeTab = String(AppState.resultsTab || 'executive');
   const statusClass = r.toleranceBreached ? 'above' : r.nearTolerance ? 'warning' : 'within';
   const statusIcon = r.toleranceBreached ? '🔴' : r.nearTolerance ? '🟠' : '🟢';
   const statusTitle = r.toleranceBreached ? 'Above Tolerance Threshold' : r.nearTolerance ? 'Approaching Tolerance Threshold' : 'Within Tolerance Threshold';
   const statusDetail = r.toleranceBreached
-    ? `Per-event P90: <strong>${fmtCurrency(r.lm.p90)}</strong> > threshold: <strong>${fmtCurrency(r.threshold)}</strong>`
+    ? `Per-event P90 ${fmtCurrency(r.lm.p90)} is above the tolerance threshold of ${fmtCurrency(r.threshold)}.`
     : r.nearTolerance
-      ? `Per-event P90: <strong>${fmtCurrency(r.lm.p90)}</strong> is above warning trigger <strong>${fmtCurrency(r.warningThreshold)}</strong> but below tolerance <strong>${fmtCurrency(r.threshold)}</strong>`
-      : `Per-event P90: <strong>${fmtCurrency(r.lm.p90)}</strong> is below the warning trigger <strong>${fmtCurrency(r.warningThreshold)}</strong>`;
+      ? `Per-event P90 ${fmtCurrency(r.lm.p90)} is above the warning trigger of ${fmtCurrency(r.warningThreshold)} but still below tolerance.`
+      : `Per-event P90 ${fmtCurrency(r.lm.p90)} remains below the warning trigger of ${fmtCurrency(r.warningThreshold)}.`;
   const executiveHeadline = r.toleranceBreached
-    ? `This scenario is currently above the organisation's risk tolerance and should be escalated.`
+    ? `This scenario is above tolerance and needs leadership attention now.`
     : r.nearTolerance
-      ? `This scenario is close to the organisation's risk tolerance and should be actively managed.`
-      : `This scenario is currently within tolerance, but should still be monitored and treated.`;
+      ? `This scenario is close to tolerance and should be actively managed before it escalates.`
+      : `This scenario is within tolerance today, but should stay under active monitoring.`;
   const executiveAction = r.toleranceBreached
-    ? 'Immediate leadership review recommended, with treatment decisions and ownership confirmed.'
+    ? 'Escalate to the accountable executive, confirm an owner, and agree immediate treatment actions.'
     : r.nearTolerance
-      ? 'Management review recommended to reduce exposure before it moves above tolerance.'
-      : 'Routine monitoring is appropriate unless conditions, controls, or external threats materially change.';
+      ? 'Agree targeted reduction actions and management review before the scenario moves above tolerance.'
+      : 'Maintain controls, monitor change signals, and revisit the scenario if threat, exposure, or scope changes.';
   const executiveAnnualView = r.annualReviewTriggered
-    ? `Annual exposure is also material at ${fmtCurrency(r.ale.p90)} on a P90 basis, which is above the annual review trigger.`
-    : `Annual exposure is ${fmtCurrency(r.ale.p90)} on a P90 basis, which is below the annual review trigger.`;
+    ? `Annual exposure is material at ${fmtCurrency(r.ale.p90)} on a severe-but-plausible basis, so it also merits annual leadership review.`
+    : `Annual exposure is ${fmtCurrency(r.ale.p90)} on a severe-but-plausible basis, which stays below the annual review trigger.`;
   const scenarioScopeSummary = r.portfolioMeta?.linked
     ? `${r.selectedRiskCount || assessment.selectedRisks?.length || 1} linked risks are being treated as one connected scenario.`
     : `${r.selectedRiskCount || assessment.selectedRisks?.length || 1} risks are being assessed together without linked uplift.`;
+  const exceedancePct = ((r.toleranceDetail?.lmExceedProb || 0) * 100).toFixed(1);
+  const completedLabel = new Date(assessment.completedAt || Date.now()).toLocaleDateString('en-AE', { year: 'numeric', month: 'long', day: 'numeric' });
+  const scenarioNarrative = assessment.enhancedNarrative || assessment.narrative || assessment.scenarioText || 'No scenario narrative available.';
+  const technicalInputs = r.inputs || assessment.fairParams || {};
+  const recommendationCards = assessment.recommendations?.length ? `
+    <section class="results-section-stack">
+      <div class="results-section-heading">Priority actions</div>
+      <div class="results-recommendations-grid">
+        ${assessment.recommendations.slice(0, 3).map((rec, idx) => `
+          <div class="results-priority-card">
+            <div class="results-priority-index">${idx + 1}</div>
+            <div>
+              <div class="results-priority-title">${rec.title}</div>
+              <div class="results-priority-copy">${rec.why}</div>
+              <div class="results-priority-impact">${rec.impact}</div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </section>` : '';
+
+  const executiveTab = `
+    <section class="results-executive-view" id="results-tab-executive">
+      <div class="results-hero ${statusClass}">
+        <div class="results-hero-main">
+          <div class="results-kicker">Assessment outcome</div>
+          <h2 class="results-hero-title">${executiveHeadline}</h2>
+          <p class="results-hero-copy">${statusDetail} ${executiveAnnualView}</p>
+          <div class="results-hero-tags">
+            <span class="badge ${r.toleranceBreached ? 'badge--danger' : r.nearTolerance ? 'badge--warning' : 'badge--success'}">${statusTitle}</span>
+            <span class="badge badge--neutral">${assessment.buName || 'No business unit'}</span>
+            <span class="badge badge--neutral">${assessment.geography || 'No geography'}</span>
+            <span class="badge badge--neutral">${completedLabel}</span>
+          </div>
+        </div>
+        <div class="results-hero-side">
+          <div class="results-signal-ring ${statusClass}">
+            <div class="results-signal-ring-inner">${statusIcon}</div>
+          </div>
+          <div class="results-signal-label">${exceedancePct}% chance of breaching tolerance</div>
+        </div>
+      </div>
+
+      <div class="results-exec-metrics">
+        <div class="results-impact-card">
+          <div class="results-impact-label">Severe but plausible event</div>
+          <div class="results-impact-value ${r.toleranceBreached ? 'danger' : ''}">${fmtCurrency(r.lm.p90)}</div>
+          <div class="results-impact-copy">A senior leader should read this as the single-event number to compare against tolerance.</div>
+        </div>
+        <div class="results-impact-card">
+          <div class="results-impact-label">Expected annual exposure</div>
+          <div class="results-impact-value">${fmtCurrency(r.ale.mean)}</div>
+          <div class="results-impact-copy">This is the average annual loss implied by the simulation, not the worst case.</div>
+        </div>
+        <div class="results-impact-card">
+          <div class="results-impact-label">Severe annual exposure</div>
+          <div class="results-impact-value warning">${fmtCurrency(r.ale.p90)}</div>
+          <div class="results-impact-copy">Useful for board-style planning, capital allocation, and resilience conversations.</div>
+        </div>
+      </div>
+
+      <div class="results-decision-grid">
+        <div class="results-decision-card">
+          <div class="results-section-heading">What leaders should do now</div>
+          <div class="results-decision-row">
+            <span class="results-decision-label">Immediate action</span>
+            <div class="results-decision-copy">${executiveAction}</div>
+          </div>
+          <div class="results-decision-row">
+            <span class="results-decision-label">Why this matters</span>
+            <div class="results-decision-copy">${scenarioScopeSummary}</div>
+          </div>
+          <div class="results-decision-row">
+            <span class="results-decision-label">Escalation rule</span>
+            <div class="results-decision-copy">${getEffectiveSettings().escalationGuidance}</div>
+          </div>
+        </div>
+        <div class="results-decision-card">
+          <div class="results-section-heading">Threshold view</div>
+          <div class="results-threshold-stack">
+            <div class="results-threshold-row"><span>Warning trigger</span><strong>${fmtCurrency(r.warningThreshold || getWarningThreshold())}</strong></div>
+            <div class="results-threshold-row"><span>Tolerance threshold</span><strong>${fmtCurrency(r.threshold)}</strong></div>
+            <div class="results-threshold-row"><span>Annual review trigger</span><strong>${fmtCurrency(r.annualReviewThreshold || getAnnualReviewThreshold())}</strong></div>
+          </div>
+          <p class="results-threshold-foot">The page is ordered so leaders see the decision threshold first, then the numbers that explain why.</p>
+        </div>
+      </div>
+
+      <div class="results-summary-grid">
+        <div class="results-summary-card results-summary-card--wide">
+          <div class="results-section-heading">Scenario in plain language</div>
+          <p class="results-summary-copy">${scenarioNarrative}</p>
+        </div>
+        <div class="results-summary-card">
+          <div class="results-section-heading">Scenario scope</div>
+          <div class="results-chip-block">
+            ${(assessment.selectedRisks?.length ? assessment.selectedRisks.map(risk => `<span class="badge badge--gold">${risk.title}</span>`).join('') : '<span class="badge badge--neutral">No linked risks selected</span>')}
+          </div>
+          ${(assessment.applicableRegulations?.length ? `<div class="results-chip-block">${assessment.applicableRegulations.map(tag => `<span class="badge badge--neutral">${tag}</span>`).join('')}</div>` : '')}
+        </div>
+      </div>
+
+      ${recommendationCards}
+    </section>`;
+
+  const technicalTab = `
+    <section class="results-technical-view ${activeTab === 'technical' ? '' : 'hidden'}" id="results-tab-technical">
+      ${(assessment.workflowGuidance?.length || assessment.benchmarkBasis || assessment.inputRationale) ? `
+      <div class="grid-2 mb-6 anim-fade-in">
+        ${renderWorkflowGuidanceBlock(assessment.workflowGuidance || [], 'How AI guided this assessment')}
+        ${renderBenchmarkRationaleBlock(assessment.benchmarkBasis, assessment.inputRationale)}
+      </div>` : ''}
+
+      <div class="grid-3 mb-6 anim-fade-in">
+        <div class="metric-card"><div class="metric-label">Typical event cost</div><div class="metric-value">${fmtCurrency(r.lm.p50)}</div><div class="metric-sub">Midpoint single-event view</div></div>
+        <div class="metric-card"><div class="metric-label">Severe event cost</div><div class="metric-value ${r.toleranceBreached ? 'danger' : ''}">${fmtCurrency(r.lm.p90)}</div><div class="metric-sub">Used for tolerance check</div></div>
+        <div class="metric-card"><div class="metric-label">Expected event cost</div><div class="metric-value">${fmtCurrency(r.lm.mean)}</div><div class="metric-sub">Average single-event loss</div></div>
+      </div>
+
+      <div class="grid-3 mb-8 anim-fade-in anim-delay-1">
+        <div class="metric-card"><div class="metric-label">Typical annual exposure</div><div class="metric-value">${fmtCurrency(r.ale.p50)}</div><div class="metric-sub">Midpoint annual view</div></div>
+        <div class="metric-card"><div class="metric-label">Severe annual exposure</div><div class="metric-value warning">${fmtCurrency(r.ale.p90)}</div><div class="metric-sub">Annual severe-but-plausible view</div></div>
+        <div class="metric-card"><div class="metric-label">Expected annual exposure</div><div class="metric-value">${fmtCurrency(r.ale.mean)}</div><div class="metric-sub">Average annual loss</div></div>
+      </div>
+
+      <div class="grid-2 mb-8 anim-fade-in anim-delay-2">
+        <div class="chart-wrap">
+          <div class="chart-title">ALE Distribution</div>
+          <div class="chart-subtitle">Annual Loss Exposure · ${r.iterations.toLocaleString()} iterations · ${AppState.currency}</div>
+          <canvas id="chart-hist"></canvas>
+        </div>
+        <div class="chart-wrap">
+          <div class="chart-title">Loss Exceedance Curve</div>
+          <div class="chart-subtitle">P(Annual Loss &gt; x) · orange line = ${fmtCurrency(r.threshold)} threshold</div>
+          <canvas id="chart-lec"></canvas>
+        </div>
+      </div>
+
+      ${assessment.structuredScenario ? `
+      <div class="card mb-6 anim-fade-in">
+        <h3 style="font-size:var(--text-base);margin-bottom:var(--sp-4)">Scenario Details</h3>
+        <div class="grid-2">
+          ${Object.entries({
+            'Asset / Service': assessment.structuredScenario.assetService,
+            'Threat Community': assessment.structuredScenario.threatCommunity,
+            'Attack Type': assessment.structuredScenario.attackType,
+            'Effect': assessment.structuredScenario.effect
+          }).map(([k, v]) => `<div style="background:var(--bg-elevated);padding:var(--sp-3) var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">${k}</div><div style="font-size:.85rem;color:var(--text-secondary);margin-top:4px">${v || '—'}</div></div>`).join('')}
+        </div>
+      </div>` : ''}
+
+      <div class="card mb-6 anim-fade-in">
+        <h3 style="font-size:var(--text-base);margin-bottom:var(--sp-4)">Simulation context</h3>
+        <div class="grid-3">
+          <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">TEF</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${technicalInputs.tefMin ?? '—'}–${technicalInputs.tefLikely ?? '—'}–${technicalInputs.tefMax ?? '—'}</div><div style="font-size:.7rem;color:var(--text-muted)">events/year</div></div>
+          <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Threat capability</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${technicalInputs.threatCapMin ?? '—'}–${technicalInputs.threatCapLikely ?? '—'}–${technicalInputs.threatCapMax ?? '—'}</div><div style="font-size:.7rem;color:var(--text-muted)">0–1 scale</div></div>
+          <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Control strength</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${technicalInputs.controlStrMin ?? '—'}–${technicalInputs.controlStrLikely ?? '—'}–${technicalInputs.controlStrMax ?? '—'}</div><div style="font-size:.7rem;color:var(--text-muted)">0–1 scale</div></div>
+        </div>
+        <div class="mt-4" style="font-size:.78rem;color:var(--text-muted)">Iterations: <strong>${r.iterations.toLocaleString()}</strong> · Distribution: <strong>${r.distType || assessment.fairParams?.distType || 'triangular'}</strong> · Threshold: <strong>${fmtCurrency(r.threshold)}</strong></div>
+      </div>
+
+      ${assessment.citations?.length ? renderCitationBlock(assessment.citations) : ''}
+
+      ${assessment.recommendations?.length ? `
+      <div class="mb-8 anim-fade-in">
+        <h3 style="font-size:var(--text-xl);margin-bottom:var(--sp-5)">Recommended Risk Treatments</h3>
+        <div style="display:flex;flex-direction:column;gap:var(--sp-4)">
+          ${assessment.recommendations.map((rec, i) => `
+            <div class="rec-card">
+              <div class="flex items-start gap-4">
+                <div class="rec-number">${i + 1}</div>
+                <div style="flex:1">
+                  <div class="rec-title">${rec.title}</div>
+                  <div class="rec-why">${rec.why}</div>
+                  <div class="rec-impact">↑ ${rec.impact}</div>
+                </div>
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
+    </section>`;
+
   setPage(`
     <main class="page">
       <div class="container container--wide" style="padding:var(--sp-8) var(--sp-6)">
         ${sharedBanner}
-        <div class="flex items-center justify-between mb-6 anim-fade-in">
+        <div class="flex items-center justify-between mb-6 anim-fade-in" style="gap:var(--sp-4);flex-wrap:wrap">
           <div>
             <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:4px">Assessment Results</div>
-            <h2 style="font-size:var(--text-2xl)">${assessment.scenarioTitle||'Risk Assessment'}</h2>
-            <div style="font-size:var(--text-sm);color:var(--text-muted);margin-top:4px">${assessment.buName||'—'} · ${assessment.geography||'—'} · ${new Date(assessment.completedAt||Date.now()).toLocaleDateString('en-AE',{year:'numeric',month:'long',day:'numeric'})}</div>
+            <h1 style="font-size:var(--text-3xl)">${assessment.scenarioTitle || 'Risk Assessment'}</h1>
+            <div style="font-size:var(--text-sm);color:var(--text-muted);margin-top:4px">${assessment.buName || '—'} · ${assessment.geography || '—'} · ${completedLabel}</div>
           </div>
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-3" style="flex-wrap:wrap">
             <button class="btn btn--secondary btn--sm" id="btn-share-results">Share</button>
             <button class="btn btn--secondary btn--sm" id="btn-export-json">↓ JSON</button>
             <button class="btn btn--secondary btn--sm" id="btn-export-pptx">↓ PPTX Spec</button>
@@ -3938,143 +4121,13 @@ function renderResults(id, isShared) {
           </div>
         </div>
 
-        <div class="tolerance-banner ${statusClass} mb-6 anim-fade-in">
-          <span class="tolerance-icon">${statusIcon}</span>
-          <div>
-            <div class="tolerance-title">${statusTitle}</div>
-            <div class="tolerance-detail">${statusDetail} &nbsp;·&nbsp; Exceedance: <strong>${(r.toleranceDetail.lmExceedProb*100).toFixed(1)}%</strong></div>
-          </div>
+        <div class="results-tabbar mb-6">
+          <button class="results-tab ${activeTab === 'executive' ? 'active' : ''}" data-results-tab="executive">Executive Summary</button>
+          <button class="results-tab ${activeTab === 'technical' ? 'active' : ''}" data-results-tab="technical">Technical Detail</button>
         </div>
 
-        <div class="grid-2 mb-6 anim-fade-in">
-          <div class="card card--elevated">
-            <div class="context-panel-title">Executive Summary</div>
-            <p class="context-panel-copy">${executiveHeadline}</p>
-            <div style="display:flex;flex-direction:column;gap:var(--sp-3);margin-top:var(--sp-4)">
-              <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)">
-                <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Expected per-event exposure</div>
-                <div style="font-size:var(--text-xl);font-weight:700;color:var(--text-primary);margin-top:6px">${fmtCurrency(r.lm.mean)}</div>
-              </div>
-              <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)">
-                <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Severe but plausible per-event exposure</div>
-                <div style="font-size:var(--text-xl);font-weight:700;color:${r.toleranceBreached ? 'var(--color-danger-400)' : 'var(--text-primary)'};margin-top:6px">${fmtCurrency(r.lm.p90)}</div>
-              </div>
-              <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)">
-                <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Expected annual exposure</div>
-                <div style="font-size:var(--text-xl);font-weight:700;color:var(--text-primary);margin-top:6px">${fmtCurrency(r.ale.mean)}</div>
-              </div>
-            </div>
-          </div>
-          <div class="card card--elevated">
-            <div class="context-panel-title">What Leaders Should Know</div>
-            <div style="display:flex;flex-direction:column;gap:var(--sp-4);margin-top:var(--sp-3)">
-              <div>
-                <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Recommended action</div>
-                <div class="context-panel-copy" style="margin-top:6px">${executiveAction}</div>
-              </div>
-              <div>
-                <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Annual view</div>
-                <div class="context-panel-copy" style="margin-top:6px">${executiveAnnualView}</div>
-              </div>
-              <div>
-                <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Scenario scope</div>
-                <div class="context-panel-copy" style="margin-top:6px">${scenarioScopeSummary}</div>
-              </div>
-              <div>
-                <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Escalation guidance</div>
-                <div class="context-panel-copy" style="margin-top:6px">${getEffectiveSettings().escalationGuidance}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="grid-3 mb-6 anim-fade-in">
-          <div class="metric-card"><div class="metric-label">Warning Trigger</div><div class="metric-value warning">${fmtCurrency(r.warningThreshold || getWarningThreshold())}</div><div class="metric-sub">Amber review trigger for P90 per-event loss</div></div>
-          <div class="metric-card"><div class="metric-label">Tolerance Threshold</div><div class="metric-value ${r.toleranceBreached?'danger':''}">${fmtCurrency(r.threshold)}</div><div class="metric-sub">Red escalation trigger for P90 per-event loss</div></div>
-          <div class="metric-card"><div class="metric-label">Annual Review Trigger</div><div class="metric-value">${fmtCurrency(r.annualReviewThreshold || getAnnualReviewThreshold())}</div><div class="metric-sub">${r.annualReviewTriggered ? 'Triggered by current ALE P90' : 'Not triggered by current ALE P90'}</div></div>
-        </div>
-
-        ${(assessment.selectedRisks?.length || r.selectedRiskCount) ? `
-        <div class="card mb-6 anim-fade-in">
-          <div class="flex items-center justify-between" style="flex-wrap:wrap;gap:var(--sp-3)">
-            <div>
-              <div class="context-panel-title">Scenario Scope</div>
-              <div class="context-panel-copy">${r.portfolioMeta?.linked ? 'Linked risk scenario uplift applied.' : 'Combined multi-risk scenario.'}</div>
-            </div>
-            <div class="badge badge--neutral">${r.selectedRiskCount || assessment.selectedRisks?.length || 1} risk${(r.selectedRiskCount || assessment.selectedRisks?.length || 1) > 1 ? 's' : ''}</div>
-          </div>
-          ${assessment.selectedRisks?.length ? `<div class="citation-chips mt-4">${assessment.selectedRisks.map(risk => `<span class="badge badge--gold">${risk.title}</span>`).join('')}</div>` : ''}
-          ${assessment.applicableRegulations?.length ? `<div class="citation-chips mt-4">${assessment.applicableRegulations.map(tag => `<span class="badge badge--neutral">${tag}</span>`).join('')}</div>` : ''}
-        </div>` : ''}
-
-        ${(assessment.workflowGuidance?.length || assessment.benchmarkBasis || assessment.inputRationale) ? `
-        <div class="grid-2 mb-6 anim-fade-in">
-          ${renderWorkflowGuidanceBlock(assessment.workflowGuidance || [], 'How AI guided this assessment')}
-          ${renderBenchmarkRationaleBlock(assessment.benchmarkBasis, assessment.inputRationale)}
-        </div>` : ''}
-
-        <div class="mb-6">
-          <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:var(--sp-3)">Per-Event Financial Exposure</div>
-          <div class="grid-3 anim-fade-in">
-            <div class="metric-card"><div class="metric-label">Typical event cost</div><div class="metric-value">${fmtCurrency(r.lm.p50)}</div><div class="metric-sub">A midpoint view of what one event may cost</div></div>
-            <div class="metric-card"><div class="metric-label">Severe but plausible event cost</div><div class="metric-value ${r.toleranceBreached?'danger':''}">${fmtCurrency(r.lm.p90)}</div><div class="metric-sub">Used for the tolerance check</div></div>
-            <div class="metric-card"><div class="metric-label">Expected event cost</div><div class="metric-value">${fmtCurrency(r.lm.mean)}</div><div class="metric-sub">Average loss per event across all simulations</div></div>
-          </div>
-        </div>
-        <div class="mb-8">
-          <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:var(--sp-3)">Annual Financial Exposure</div>
-          <div class="grid-3 anim-fade-in anim-delay-1">
-            <div class="metric-card"><div class="metric-label">Typical annual exposure</div><div class="metric-value">${fmtCurrency(r.ale.p50)}</div><div class="metric-sub">A midpoint annual view</div></div>
-            <div class="metric-card"><div class="metric-label">Severe annual exposure</div><div class="metric-value warning">${fmtCurrency(r.ale.p90)}</div><div class="metric-sub">Useful for annual planning and oversight</div></div>
-            <div class="metric-card"><div class="metric-label">Expected annual exposure</div><div class="metric-value">${fmtCurrency(r.ale.mean)}</div><div class="metric-sub">Average annual loss across all simulations</div></div>
-          </div>
-        </div>
-
-        <div class="grid-2 mb-8 anim-fade-in anim-delay-2">
-          <div class="chart-wrap">
-            <div class="chart-title">ALE Distribution</div>
-            <div class="chart-subtitle">Annual Loss Exposure · ${r.iterations.toLocaleString()} iterations · ${AppState.currency}</div>
-            <canvas id="chart-hist"></canvas>
-          </div>
-          <div class="chart-wrap">
-            <div class="chart-title">Loss Exceedance Curve</div>
-            <div class="chart-subtitle">P(Annual Loss &gt; x) · orange line = ${fmtCurrency(r.threshold)} threshold</div>
-            <canvas id="chart-lec"></canvas>
-          </div>
-        </div>
-
-        ${assessment.structuredScenario?`
-        <div class="card mb-6 anim-fade-in">
-          <h3 style="font-size:var(--text-base);margin-bottom:var(--sp-4)">Scenario Details</h3>
-          <div class="grid-2">
-            ${Object.entries({
-              'Asset / Service': assessment.structuredScenario.assetService,
-              'Threat Community': assessment.structuredScenario.threatCommunity,
-              'Attack Type': assessment.structuredScenario.attackType,
-              'Effect': assessment.structuredScenario.effect
-            }).map(([k,v])=>`<div style="background:var(--bg-elevated);padding:var(--sp-3) var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">${k}</div><div style="font-size:.85rem;color:var(--text-secondary);margin-top:4px">${v||'—'}</div></div>`).join('')}
-          </div>
-        </div>`:''}
-
-        ${assessment.citations?.length?renderCitationBlock(assessment.citations):''}
-
-        ${assessment.recommendations?.length?`
-        <div class="mb-8 anim-fade-in">
-          <h3 style="font-size:var(--text-xl);margin-bottom:var(--sp-5)">Recommended Risk Treatments</h3>
-          <div style="display:flex;flex-direction:column;gap:var(--sp-4)">
-            ${assessment.recommendations.map((rec,i)=>`
-              <div class="rec-card">
-                <div class="flex items-start gap-4">
-                  <div class="rec-number">${i+1}</div>
-                  <div style="flex:1">
-                    <div class="rec-title">${rec.title}</div>
-                    <div class="rec-why">${rec.why}</div>
-                    <div class="rec-impact">↑ ${rec.impact}</div>
-                  </div>
-                </div>
-              </div>`).join('')}
-          </div>
-        </div>`:''}
+        <div class="${activeTab === 'executive' ? '' : 'hidden'}" id="results-tab-executive-wrap">${executiveTab}</div>
+        ${technicalTab}
 
         <div class="flex items-center gap-4 mt-8 pt-6" style="border-top:1px solid var(--border-subtle)">
           <a href="#/" class="btn btn--ghost">← Home</a>
@@ -4085,13 +4138,24 @@ function renderResults(id, isShared) {
       </div>
     </main>`);
 
-  requestAnimationFrame(() => {
-    const hc = document.getElementById('chart-hist');
-    const lc = document.getElementById('chart-lec');
-    if (hc) UI.drawHistogram(hc, r.histogram, r.threshold, AppState.currency, AppState.fxRate);
-    if (lc) UI.drawLEC(lc, r.lec, r.threshold, AppState.currency, AppState.fxRate);
-    attachCitationHandlers();
+  function drawTechnicalCharts() {
+    requestAnimationFrame(() => {
+      const hc = document.getElementById('chart-hist');
+      const lc = document.getElementById('chart-lec');
+      if (hc) UI.drawHistogram(hc, r.histogram, r.threshold, AppState.currency, AppState.fxRate);
+      if (lc) UI.drawLEC(lc, r.lec, r.threshold, AppState.currency, AppState.fxRate);
+      attachCitationHandlers();
+    });
+  }
+
+  document.querySelectorAll('[data-results-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      AppState.resultsTab = btn.dataset.resultsTab;
+      renderResults(id, isShared || assessment._shared);
+    });
   });
+  if (activeTab === 'technical') drawTechnicalCharts();
+  else attachCitationHandlers();
   document.getElementById('btn-share-results').addEventListener('click', () => ShareService.copyShareLink(assessment));
   document.getElementById('btn-export-json').addEventListener('click', () => { ExportService.exportJSON(assessment); UI.toast('JSON exported.','success'); });
   document.getElementById('btn-export-pdf').addEventListener('click', () => ExportService.exportPDF(assessment, AppState.currency, AppState.fxRate));
