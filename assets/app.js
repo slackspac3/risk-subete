@@ -7005,27 +7005,26 @@ function renderAdminSettings(activeSection = 'org') {
     }
     button.disabled = true;
     button.textContent = 'Applying…';
-    const currentAccount = getManagedAccountsForAdmin(getAdminSettings()).find(account => account.username === username) || { username, role: 'user', businessUnitEntityId: '', departmentEntityId: '' };
+    const currentSettings = getAdminSettings();
+    const currentAccount = getManagedAccountsForAdmin(currentSettings).find(account => account.username === username) || { username, role: 'user', businessUnitEntityId: '', departmentEntityId: '' };
     const nextSettings = applyManagedAccountAssignmentToSettings(currentAccount, {
       role,
       businessUnitEntityId
-    }, getAdminSettings());
-    saveAdminSettings(nextSettings);
+    }, currentSettings);
     try {
       await AuthService.adminUpdateManagedAccount(username, {
         role,
         businessUnitEntityId,
         departmentEntityId: role === 'bu_admin' ? '' : departmentEntityId
       });
+      saveAdminSettings(nextSettings);
     } catch (error) {
-      if (role !== 'bu_admin') {
-        AppState.adminNewUserStatus = `User update failed: ${error instanceof Error ? error.message : String(error)}`;
-        document.getElementById('admin-new-user-result').textContent = AppState.adminNewUserStatus;
-        UI.toast('User update failed.', 'danger');
-        button.disabled = false;
-        button.textContent = 'Apply Access';
-        return false;
-      }
+      AppState.adminNewUserStatus = `User update failed: ${error instanceof Error ? error.message : String(error)}`;
+      document.getElementById('admin-new-user-result').textContent = AppState.adminNewUserStatus;
+      UI.toast('User update failed.', 'danger');
+      button.disabled = false;
+      button.textContent = 'Apply Access';
+      return false;
     }
     row.dataset.dirty = 'false';
     button.textContent = 'Applied';
