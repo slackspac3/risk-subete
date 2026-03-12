@@ -144,15 +144,21 @@ const UI = (() => {
   // ─── Confirm Dialog ───────────────────────────────────────
   function confirm(message) {
     return new Promise(resolve => {
+      let settled = false;
+      const finish = value => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
       const m = modal({
         title: 'Confirm',
         body: `<p>${message}</p>`,
         footer: `<button class="btn btn--ghost" id="confirm-cancel">Cancel</button>
                  <button class="btn btn--danger" id="confirm-ok">Confirm</button>`,
-        onClose: () => resolve(false)
+        onClose: () => finish(false)
       });
-      document.getElementById('confirm-ok').addEventListener('click', () => { m.close(); resolve(true); });
-      document.getElementById('confirm-cancel').addEventListener('click', () => { m.close(); resolve(false); });
+      document.getElementById('confirm-ok').addEventListener('click', () => { finish(true); m.close(); });
+      document.getElementById('confirm-cancel').addEventListener('click', () => { finish(false); m.close(); });
     });
   }
 
