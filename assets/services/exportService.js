@@ -180,19 +180,19 @@ const ExportService = (() => {
 
       <div class="metric-grid">
         <div class="card">
-          <div class="metric-label">Severe but plausible event</div>
+          <div class="metric-label">If one major event happens</div>
           <div class="metric-value ${r.toleranceBreached ? 'danger' : ''}">${fmt(r.lm.p90)}</div>
-          <div class="metric-copy">The single-event number senior leaders should compare to tolerance.</div>
+          <div class="metric-copy">Think of this as the downside case for one serious incident. This is the number compared against tolerance.</div>
         </div>
         <div class="card">
-          <div class="metric-label">Expected annual exposure</div>
+          <div class="metric-label">Likely yearly impact</div>
           <div class="metric-value">${fmt(r.ale.mean)}</div>
-          <div class="metric-copy">Average annual loss implied by the simulation, not the worst case.</div>
+          <div class="metric-copy">If conditions stay broadly the same, this is the modelled average loss across a year.</div>
         </div>
         <div class="card">
-          <div class="metric-label">Severe annual exposure</div>
+          <div class="metric-label">High-end yearly impact</div>
           <div class="metric-value warning">${fmt(r.ale.p90)}</div>
-          <div class="metric-copy">Useful for board-style planning, resilience, and capital conversations.</div>
+          <div class="metric-copy">Use this as the heavy-stress annual view for planning, resilience, and escalation discussions.</div>
         </div>
       </div>
 

@@ -4129,19 +4129,19 @@ function renderResults(id, isShared) {
 
       <div class="results-exec-metrics">
         <div class="results-impact-card">
-          <div class="results-impact-label">Severe but plausible event</div>
+          <div class="results-impact-label">If one major event happens</div>
           <div class="results-impact-value ${r.toleranceBreached ? 'danger' : ''}">${fmtCurrency(r.lm.p90)}</div>
-          <div class="results-impact-copy">A senior leader should read this as the single-event number to compare against tolerance.</div>
+          <div class="results-impact-copy">Think of this as the downside case for one serious incident. This is the number compared against tolerance.</div>
         </div>
         <div class="results-impact-card">
-          <div class="results-impact-label">Expected annual exposure</div>
+          <div class="results-impact-label">Likely yearly impact</div>
           <div class="results-impact-value">${fmtCurrency(r.ale.mean)}</div>
-          <div class="results-impact-copy">This is the average annual loss implied by the simulation, not the worst case.</div>
+          <div class="results-impact-copy">If conditions stay broadly the same, this is the modelled average loss across a year.</div>
         </div>
         <div class="results-impact-card">
-          <div class="results-impact-label">Severe annual exposure</div>
+          <div class="results-impact-label">High-end yearly impact</div>
           <div class="results-impact-value warning">${fmtCurrency(r.ale.p90)}</div>
-          <div class="results-impact-copy">Useful for board-style planning, capital allocation, and resilience conversations.</div>
+          <div class="results-impact-copy">Use this as the heavy-stress annual view for planning, resilience, and escalation discussions.</div>
         </div>
       </div>
 
