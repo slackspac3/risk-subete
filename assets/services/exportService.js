@@ -12,12 +12,13 @@
  */
 
 const ExportService = (() => {
+  function _getCurrencyPrefix(currency) {
+    return currency === 'AED' ? 'AED ' : '$';
+  }
+
   function _formatCurrency(value, currency, fxRate) {
-    const v = currency === 'AED' ? value * fxRate : value;
-    const suffix = currency === 'AED' ? ' AED' : '';
-    if (v >= 1_000_000) return (currency === 'AED' ? 'AED ' : '$') + (v / 1_000_000).toFixed(2) + 'M' + (currency === 'AED' ? '' : '');
-    if (v >= 1_000)     return (currency === 'AED' ? 'AED ' : '$') + (v / 1_000).toFixed(0) + 'K';
-    return (currency === 'AED' ? 'AED ' : '$') + v.toFixed(0);
+    const displayValue = Math.round(currency === 'AED' ? Number(value || 0) * fxRate : Number(value || 0));
+    return `${_getCurrencyPrefix(currency)}${displayValue.toLocaleString(currency === 'AED' ? 'en-AE' : 'en-US')}`;
   }
 
   function _cleanExecutiveNarrativeText(value) {

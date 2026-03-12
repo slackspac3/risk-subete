@@ -167,6 +167,11 @@ const UI = (() => {
     });
   }
 
+
+  function _getCurrencyPrefix(currency) {
+    return currency === 'AED' ? 'AED ' : '$';
+  }
+
   // ─── Chart: Histogram ────────────────────────────────────
   function drawHistogram(canvas, bins, threshold, currency = 'USD', fxRate = 3.6725) {
     const ctx = canvas.getContext('2d');
@@ -327,7 +332,7 @@ const UI = (() => {
       ctx.setLineDash([]);
       ctx.fillStyle = 'rgba(245,158,11,0.9)';
       ctx.font = '10px DM Sans, sans-serif'; ctx.textAlign = 'left';
-      ctx.fillText('$5M Threshold', thrX + 4, pad.top + 14);
+      ctx.fillText(`${_fmtShort(thr, currency)} threshold`, thrX + 4, pad.top + 14);
     }
 
     // X axis labels
@@ -361,10 +366,8 @@ const UI = (() => {
   }
 
   function _fmtShort(v, currency) {
-    const sym = currency === 'AED' ? 'AED ' : '$';
-    if (v >= 1_000_000) return sym + (v / 1_000_000).toFixed(1) + 'M';
-    if (v >= 1_000)     return sym + (v / 1_000).toFixed(0) + 'K';
-    return sym + v.toFixed(0);
+    const displayValue = Math.round(Number(v || 0));
+    return `${_getCurrencyPrefix(currency)}${displayValue.toLocaleString(currency === 'AED' ? 'en-AE' : 'en-US')}`;
   }
 
   return { toast, modal, citationModal, renderStepper, skeletonBlock, skeletonCard, tagInput, confirm, drawHistogram, drawLEC };

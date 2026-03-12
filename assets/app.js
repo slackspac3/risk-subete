@@ -2054,17 +2054,9 @@ function saveSessionLLMConfig(config) {
   sessionStorage.setItem(buildUserStorageKey(SESSION_LLM_STORAGE_PREFIX), JSON.stringify(config));
 }
 
-function fmtCurrency(usdValue) {
-  if (AppState.currency === 'AED') {
-    const v = usdValue * AppState.fxRate;
-    if (v >= 1_000_000) return 'AED ' + (v / 1_000_000).toFixed(2) + 'M';
-    if (v >= 1_000) return 'AED ' + (v / 1_000).toFixed(0) + 'K';
-    return 'AED ' + v.toFixed(0);
-  }
-  const v = usdValue;
-  if (v >= 1_000_000) return '$' + (v / 1_000_000).toFixed(2) + 'M';
-  if (v >= 1_000) return '$' + (v / 1_000).toFixed(0) + 'K';
-  return '$' + v.toFixed(0);
+function fmtCurrency(usdValue, currency = AppState.currency, fxRate = AppState.fxRate) {
+  const displayValue = Math.round(currency === 'AED' ? Number(usdValue || 0) * fxRate : Number(usdValue || 0));
+  return `${getCurrencyPrefix(currency)}${displayValue.toLocaleString(currency === 'AED' ? 'en-AE' : 'en-US')}`;
 }
 
 function parseFlexibleNumber(value) {
@@ -4093,7 +4085,7 @@ function renderWizard3() {
   const da = bu?.defaultAssumptions || {};
   const isAdv = AppState.mode === 'advanced';
   const cur = AppState.currency;
-  const sym = cur === 'AED' ? 'AED' : 'USD $';
+  const sym = cur;
   const baselineAssessment = draft.comparisonBaselineId ? getAssessmentById(draft.comparisonBaselineId) : null;
 
   const v = (key, def) => p[key] != null ? p[key] : def;
