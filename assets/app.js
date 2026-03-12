@@ -53,7 +53,9 @@ const AppState = {
   settingsSectionState: {},
   settingsScrollState: {},
   adminSettingsCache: null,
-  userStateCache: { username: '', userSettings: null, assessments: null, learningStore: null, draft: null },
+  userStateCache: { username: '', userSettings: null, assessments: null, learningStore: null, draft: null, _meta: { revision: 0, updatedAt: 0 } },
+  userStateSyncTimer: null,
+  userStateSyncRevision: 0,
   auditLogCache: { loaded: false, loading: false, entries: [], summary: null, error: '' }
 };
 
@@ -240,7 +242,11 @@ async function loadSharedUserState(username = AuthService.getCurrentUser()?.user
       userSettings: state.userSettings || null,
       assessments: Array.isArray(state.assessments) ? state.assessments : [],
       learningStore: state.learningStore && typeof state.learningStore === 'object' ? state.learningStore : { templates: {} },
-      draft: state.draft && typeof state.draft === 'object' ? state.draft : null
+      draft: state.draft && typeof state.draft === 'object' ? state.draft : null,
+      _meta: {
+        revision: Number(state._meta?.revision || 0),
+        updatedAt: Number(state._meta?.updatedAt || 0)
+      }
     };
     if (state.userSettings) {
       localStorage.setItem(buildUserStorageKey(USER_SETTINGS_STORAGE_PREFIX, safeUsername), JSON.stringify(state.userSettings));
@@ -258,19 +264,26 @@ async function loadSharedUserState(username = AuthService.getCurrentUser()?.user
 function queueSharedUserStateSync(username = AuthService.getCurrentUser()?.username || '') {
   const safeUsername = String(username || '').trim().toLowerCase();
   if (!safeUsername) return;
-  const payload = {
-    userSettings: AppState.userStateCache.userSettings,
-    assessments: Array.isArray(AppState.userStateCache.assessments) ? AppState.userStateCache.assessments : [],
-    learningStore: AppState.userStateCache.learningStore && typeof AppState.userStateCache.learningStore === 'object' ? AppState.userStateCache.learningStore : { templates: {} },
-    draft: AppState.userStateCache.draft && typeof AppState.userStateCache.draft === 'object' ? AppState.userStateCache.draft : null
-  };
-  requestUserState('PUT', safeUsername, payload).catch(error => console.warn('queueSharedUserStateSync failed:', error.message));
+  if (AppState.userStateSyncTimer) clearTimeout(AppState.userStateSyncTimer);
+  const revision = ++AppState.userStateSyncRevision;
+  const updatedAt = Date.now();
+  AppState.userStateCache._meta = { revision, updatedAt };
+  AppState.userStateSyncTimer = setTimeout(() => {
+    const payload = {
+      userSettings: AppState.userStateCache.userSettings,
+      assessments: Array.isArray(AppState.userStateCache.assessments) ? AppState.userStateCache.assessments : [],
+      learningStore: AppState.userStateCache.learningStore && typeof AppState.userStateCache.learningStore === 'object' ? AppState.userStateCache.learningStore : { templates: {} },
+      draft: AppState.userStateCache.draft && typeof AppState.userStateCache.draft === 'object' ? AppState.userStateCache.draft : null,
+      _meta: { revision, updatedAt }
+    };
+    requestUserState('PUT', safeUsername, payload).catch(error => console.warn('queueSharedUserStateSync failed:', error.message));
+  }, 250);
 }
 
 function ensureUserStateCache(username = AuthService.getCurrentUser()?.username || '') {
   const safeUsername = String(username || '').trim().toLowerCase();
   if (!safeUsername) {
-    return { username: '', userSettings: null, assessments: [], learningStore: { templates: {} }, draft: null };
+    return { username: '', userSettings: null, assessments: [], learningStore: { templates: {} }, draft: null, _meta: { revision: 0, updatedAt: 0 } };
   }
   if (AppState.userStateCache.username !== safeUsername) {
     AppState.userStateCache = {
@@ -278,7 +291,8 @@ function ensureUserStateCache(username = AuthService.getCurrentUser()?.username 
       userSettings: null,
       assessments: null,
       learningStore: null,
-      draft: null
+      draft: null,
+      _meta: { revision: 0, updatedAt: 0 }
     };
   }
   return AppState.userStateCache;
@@ -407,7 +421,7 @@ function clearUserPersistentState(username) {
   sessionStorage.removeItem(buildUserStorageKey(DRAFT_STORAGE_PREFIX, safeUsername));
   sessionStorage.removeItem(buildUserStorageKey(SESSION_LLM_STORAGE_PREFIX, safeUsername));
   if (AppState.userStateCache.username === safeUsername) {
-    AppState.userStateCache = { username: safeUsername, userSettings: null, assessments: [], learningStore: { templates: {} }, draft: null };
+    AppState.userStateCache = { username: safeUsername, userSettings: null, assessments: [], learningStore: { templates: {} }, draft: null, _meta: { revision: 0, updatedAt: 0 } };
   }
   requestUserState('PUT', safeUsername, { userSettings: null, assessments: [], learningStore: { templates: {} }, draft: null }, { category: 'user_admin', eventType: 'user_state_reset', target: safeUsername }).catch(error => console.warn('clearUserPersistentState sync failed:', error.message));
 }

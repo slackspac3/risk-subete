@@ -37,7 +37,11 @@ function normaliseState(state = {}) {
     userSettings: state.userSettings && typeof state.userSettings === 'object' ? state.userSettings : null,
     assessments: Array.isArray(state.assessments) ? state.assessments : [],
     learningStore: state.learningStore && typeof state.learningStore === 'object' ? state.learningStore : { templates: {} },
-    draft: state.draft && typeof state.draft === 'object' ? state.draft : null
+    draft: state.draft && typeof state.draft === 'object' ? state.draft : null,
+    _meta: {
+      revision: Number(state._meta?.revision || 0),
+      updatedAt: Number(state._meta?.updatedAt || 0)
+    }
   };
 }
 
@@ -54,6 +58,14 @@ async function readUserState(username) {
 
 async function writeUserState(username, state) {
   const next = normaliseState(state);
+  const current = await readUserState(username);
+  const currentUpdatedAt = Number(current._meta?.updatedAt || 0);
+  const nextUpdatedAt = Number(next._meta?.updatedAt || 0);
+  const currentRevision = Number(current._meta?.revision || 0);
+  const nextRevision = Number(next._meta?.revision || 0);
+  if (currentUpdatedAt > nextUpdatedAt || (currentUpdatedAt === nextUpdatedAt && currentRevision > nextRevision)) {
+    return current;
+  }
   await runKvCommand(['SET', buildStateKey(username), JSON.stringify(next)]);
   return next;
 }
