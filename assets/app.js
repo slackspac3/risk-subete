@@ -3276,7 +3276,6 @@ function renderWizard2() {
             <p style="text-align:center;font-size:.75rem;color:var(--text-muted);margin-top:8px">Retrieves relevant internal docs and uses AI to suggest FAIR inputs with citations.</p>
           </div>
           <div id="llm-output-area"></div>
-          ${draft.llmAssisted && draft.citations?.length ? renderCitationBlock(draft.citations) : ''}
         </div>
         <div class="wizard-footer">
           <button class="btn btn--ghost" id="btn-back-2">← Back</button>
