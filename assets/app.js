@@ -199,66 +199,189 @@ function buildAdminImpactAssessment(currentSettings = DEFAULT_ADMIN_SETTINGS, ne
   const nextEntities = getCompanyEntities(nextStructure);
   const currentDepartments = currentStructure.filter(node => isDepartmentEntityType(node.type));
   const nextDepartments = nextStructure.filter(node => isDepartmentEntityType(node.type));
+  const currentEntityMap = new Map(currentEntities.map(item => [item.id, item]));
+  const nextEntityMap = new Map(nextEntities.map(item => [item.id, item]));
+  const currentDepartmentMap = new Map(currentDepartments.map(item => [item.id, item]));
+  const nextDepartmentMap = new Map(nextDepartments.map(item => [item.id, item]));
   const nextEntityIds = new Set(nextEntities.map(item => item.id));
   const nextDepartmentIds = new Set(nextDepartments.map(item => item.id));
+  const currentLayers = Array.isArray(currentSettings.entityContextLayers) ? currentSettings.entityContextLayers : [];
+  const nextLayers = Array.isArray(nextSettings.entityContextLayers) ? nextSettings.entityContextLayers : [];
   const managedAccounts = getManagedAccountsForAdmin(nextSettings);
+  const truncateNames = list => list.slice(0, 3).join(', ') + (list.length > 3 ? ` +${list.length - 3} more` : '');
 
   const removedEntities = currentEntities.filter(item => !nextEntityIds.has(item.id));
   const removedDepartments = currentDepartments.filter(item => !nextDepartmentIds.has(item.id));
   if (removedEntities.length) {
-    impacts.push({ severity: 'high', title: 'Businesses removed from the organisation structure', detail: `${removedEntities.length} business unit${removedEntities.length === 1 ? '' : 's'} will disappear from user selection and inherited context.` });
+    impacts.push({
+      severity: 'high',
+      title: 'Businesses will disappear from the organisation tree',
+      detail: `${removedEntities.length} business unit${removedEntities.length === 1 ? '' : 's'} will no longer be available to users, including ${truncateNames(removedEntities.map(item => item.name || 'Unnamed business'))}.`
+    });
   }
   if (removedDepartments.length) {
-    impacts.push({ severity: 'high', title: 'Functions or departments removed', detail: `${removedDepartments.length} function${removedDepartments.length === 1 ? '' : 's'} will no longer be available to assigned users.` });
+    impacts.push({
+      severity: 'high',
+      title: 'Functions or departments will be removed',
+      detail: `${removedDepartments.length} function${removedDepartments.length === 1 ? '' : 's'} will disappear from user selection, including ${truncateNames(removedDepartments.map(item => item.name || 'Unnamed function'))}.`
+    });
+  }
+
+  const renamedEntities = nextEntities.filter(item => currentEntityMap.has(item.id) && String(currentEntityMap.get(item.id)?.name || '').trim() !== String(item.name || '').trim());
+  if (renamedEntities.length) {
+    impacts.push({
+      severity: 'medium',
+      title: 'Business-unit labels will change for users',
+      detail: `${renamedEntities.length} business unit${renamedEntities.length === 1 ? '' : 's'} were renamed, which will change dashboard labels, assignments, and saved-context references.`
+    });
+  }
+  const renamedDepartments = nextDepartments.filter(item => currentDepartmentMap.has(item.id) && String(currentDepartmentMap.get(item.id)?.name || '').trim() !== String(item.name || '').trim());
+  if (renamedDepartments.length) {
+    impacts.push({
+      severity: 'medium',
+      title: 'Function labels will change for users',
+      detail: `${renamedDepartments.length} function${renamedDepartments.length === 1 ? '' : 's'} were renamed, which will change how saved assignments and reports appear to end users.`
+    });
+  }
+
+  const reparentedDepartments = nextDepartments.filter(item => {
+    const current = currentDepartmentMap.get(item.id);
+    return current && String(current.parentId || '') !== String(item.parentId || '');
+  });
+  if (reparentedDepartments.length) {
+    impacts.push({
+      severity: 'high',
+      title: 'Functions will move to different business units',
+      detail: `${reparentedDepartments.length} function${reparentedDepartments.length === 1 ? '' : 's'} are being moved under a different BU, which can break user assignment and inherited context.`
+    });
   }
 
   const orphanedUsers = managedAccounts.filter(account => account.businessUnitEntityId && !nextEntityIds.has(account.businessUnitEntityId));
   if (orphanedUsers.length) {
-    impacts.push({ severity: 'high', title: 'Users would lose their BU assignment', detail: `${orphanedUsers.length} managed user${orphanedUsers.length === 1 ? '' : 's'} are assigned to business units that no longer exist.` });
+    impacts.push({
+      severity: 'high',
+      title: 'Some users would lose their BU assignment',
+      detail: `${orphanedUsers.length} managed user${orphanedUsers.length === 1 ? '' : 's'} would no longer map to a valid business unit, including ${truncateNames(orphanedUsers.map(account => account.displayName || account.username))}.`
+    });
   }
   const orphanedFunctions = managedAccounts.filter(account => account.departmentEntityId && !nextDepartmentIds.has(account.departmentEntityId));
   if (orphanedFunctions.length) {
-    impacts.push({ severity: 'high', title: 'Users would lose their function assignment', detail: `${orphanedFunctions.length} managed user${orphanedFunctions.length === 1 ? '' : 's'} are assigned to functions that no longer exist.` });
+    impacts.push({
+      severity: 'high',
+      title: 'Some users would lose their function assignment',
+      detail: `${orphanedFunctions.length} managed user${orphanedFunctions.length === 1 ? '' : 's'} would no longer map to a valid function, including ${truncateNames(orphanedFunctions.map(account => account.displayName || account.username))}.`
+    });
+  }
+  const mismatchedAssignments = managedAccounts.filter(account => {
+    if (!account.businessUnitEntityId || !account.departmentEntityId) return false;
+    const department = nextDepartmentMap.get(account.departmentEntityId);
+    return !!department && String(department.parentId || '') !== String(account.businessUnitEntityId || '');
+  });
+  if (mismatchedAssignments.length) {
+    impacts.push({
+      severity: 'high',
+      title: 'Some user assignments would no longer make sense',
+      detail: `${mismatchedAssignments.length} managed user${mismatchedAssignments.length === 1 ? '' : 's'} would point to a function that sits under a different BU than the one assigned.`
+    });
+  }
+  const displacedBuAdmins = managedAccounts.filter(account => account.role === 'bu_admin' && account.businessUnitEntityId && !nextEntityIds.has(account.businessUnitEntityId));
+  if (displacedBuAdmins.length) {
+    impacts.push({
+      severity: 'high',
+      title: 'BU admin ownership would be removed',
+      detail: `${displacedBuAdmins.length} BU admin assignment${displacedBuAdmins.length === 1 ? '' : 's'} would be left without a valid managed business unit.`
+    });
+  }
+
+  const currentLayerIds = new Set(currentLayers.map(item => item.entityId));
+  const nextLayerIds = new Set(nextLayers.map(item => item.entityId));
+  const removedLayers = currentLayers.filter(item => !nextLayerIds.has(item.entityId));
+  if (removedLayers.length) {
+    impacts.push({
+      severity: 'medium',
+      title: 'Some retained context layers will be removed',
+      detail: `${removedLayers.length} saved entity or function context layer${removedLayers.length === 1 ? '' : 's'} will stop shaping user guidance and AI outputs.`
+    });
+  }
+  const addedLayers = nextLayers.filter(item => !currentLayerIds.has(item.entityId));
+  if (addedLayers.length) {
+    impacts.push({
+      severity: 'low',
+      title: 'New retained context will shape future user outputs',
+      detail: `${addedLayers.length} new context layer${addedLayers.length === 1 ? '' : 's'} will start influencing AI suggestions, summaries, and inherited context.`
+    });
   }
 
   if ((currentSettings.geography || '') !== (nextSettings.geography || '')) {
-    impacts.push({ severity: 'medium', title: 'Default geography will change', detail: `New users and fallback regulatory context will shift from ${currentSettings.geography || 'unset'} to ${nextSettings.geography || 'unset'}.` });
+    impacts.push({
+      severity: 'medium',
+      title: 'Default geography will change',
+      detail: `Fallback geography will move from ${currentSettings.geography || 'unset'} to ${nextSettings.geography || 'unset'}, which changes default regional context for new or reset users.`
+    });
   }
   if (!!currentSettings.defaultLinkMode !== !!nextSettings.defaultLinkMode) {
-    impacts.push({ severity: 'medium', title: 'Default linked-risk behaviour will change', detail: `New assessments will default to linked-risk mode being ${nextSettings.defaultLinkMode ? 'enabled' : 'disabled'}.` });
+    impacts.push({
+      severity: 'medium',
+      title: 'Default linked-risk behaviour will change',
+      detail: `New assessments will start with linked-risk mode ${nextSettings.defaultLinkMode ? 'enabled' : 'disabled'}, which changes how users see related-risk analysis by default.`
+    });
   }
   if (Number(currentSettings.warningThresholdUsd || 0) !== Number(nextSettings.warningThresholdUsd || 0) || Number(currentSettings.toleranceThresholdUsd || 0) !== Number(nextSettings.toleranceThresholdUsd || 0) || Number(currentSettings.annualReviewThresholdUsd || 0) !== Number(nextSettings.annualReviewThresholdUsd || 0)) {
-    impacts.push({ severity: 'medium', title: 'Risk thresholds will change', detail: 'Assessment flags, escalation signals, and annual review triggers will shift for new and reopened scenarios.' });
+    impacts.push({
+      severity: 'medium',
+      title: 'Assessment thresholds will change',
+      detail: 'Warning, tolerance, and annual review signals may shift for new, reopened, and compared scenarios.'
+    });
   }
 
   const currentRegs = Array.isArray(currentSettings.applicableRegulations) ? currentSettings.applicableRegulations : [];
   const nextRegs = Array.isArray(nextSettings.applicableRegulations) ? nextSettings.applicableRegulations : [];
   if (JSON.stringify(currentRegs) !== JSON.stringify(nextRegs)) {
-    impacts.push({ severity: 'medium', title: 'Fallback regulations will change', detail: `Shared regulatory guidance changed from ${currentRegs.length} to ${nextRegs.length} fallback tags.` });
+    impacts.push({
+      severity: 'medium',
+      title: 'Fallback regulations will change',
+      detail: `Default regulatory guidance changed from ${currentRegs.length} to ${nextRegs.length} tags, which can alter how users see compliance context in assessments.`
+    });
   }
   if ((currentSettings.aiInstructions || '') !== (nextSettings.aiInstructions || '') || (currentSettings.benchmarkStrategy || '') !== (nextSettings.benchmarkStrategy || '')) {
-    impacts.push({ severity: 'low', title: 'AI guidance will change', detail: 'New AI-assisted outputs may read differently for both admin and end users.' });
+    impacts.push({
+      severity: 'low',
+      title: 'AI guidance will change',
+      detail: 'Future AI-assisted drafts, explanations, and benchmark framing may read differently for users.'
+    });
   }
   if ((currentSettings.riskAppetiteStatement || '') !== (nextSettings.riskAppetiteStatement || '') || (currentSettings.escalationGuidance || '') !== (nextSettings.escalationGuidance || '')) {
-    impacts.push({ severity: 'low', title: 'Leadership guidance text will change', detail: 'Executive summaries and escalation wording will reflect the new governance guidance.' });
+    impacts.push({
+      severity: 'low',
+      title: 'Leadership guidance will change',
+      detail: 'Executive summaries, escalation prompts, and results guidance will pick up the new governance wording.'
+    });
   }
+
+  const counts = {
+    high: impacts.filter(item => item.severity === 'high').length,
+    medium: impacts.filter(item => item.severity === 'medium').length,
+    low: impacts.filter(item => item.severity === 'low').length
+  };
+  const severity = counts.high ? 'high' : counts.medium ? 'medium' : counts.low ? 'low' : 'none';
+  const summary = !impacts.length
+    ? 'No material end-user impact is currently detected.'
+    : `${impacts.length} downstream change${impacts.length === 1 ? '' : 's'} detected for end users.`;
 
   return {
     impacts,
-    counts: {
-      high: impacts.filter(item => item.severity === 'high').length,
-      medium: impacts.filter(item => item.severity === 'medium').length,
-      low: impacts.filter(item => item.severity === 'low').length
-    }
+    counts,
+    severity,
+    summary
   };
 }
 
 function renderAdminImpactAssessment(assessment) {
   const items = Array.isArray(assessment?.impacts) ? assessment.impacts : [];
   if (!items.length) {
-    return `<div class="card" style="padding:var(--sp-4);background:var(--bg-canvas)"><div class="context-panel-title">End-user impact review</div><div class="form-help" style="margin-top:8px">No material end-user impact is currently detected from these admin changes.</div></div>`;
+    return `<div class="card" style="padding:var(--sp-4);background:var(--bg-canvas)"><div class="context-panel-title">End-user impact review</div><div class="form-help" style="margin-top:8px">${assessment?.summary || 'No material end-user impact is currently detected from these admin changes.'}</div></div>`;
   }
-  return `<div class="card" style="padding:var(--sp-4);background:var(--bg-canvas)"><div class="context-panel-title">End-user impact review</div><div class="citation-chips" style="margin-top:10px"><span class="badge badge--danger">High ${assessment.counts.high}</span><span class="badge badge--warning">Medium ${assessment.counts.medium}</span><span class="badge badge--neutral">Low ${assessment.counts.low}</span></div><div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">${items.slice(0, 6).map(item => `<div style="background:var(--bg-elevated);padding:var(--sp-3);border-radius:var(--radius-lg)"><div style="font-weight:600;color:var(--text-primary)">${item.title}</div><div class="form-help" style="margin-top:6px">${item.detail}</div></div>`).join('')}</div></div>`;
+  return `<div class="card" style="padding:var(--sp-4);background:var(--bg-canvas)"><div class="context-panel-title">End-user impact review</div><div class="form-help" style="margin-top:8px">${assessment.summary}</div><div class="citation-chips" style="margin-top:10px"><span class="badge badge--danger">High ${assessment.counts.high}</span><span class="badge badge--warning">Medium ${assessment.counts.medium}</span><span class="badge badge--neutral">Low ${assessment.counts.low}</span></div><div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">${items.slice(0, 8).map(item => `<div style="background:var(--bg-elevated);padding:var(--sp-3);border-radius:var(--radius-lg)"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="badge badge--${item.severity === 'high' ? 'danger' : item.severity === 'medium' ? 'warning' : 'neutral'}">${item.severity}</span><div style="font-weight:600;color:var(--text-primary)">${item.title}</div></div><div class="form-help" style="margin-top:6px">${item.detail}</div></div>`).join('')}</div></div>`;
 }
 
 async function performLogout({ renderLoginScreen = false } = {}) {
@@ -7154,8 +7277,10 @@ function renderAdminSettings(activeSection = 'org') {
       return;
     }
     const impactAssessment = assessAdminSettingsImpact();
-    if (impactAssessment.counts.high) {
-      const proceed = await UI.confirm(`These admin changes show ${impactAssessment.counts.high} high-impact issue${impactAssessment.counts.high === 1 ? '' : 's'} for end users. Save anyway?`);
+    if (impactAssessment.counts.high || impactAssessment.counts.medium >= 3) {
+      const topItems = impactAssessment.impacts.slice(0, 3).map(item => `- ${item.title}`).join('\n');
+      const proceed = await UI.confirm(`Review before saving:
+${topItems}${impactAssessment.impacts.length > 3 ? `\n- +${impactAssessment.impacts.length - 3} more` : ''}\n\nSave these admin changes anyway?`);
       if (!proceed) return;
     }
     const accessSaved = await applyPendingManagedAccountChanges();
