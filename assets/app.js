@@ -14,6 +14,21 @@ const ASSESSMENTS_STORAGE_PREFIX = 'rq_assessments';
 const LEARNING_STORAGE_PREFIX = 'rq_learning_store';
 const DRAFT_STORAGE_PREFIX = 'rq_draft';
 const SESSION_LLM_STORAGE_PREFIX = 'rq_llm_session';
+const DEFAULT_TYPICAL_DEPARTMENTS = [
+  'Information Security',
+  'Technology',
+  'Operations',
+  'Finance',
+  'Procurement',
+  'Legal',
+  'Risk & Compliance',
+  'Human Resources',
+  'Internal Audit',
+  'Data & AI',
+  'Commercial',
+  'Shared Services'
+];
+
 const DEFAULT_ADMIN_SETTINGS = {
   geography: 'United Arab Emirates',
   companyWebsiteUrl: '',
@@ -30,7 +45,8 @@ const DEFAULT_ADMIN_SETTINGS = {
   warningThresholdUsd: 3_000_000,
   annualReviewThresholdUsd: 12_000_000,
   adminContextSummary: 'Use this workspace to maintain geography, regulations, thresholds, and AI guidance for the platform.',
-  escalationGuidance: 'Escalate to leadership when the scenario is above tolerance, close to tolerance, or materially affects regulated services.'
+  escalationGuidance: 'Escalate to leadership when the scenario is above tolerance, close to tolerance, or materially affects regulated services.',
+  typicalDepartments: [...DEFAULT_TYPICAL_DEPARTMENTS]
 };
 
 
@@ -348,6 +364,15 @@ function buildAdminImpactAssessment(currentSettings = DEFAULT_ADMIN_SETTINGS, ne
       severity: 'low',
       title: 'AI guidance will change',
       detail: 'Future AI-assisted drafts, explanations, and benchmark framing may read differently for users.'
+    });
+  }
+  const currentTypicalDepartments = getTypicalDepartments(currentSettings);
+  const nextTypicalDepartments = getTypicalDepartments(nextSettings);
+  if (JSON.stringify(currentTypicalDepartments) !== JSON.stringify(nextTypicalDepartments)) {
+    impacts.push({
+      severity: 'low',
+      title: 'Suggested department options will change',
+      detail: 'Admins and BU admins will see a different suggested department list when creating new functions or departments.'
     });
   }
   if ((currentSettings.riskAppetiteStatement || '') !== (nextSettings.riskAppetiteStatement || '') || (currentSettings.escalationGuidance || '') !== (nextSettings.escalationGuidance || '')) {
@@ -704,20 +729,14 @@ const DEPARTMENT_RELATIONSHIP_TYPES = [
   'Hybrid'
 ];
 
-const TYPICAL_DEPARTMENTS = [
-  'Information Security',
-  'Technology',
-  'Operations',
-  'Finance',
-  'Procurement',
-  'Legal',
-  'Risk & Compliance',
-  'Human Resources',
-  'Internal Audit',
-  'Data & AI',
-  'Commercial',
-  'Shared Services'
-];
+const TYPICAL_DEPARTMENTS = [...DEFAULT_TYPICAL_DEPARTMENTS];
+
+function getTypicalDepartments(settings = getAdminSettings()) {
+  if (Array.isArray(settings.typicalDepartments) && settings.typicalDepartments.length) {
+    return settings.typicalDepartments.map(name => String(name || '').trim()).filter(Boolean);
+  }
+  return [...DEFAULT_TYPICAL_DEPARTMENTS];
+}
 
 function getStoredBUOverrides() {
   const settings = getAdminSettings();
@@ -1621,7 +1640,7 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
         <label class="form-label" for="org-department-template">Typical Department</label>
         <select class="form-select" id="org-department-template">
           <option value="">Choose a typical department or keep a custom name</option>
-          ${TYPICAL_DEPARTMENTS.map(name => `<option value="${name}" ${name === defaultDepartmentHint ? 'selected' : ''}>${name}</option>`).join('')}
+          ${getTypicalDepartments().map(name => `<option value="${name}" ${name === defaultDepartmentHint ? 'selected' : ''}>${name}</option>`).join('')}
         </select>
         <span class="form-help">This helps standardise department naming, but you can still use your own wording.</span>
       </div>
@@ -6647,6 +6666,11 @@ function renderAdminSettings(activeSection = 'org') {
       <div class="tag-input-wrap" id="ti-admin-regulations"></div>
     </div>
     <div class="form-group mt-4">
+      <label class="form-label">Typical Departments</label>
+      <div class="tag-input-wrap" id="ti-admin-typical-departments"></div>
+      <span class="form-help">These appear as suggested department names when BU admins or global admin add a new function or department.</span>
+    </div>
+    <div class="form-group mt-4">
       <label class="form-label" for="admin-ai-instructions">AI Guidance</label>
       <textarea class="form-textarea" id="admin-ai-instructions" rows="3">${settings.aiInstructions}</textarea>
     </div>
@@ -6910,6 +6934,8 @@ function renderAdminSettings(activeSection = 'org') {
   }
   const regsHost = document.getElementById('ti-admin-regulations');
   const regsInput = regsHost ? UI.tagInput('ti-admin-regulations', settings.applicableRegulations) : null;
+  const typicalDepartmentsHost = document.getElementById('ti-admin-typical-departments');
+  const typicalDepartmentsInput = typicalDepartmentsHost ? UI.tagInput('ti-admin-typical-departments', getTypicalDepartments(settings)) : null;
   const structureSummaryEl = document.getElementById('admin-company-structure-summary');
   const layerSummaryEl = document.getElementById('admin-layer-summary-list');
   const profileEl = document.getElementById('admin-company-profile');
@@ -7174,6 +7200,7 @@ function renderAdminSettings(activeSection = 'org') {
         annualReviewThresholdUsd,
         riskAppetiteStatement: getInputValue('admin-appetite', currentSettings.riskAppetiteStatement || DEFAULT_ADMIN_SETTINGS.riskAppetiteStatement) || DEFAULT_ADMIN_SETTINGS.riskAppetiteStatement,
         applicableRegulations: regsInput?.getTags ? regsInput.getTags() : (Array.isArray(currentSettings.applicableRegulations) ? currentSettings.applicableRegulations : [...DEFAULT_ADMIN_SETTINGS.applicableRegulations]),
+        typicalDepartments: typicalDepartmentsInput?.getTags ? typicalDepartmentsInput.getTags() : getTypicalDepartments(currentSettings),
         aiInstructions: getInputValue('admin-ai-instructions', currentSettings.aiInstructions || ''),
         benchmarkStrategy: getInputValue('admin-benchmark-strategy', currentSettings.benchmarkStrategy || DEFAULT_ADMIN_SETTINGS.benchmarkStrategy) || DEFAULT_ADMIN_SETTINGS.benchmarkStrategy,
         adminContextSummary: getInputValue('admin-context-summary', currentSettings.adminContextSummary || DEFAULT_ADMIN_SETTINGS.adminContextSummary) || DEFAULT_ADMIN_SETTINGS.adminContextSummary,
