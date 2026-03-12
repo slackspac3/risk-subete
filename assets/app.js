@@ -4478,8 +4478,8 @@ function renderResults(id, isShared) {
       ? 'Agree targeted reduction actions and management review before the scenario moves above tolerance.'
       : 'Maintain controls, monitor change signals, and revisit the scenario if threat, exposure, or scope changes.';
   const executiveAnnualView = r.annualReviewTriggered
-    ? `Annual exposure is material at ${fmtCurrency(r.ale.p90)} on a severe-but-plausible basis, so it also merits annual leadership review.`
-    : `Annual exposure is ${fmtCurrency(r.ale.p90)} on a severe-but-plausible basis, which stays below the annual review trigger.`;
+    ? `Annual leadership review is warranted.`
+    : `Annual review is not currently triggered.`;
   const scenarioScopeSummary = r.portfolioMeta?.linked
     ? `${r.selectedRiskCount || assessment.selectedRisks?.length || 1} linked risks are being treated as one connected scenario.`
     : `${r.selectedRiskCount || assessment.selectedRisks?.length || 1} risks are being assessed together without linked uplift.`;
@@ -4522,7 +4522,7 @@ function renderResults(id, isShared) {
         <div class="results-hero-main">
           <div class="results-kicker">Assessment outcome</div>
           <h2 class="results-hero-title">${executiveHeadline}</h2>
-          <p class="results-hero-copy">${statusDetail} ${executiveAnnualView}</p>
+          <p class="results-hero-copy">${statusDetail}</p>
           <div class="results-hero-tags">
             <span class="badge ${r.toleranceBreached ? 'badge--danger' : r.nearTolerance ? 'badge--warning' : 'badge--success'}">${statusTitle}</span>
             <span class="badge badge--neutral">${assessment.buName || 'No business unit'}</span>
@@ -4534,7 +4534,7 @@ function renderResults(id, isShared) {
           <div class="results-signal-ring ${statusClass}">
             <div class="results-signal-ring-inner">${statusIcon}</div>
           </div>
-          <div class="results-signal-label">${exceedancePct}% chance of breaching tolerance</div>
+          <div class="results-signal-label">${exceedancePct}% breach likelihood</div>
         </div>
       </div>
 
@@ -4542,17 +4542,17 @@ function renderResults(id, isShared) {
         <div class="results-impact-card">
           <div class="results-impact-label">Potential impact from one serious event</div>
           <div class="results-impact-value ${r.toleranceBreached ? 'danger' : ''}">${fmtCurrency(r.lm.p90)}</div>
-          <div class="results-impact-copy">Use this as the serious single-event view when discussing tolerance and escalation.</div>
+          <div class="results-impact-copy">Single-event view</div>
         </div>
         <div class="results-impact-card">
           <div class="results-impact-label">Most likely impact over a year</div>
           <div class="results-impact-value">${fmtCurrency(r.ale.mean)}</div>
-          <div class="results-impact-copy">Use this as the most likely yearly view if conditions stay broadly the same.</div>
+          <div class="results-impact-copy">Expected yearly view</div>
         </div>
         <div class="results-impact-card">
           <div class="results-impact-label">High-stress impact over a year</div>
           <div class="results-impact-value warning">${fmtCurrency(r.ale.p90)}</div>
-          <div class="results-impact-copy">Use this as the more severe yearly view for resilience, capital, and escalation discussions.</div>
+          <div class="results-impact-copy">Severe yearly view</div>
         </div>
       </div>
 
@@ -4563,7 +4563,10 @@ function renderResults(id, isShared) {
             <strong style="font-family:var(--font-display);font-size:var(--text-xl);color:var(--text-primary)">${executiveDecision.decision}</strong>
             <span class="badge ${r.toleranceBreached ? 'badge--danger' : r.nearTolerance ? 'badge--warning' : 'badge--success'}">${statusTitle}</span>
           </div>
-          <p class="results-decision-copy" style="margin-top:var(--sp-3)">${executiveDecision.rationale}</p>
+          <div class="results-decision-row">
+            <span class="results-decision-label">Why now</span>
+            <div class="results-decision-copy">${executiveDecision.rationale}</div>
+          </div>
           <div class="results-decision-row">
             <span class="results-decision-label">What should happen now</span>
             <div class="results-decision-copy">${executiveAction}</div>
@@ -4572,27 +4575,18 @@ function renderResults(id, isShared) {
             <span class="results-decision-label">Main priority</span>
             <div class="results-decision-copy">${executiveDecision.priority}</div>
           </div>
-          <div class="results-decision-row">
-            <span class="results-decision-label">Management focus area</span>
-            <div class="results-decision-copy">${executiveDecision.managementFocus}</div>
-          </div>
         </div>
         <div class="results-decision-card">
           <div class="results-section-heading">Threshold position</div>
           <div class="results-threshold-stack">
-            <div class="results-threshold-row"><span>Warning trigger</span><strong>${fmtCurrency(r.warningThreshold || getWarningThreshold())}</strong></div>
-            <div class="results-threshold-row"><span>Tolerance threshold</span><strong>${fmtCurrency(r.threshold)}</strong></div>
-            <div class="results-threshold-row"><span>Annual review trigger</span><strong>${fmtCurrency(r.annualReviewThreshold || getAnnualReviewThreshold())}</strong></div>
+            <div class="results-threshold-row"><span>Warning</span><strong>${fmtCurrency(r.warningThreshold || getWarningThreshold())}</strong></div>
+            <div class="results-threshold-row"><span>Tolerance</span><strong>${fmtCurrency(r.threshold)}</strong></div>
+            <div class="results-threshold-row"><span>Annual review</span><strong>${fmtCurrency(r.annualReviewThreshold || getAnnualReviewThreshold())}</strong></div>
           </div>
           <div class="results-decision-row">
-            <span class="results-decision-label">Why this matters now</span>
-            <div class="results-decision-copy">${scenarioScopeSummary}</div>
+            <span class="results-decision-label">Current position</span>
+            <div class="results-decision-copy">${executiveAnnualView}</div>
           </div>
-          <div class="results-decision-row">
-            <span class="results-decision-label">Escalation guidance</span>
-            <div class="results-decision-copy">${getEffectiveSettings().escalationGuidance}</div>
-          </div>
-          <p class="results-threshold-foot">This section is designed to show the decision first and the supporting numbers second.</p>
         </div>
       </div>
 
@@ -4601,11 +4595,6 @@ function renderResults(id, isShared) {
           <div class="results-section-heading">What this scenario means in practice</div>
           <p class="results-summary-copy">${scenarioNarrative}</p>
         </div>
-        ${renderAssessmentDriversBlock(assessmentIntelligence.drivers)}
-      </div>
-
-      <div class="results-decision-grid">
-        ${renderAssessmentConfidenceBlock(assessmentIntelligence.confidence)}
         <div class="results-summary-card">
           <div class="results-section-heading">Scenario scope</div>
           <div class="results-chip-block">
@@ -4614,10 +4603,6 @@ function renderResults(id, isShared) {
           ${(assessment.applicableRegulations?.length ? `<div class="results-chip-block">${assessment.applicableRegulations.map(tag => `<span class="badge badge--neutral">${tag}</span>`).join('')}</div>` : '')}
         </div>
       </div>
-
-      ${renderAssessmentComparisonBlock(comparisonOptions, activeComparisonId, comparison)}
-
-      ${renderAssessmentAssumptionsBlock(assessmentIntelligence.assumptions)}
 
       ${recommendationCards}
     </section>`;
@@ -4629,6 +4614,15 @@ function renderResults(id, isShared) {
         ${renderWorkflowGuidanceBlock(assessment.workflowGuidance || [], 'How AI guided this assessment')}
         ${renderBenchmarkRationaleBlock(assessment.benchmarkBasis, assessment.inputRationale)}
       </div>` : ''}
+
+      <div class="results-decision-grid mb-6 anim-fade-in">
+        ${renderAssessmentConfidenceBlock(assessmentIntelligence.confidence)}
+        ${renderAssessmentDriversBlock(assessmentIntelligence.drivers)}
+      </div>
+
+      ${renderAssessmentComparisonBlock(comparisonOptions, activeComparisonId, comparison)}
+
+      ${renderAssessmentAssumptionsBlock(assessmentIntelligence.assumptions)}
 
       <div class="grid-3 mb-6 anim-fade-in">
         <div class="metric-card"><div class="metric-label">Typical event cost</div><div class="metric-value">${fmtCurrency(r.lm.p50)}</div><div class="metric-sub">Midpoint single-event view</div></div>
