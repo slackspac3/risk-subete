@@ -1938,11 +1938,13 @@ function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), o
   const existingLayer = getEntityLayerById(settings, entity.id) || {};
   const contextRequest = buildEntityContextRequest(entity, settings, existingLayer);
   const parentName = contextRequest.parentEntity?.name || '';
+  const isDepartment = isDepartmentEntityType(entity.type);
+  const refinementHistory = [];
   const modal = UI.modal({
     title: `Manage Context: ${entity.name}`,
     body: `
-      <div class="context-panel-copy" style="margin-bottom:12px">This context sits under <strong>${entity.name}</strong> and helps the platform retain what is unique about this ${isDepartmentEntityType(entity.type) ? 'department' : 'business unit'}.</div>
-      ${parentName ? `<div class="form-help" style="margin-bottom:12px">AI assist will inherit context from <strong>${parentName}</strong> and specialise it for this ${isDepartmentEntityType(entity.type) ? 'function' : 'entity'}.</div>` : ''}
+      <div class="context-panel-copy" style="margin-bottom:12px">This context sits under <strong>${entity.name}</strong> and helps the platform retain what is unique about this ${isDepartment ? 'department' : 'business unit'}.</div>
+      ${parentName ? `<div class="form-help" style="margin-bottom:12px">AI assist will inherit context from <strong>${parentName}</strong> and specialise it for this ${isDepartment ? 'function' : 'entity'}.</div>` : ''}
       <div class="grid-2" style="gap:12px">
         <div class="form-group">
           <label class="form-label" for="entity-layer-name">Entity</label>
@@ -1976,11 +1978,72 @@ function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), o
       <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
         <button class="btn btn--secondary" id="btn-entity-layer-ai" type="button">Build with AI</button>
         <span class="form-help">Derive context from the entity, the parent BU, and the current admin baseline.</span>
+      </div>
+      <div class="card mt-4" style="padding:var(--sp-4);background:var(--bg-elevated)">
+        <div class="context-panel-title">Refine With Follow-Up Prompts</div>
+        <p class="form-help" style="margin-top:6px">Ask follow-up questions or give directions like “make this more specific to data residency”, “tighten the summary for a COO”, or “focus more on vendor dependencies”.</p>
+        <div id="entity-layer-refinement-history" style="display:flex;flex-direction:column;gap:10px;margin-top:12px"></div>
+        <div class="form-group mt-4">
+          <label class="form-label" for="entity-layer-followup">Follow-up prompt</label>
+          <textarea class="form-textarea" id="entity-layer-followup" rows="3" placeholder="Tell the AI how you want to improve or reshape this context."></textarea>
+        </div>
+        <div class="flex items-center gap-3 mt-3" style="flex-wrap:wrap">
+          <button class="btn btn--secondary" id="btn-entity-layer-refine" type="button">Refine Context with AI</button>
+          <span class="form-help" id="entity-layer-refine-status">The current context fields above will be updated in place each time you refine.</span>
+        </div>
       </div>`,
     footer: `<button class="btn btn--ghost" id="entity-layer-cancel">Cancel</button><button class="btn btn--primary" id="entity-layer-save">Save Context</button>`
   });
 
   const regsInput = UI.tagInput('ti-entity-layer-regulations', existingLayer.applicableRegulations || []);
+  const summaryEl = document.getElementById('entity-layer-summary');
+  const geoEl = document.getElementById('entity-layer-geo');
+  const appetiteEl = document.getElementById('entity-layer-appetite');
+  const aiEl = document.getElementById('entity-layer-ai');
+  const benchmarkEl = document.getElementById('entity-layer-benchmark');
+  const historyEl = document.getElementById('entity-layer-refinement-history');
+  const followupEl = document.getElementById('entity-layer-followup');
+  const refineStatusEl = document.getElementById('entity-layer-refine-status');
+
+  function getCurrentContextDraft() {
+    return {
+      geography: geoEl.value.trim(),
+      contextSummary: summaryEl.value.trim(),
+      riskAppetiteStatement: appetiteEl.value.trim(),
+      applicableRegulations: regsInput.getTags(),
+      aiInstructions: aiEl.value.trim(),
+      benchmarkStrategy: benchmarkEl.value.trim()
+    };
+  }
+
+  function applyContextResult(result, { onlyEmptyGeography = false } = {}) {
+    if (result.geography && (!onlyEmptyGeography || !geoEl.value.trim())) {
+      geoEl.value = result.geography;
+    }
+    if (result.contextSummary) summaryEl.value = result.contextSummary;
+    if (result.riskAppetiteStatement) appetiteEl.value = result.riskAppetiteStatement;
+    if (Array.isArray(result.applicableRegulations) && result.applicableRegulations.length) {
+      regsInput.setTags(Array.from(new Set(result.applicableRegulations)));
+    }
+    if (result.aiInstructions) aiEl.value = result.aiInstructions;
+    if (result.benchmarkStrategy) benchmarkEl.value = result.benchmarkStrategy;
+  }
+
+  function renderRefinementHistory() {
+    if (!historyEl) return;
+    if (!refinementHistory.length) {
+      historyEl.innerHTML = '<div class="form-help">No follow-up prompts yet. Build the first draft, then use this area to iterate until the context feels right.</div>';
+      return;
+    }
+    historyEl.innerHTML = refinementHistory.map(entry => `
+      <div class="card" style="padding:var(--sp-3);background:${entry.role === 'user' ? 'var(--bg-canvas)' : 'rgba(244,193,90,.08)'};border-color:${entry.role === 'user' ? 'var(--border-subtle)' : 'rgba(244,193,90,.18)'}">
+        <div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">${entry.role === 'user' ? 'Your prompt' : 'AI update'}</div>
+        <div class="context-panel-copy" style="margin-top:6px">${entry.text}</div>
+      </div>`).join('');
+    historyEl.scrollTop = historyEl.scrollHeight;
+  }
+
+  renderRefinementHistory();
   document.getElementById('entity-layer-cancel').addEventListener('click', () => modal.close());
   document.getElementById('btn-entity-layer-ai').addEventListener('click', async () => {
     const btn = document.getElementById('btn-entity-layer-ai');
@@ -1994,24 +2057,10 @@ function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), o
         apiKey: llmConfig.apiKey || ''
       });
       const result = await LLMService.buildEntityContext(contextRequest);
-      if (result.geography && !document.getElementById('entity-layer-geo').value.trim()) {
-        document.getElementById('entity-layer-geo').value = result.geography;
-      }
-      if (result.contextSummary) {
-        document.getElementById('entity-layer-summary').value = result.contextSummary;
-      }
-      if (result.riskAppetiteStatement) {
-        document.getElementById('entity-layer-appetite').value = result.riskAppetiteStatement;
-      }
-      if (Array.isArray(result.applicableRegulations) && result.applicableRegulations.length) {
-        regsInput.setTags(Array.from(new Set([...regsInput.getTags(), ...result.applicableRegulations])));
-      }
-      if (result.aiInstructions) {
-        document.getElementById('entity-layer-ai').value = result.aiInstructions;
-      }
-      if (result.benchmarkStrategy) {
-        document.getElementById('entity-layer-benchmark').value = result.benchmarkStrategy;
-      }
+      applyContextResult(result, { onlyEmptyGeography: true });
+      refinementHistory.push({ role: 'assistant', text: `Initial context draft created for ${entity.name}. Review it or use follow-up prompts below to shape it further.` });
+      renderRefinementHistory();
+      if (refineStatusEl) refineStatusEl.textContent = 'Initial AI draft applied. Use a follow-up prompt below if you want to reshape it further.';
       UI.toast(`Context built for ${entity.name}. Review and save it.`, 'success', 5000);
     } catch (error) {
       UI.toast('Context build failed: ' + error.message, 'danger', 6000);
@@ -2020,16 +2069,55 @@ function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), o
       btn.textContent = 'Build with AI';
     }
   });
+  document.getElementById('btn-entity-layer-refine').addEventListener('click', async () => {
+    const prompt = followupEl.value.trim();
+    if (!prompt) {
+      UI.toast('Enter a follow-up prompt first.', 'warning');
+      return;
+    }
+    const btn = document.getElementById('btn-entity-layer-refine');
+    const llmConfig = getSessionLLMConfig();
+    btn.disabled = true;
+    btn.textContent = 'Refining…';
+    if (refineStatusEl) refineStatusEl.textContent = 'Refining the context using your latest instruction…';
+    refinementHistory.push({ role: 'user', text: prompt });
+    renderRefinementHistory();
+    try {
+      LLMService.setCompassConfig({
+        apiUrl: llmConfig.apiUrl || DEFAULT_COMPASS_PROXY_URL,
+        model: llmConfig.model || 'gpt-5.1',
+        apiKey: llmConfig.apiKey || ''
+      });
+      const result = await LLMService.refineEntityContext({
+        ...contextRequest,
+        currentContext: getCurrentContextDraft(),
+        history: refinementHistory,
+        userPrompt: prompt
+      });
+      applyContextResult(result);
+      refinementHistory.push({ role: 'assistant', text: result.responseMessage || 'I refined the context based on your latest prompt.' });
+      renderRefinementHistory();
+      followupEl.value = '';
+      if (refineStatusEl) refineStatusEl.textContent = 'Latest refinement applied. Keep iterating until you are comfortable with the context.';
+      UI.toast(`Context refined for ${entity.name}.`, 'success', 5000);
+    } catch (error) {
+      UI.toast('Context refinement failed: ' + error.message, 'danger', 6000);
+      if (refineStatusEl) refineStatusEl.textContent = `Context refinement failed: ${error.message}`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Refine Context with AI';
+    }
+  });
   document.getElementById('entity-layer-save').addEventListener('click', () => {
     onSave?.({
       entityId: entity.id,
       entityName: entity.name,
-      geography: document.getElementById('entity-layer-geo').value.trim(),
-      contextSummary: document.getElementById('entity-layer-summary').value.trim(),
-      riskAppetiteStatement: document.getElementById('entity-layer-appetite').value.trim(),
+      geography: geoEl.value.trim(),
+      contextSummary: summaryEl.value.trim(),
+      riskAppetiteStatement: appetiteEl.value.trim(),
       applicableRegulations: regsInput.getTags(),
-      aiInstructions: document.getElementById('entity-layer-ai').value.trim(),
-      benchmarkStrategy: document.getElementById('entity-layer-benchmark').value.trim()
+      aiInstructions: aiEl.value.trim(),
+      benchmarkStrategy: benchmarkEl.value.trim()
     }, modal);
   });
   return modal;

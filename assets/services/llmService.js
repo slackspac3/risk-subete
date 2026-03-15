@@ -1165,6 +1165,106 @@ ${evidenceMeta.promptBlock}`;
     };
   }
 
+  async function refineEntityContext(input = {}) {
+    const currentContext = {
+      geography: String(input.currentContext?.geography || '').trim(),
+      contextSummary: String(input.currentContext?.contextSummary || '').trim(),
+      riskAppetiteStatement: String(input.currentContext?.riskAppetiteStatement || '').trim(),
+      applicableRegulations: Array.isArray(input.currentContext?.applicableRegulations) ? input.currentContext.applicableRegulations.map(String).filter(Boolean) : [],
+      aiInstructions: String(input.currentContext?.aiInstructions || '').trim(),
+      benchmarkStrategy: String(input.currentContext?.benchmarkStrategy || '').trim()
+    };
+    const fallbackMessage = 'I refined the context using your latest instruction. Review the updated summary, appetite, regulations, and guidance before saving.';
+    if (_isDirectCompassUrl(_compassApiUrl) && !_compassApiKey) {
+      return {
+        ...currentContext,
+        responseMessage: fallbackMessage,
+        confidenceLabel: 'Local fallback',
+        evidenceQuality: 'No live model',
+        evidenceSummary: 'A live AI model was not available, so the current context was kept as the working draft.',
+        missingInformation: ['Connect a live AI model if you want iterative refinement from follow-up prompts.']
+      };
+    }
+    try {
+      const systemPrompt = `You are a senior enterprise risk and operating-context analyst. Refine an existing BU or function context based on user follow-up prompts. Return JSON only with this schema:
+{
+  "geography": "string",
+  "contextSummary": "string",
+  "riskAppetiteStatement": "string",
+  "applicableRegulations": ["string"],
+  "aiInstructions": "string",
+  "benchmarkStrategy": "string",
+  "responseMessage": "string"
+}`;
+      const evidenceMeta = _buildEvidenceMeta({
+        citations: [],
+        businessUnit: input.parentEntity,
+        geography: currentContext.geography || input.adminSettings?.geography || input.parentLayer?.geography,
+        applicableRegulations: currentContext.applicableRegulations.length ? currentContext.applicableRegulations : (input.parentLayer?.applicableRegulations || input.adminSettings?.applicableRegulations),
+        organisationContext: currentContext.contextSummary || input.parentLayer?.contextSummary || input.parentEntity?.profile,
+        adminSettings: input.adminSettings
+      });
+      const userPrompt = `Refine the retained context for this organisation node based on the latest user instruction.
+
+Entity:
+${JSON.stringify(input.entity || {}, null, 2)}
+
+Parent entity:
+${JSON.stringify(input.parentEntity || {}, null, 2)}
+
+Current retained context:
+${JSON.stringify(currentContext, null, 2)}
+
+Parent layer:
+${JSON.stringify(input.parentLayer || {}, null, 2)}
+
+Conversation so far:
+${JSON.stringify(Array.isArray(input.history) ? input.history : [], null, 2)}
+
+Latest user instruction:
+${String(input.userPrompt || '').trim()}
+
+Instructions:
+- update the current retained context instead of restarting from scratch
+- preserve good existing detail unless the latest instruction clearly changes it
+- keep the context practical for future risk assessments and AI assistance
+- for departments and functions, keep the context summary concise at 2-4 sentences
+- avoid generic filler and avoid inventing unsupported facts
+- explain what changed in responseMessage in plain language
+
+Evidence quality context:
+${evidenceMeta.promptBlock}`;
+      const raw = await _callLLM(systemPrompt, userPrompt);
+      if (!raw) {
+        return _withEvidenceMeta({ ...currentContext, responseMessage: fallbackMessage }, evidenceMeta);
+      }
+      const parsed = JSON.parse(String(raw).replace(/```json\n?|```/g, '').trim());
+      const isDepartment = String(input.entity?.type || '').toLowerCase() === 'department / function';
+      return _withEvidenceMeta({
+        geography: String(parsed.geography || currentContext.geography || '').trim(),
+        contextSummary: _cleanUserFacingText(parsed.contextSummary || currentContext.contextSummary || '', { maxSentences: isDepartment ? 4 : 5 }),
+        riskAppetiteStatement: _cleanUserFacingText(parsed.riskAppetiteStatement || currentContext.riskAppetiteStatement || '', { maxSentences: 2 }),
+        applicableRegulations: Array.isArray(parsed.applicableRegulations) ? parsed.applicableRegulations.map(String).filter(Boolean) : currentContext.applicableRegulations,
+        aiInstructions: _cleanUserFacingText(parsed.aiInstructions || currentContext.aiInstructions || '', { maxSentences: 3 }),
+        benchmarkStrategy: _cleanUserFacingText(parsed.benchmarkStrategy || currentContext.benchmarkStrategy || '', { maxSentences: 2 }),
+        responseMessage: _cleanUserFacingText(parsed.responseMessage || fallbackMessage, { maxSentences: 3 })
+      }, evidenceMeta);
+    } catch (error) {
+      console.warn('refineEntityContext fallback:', error.message);
+      return _withEvidenceMeta({
+        ...currentContext,
+        responseMessage: fallbackMessage
+      }, _buildEvidenceMeta({
+        citations: [],
+        businessUnit: input.parentEntity,
+        geography: currentContext.geography || input.adminSettings?.geography || input.parentLayer?.geography,
+        applicableRegulations: currentContext.applicableRegulations.length ? currentContext.applicableRegulations : (input.parentLayer?.applicableRegulations || input.adminSettings?.applicableRegulations),
+        organisationContext: currentContext.contextSummary || input.parentLayer?.contextSummary || input.parentEntity?.profile,
+        adminSettings: input.adminSettings
+      }));
+    }
+  }
+
   async function buildUserPreferenceAssist(input = {}) {
     const stub = _buildUserPreferenceAssistStub(input);
     if (_isDirectCompassUrl(_compassApiUrl) && !_compassApiKey) return stub;
@@ -1509,6 +1609,7 @@ ${evidenceMeta.promptBlock}`;
     analyseRiskRegister,
     buildCompanyContext,
     buildEntityContext,
+    refineEntityContext,
     buildUserPreferenceAssist,
     suggestTreatmentImprovement,
     challengeAssessment,
