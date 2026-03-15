@@ -112,9 +112,7 @@ const LLMService = (() => {
     const timeoutMs = Number(options.timeoutMs || 30000);
     const maxCompletionTokens = Number(options.maxCompletionTokens || 1200);
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeoutId = controller
-      ? setTimeout(() => controller.abort(new Error('LLM request timed out.')), timeoutMs)
-      : null;
+    let timeoutId = null;
 
     try {
       const headers = {
@@ -123,28 +121,38 @@ const LLMService = (() => {
       if (_compassApiKey) {
         headers.Authorization = `Bearer ${_compassApiKey}`;
       }
-      const res = await fetch(_compassApiUrl, {
-        method: 'POST',
-        headers,
-        signal: controller?.signal,
-        body: JSON.stringify({
-          model: _compassModel,
-          max_completion_tokens: maxCompletionTokens,
-          temperature: 0.3,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user',   content: userPrompt }
-          ]
-        })
+      const fetchPromise = (async () => {
+        const res = await fetch(_compassApiUrl, {
+          method: 'POST',
+          headers,
+          signal: controller?.signal,
+          body: JSON.stringify({
+            model: _compassModel,
+            max_completion_tokens: maxCompletionTokens,
+            temperature: 0.3,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user',   content: userPrompt }
+            ]
+          })
+        });
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`LLM API error ${res.status}: ${errText}`);
+        }
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content || null;
+      })();
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          try { controller?.abort(); } catch {}
+          reject(new Error('AI assist timed out. Try again, shorten the prompt, or check the model configuration.'));
+        }, timeoutMs);
       });
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`LLM API error ${res.status}: ${errText}`);
-      }
-      const data = await res.json();
-      return data.choices?.[0]?.message?.content || null;
+      return await Promise.race([fetchPromise, timeoutPromise]);
     } catch (error) {
-      if (error?.name === 'AbortError') {
+      const message = String(error?.message || error || '');
+      if (error?.name === 'AbortError' || /timed out/i.test(message)) {
         throw new Error('AI assist timed out. Try again, shorten the prompt, or check the model configuration.');
       }
       throw _normaliseLLMError(error);
