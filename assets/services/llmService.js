@@ -105,13 +105,15 @@ const LLMService = (() => {
   }
 
   // ─── Real API call (when keys are available) ─────────────
-  async function _callLLM(systemPrompt, userPrompt) {
+  async function _callLLM(systemPrompt, userPrompt, options = {}) {
     const directCompass = _isDirectCompassUrl(_compassApiUrl);
     if (directCompass && !_compassApiKey) return null; // fall through to stub
 
+    const timeoutMs = Number(options.timeoutMs || 30000);
+    const maxCompletionTokens = Number(options.maxCompletionTokens || 1200);
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timeoutId = controller
-      ? setTimeout(() => controller.abort(new Error('LLM request timed out.')), 30000)
+      ? setTimeout(() => controller.abort(new Error('LLM request timed out.')), timeoutMs)
       : null;
 
     try {
@@ -127,7 +129,7 @@ const LLMService = (() => {
         signal: controller?.signal,
         body: JSON.stringify({
           model: _compassModel,
-          max_completion_tokens: 1200,
+          max_completion_tokens: maxCompletionTokens,
           temperature: 0.3,
           messages: [
             { role: 'system', content: systemPrompt },
@@ -215,7 +217,7 @@ const LLMService = (() => {
 
 
   function _buildUploadedDocumentBlock(input = {}) {
-    const uploadedText = _truncateText(input.uploadedText || '', 2400);
+    const uploadedText = _truncateText(input.uploadedText || '', 1400);
     if (!uploadedText) return 'Uploaded supporting documents\n(none)';
     const label = String(input.uploadedDocumentName || 'source material').trim() || 'source material';
     return `Uploaded supporting documents (${label}):\n${uploadedText}`;
@@ -1171,7 +1173,7 @@ Instructions:
 
 Evidence quality context:
 ${evidenceMeta.promptBlock}`;
-      const raw = await _callLLM(systemPrompt, userPrompt);
+      const raw = await _callLLM(systemPrompt, userPrompt, { maxCompletionTokens: 700, timeoutMs: 15000 });
       if (!raw) return _withEvidenceMeta(stub, evidenceMeta);
       const parsed = JSON.parse(String(raw).replace(/```json\n?|```/g, '').trim());
       return _withEvidenceMeta({
@@ -1259,7 +1261,7 @@ ${JSON.stringify(input.parentLayer || {}, null, 2)}
 ${_buildUploadedDocumentBlock(input)}
 
 Recent conversation:
-${JSON.stringify(_compactHistory(input.history), null, 2)}
+${JSON.stringify(_compactHistory(input.history, 3), null, 2)}
 
 Latest user instruction:
 ${String(input.userPrompt || '').trim()}
@@ -1274,7 +1276,7 @@ Instructions:
 
 Evidence quality context:
 ${evidenceMeta.promptBlock}`;
-      const raw = await _callLLM(systemPrompt, userPrompt);
+      const raw = await _callLLM(systemPrompt, userPrompt, { maxCompletionTokens: 700, timeoutMs: 12000 });
       if (!raw) {
         return _withEvidenceMeta({ ...currentContext, responseMessage: fallbackMessage }, evidenceMeta);
       }
@@ -1373,7 +1375,7 @@ ${JSON.stringify(Array.isArray(input.currentRegulations) ? input.currentRegulati
 ${_buildUploadedDocumentBlock(input)}
 
 Recent conversation:
-${JSON.stringify(_compactHistory(input.history), null, 2)}
+${JSON.stringify(_compactHistory(input.history, 3), null, 2)}
 
 Latest user instruction:
 ${String(input.userPrompt || '').trim()}
@@ -1387,7 +1389,7 @@ Instructions:
 
 Evidence quality context:
 ${evidenceMeta.promptBlock}`;
-      const raw = await _callLLM(systemPrompt, userPrompt);
+      const raw = await _callLLM(systemPrompt, userPrompt, { maxCompletionTokens: 800, timeoutMs: 12000 });
       if (!raw) {
         return _withEvidenceMeta({
           ...currentSections,
@@ -1468,7 +1470,7 @@ Instructions:
 
 Evidence quality context:
 ${evidenceMeta.promptBlock}`;
-      const raw = await _callLLM(systemPrompt, userPrompt);
+      const raw = await _callLLM(systemPrompt, userPrompt, { maxCompletionTokens: 700, timeoutMs: 15000 });
       if (!raw) return _withEvidenceMeta(stub, evidenceMeta);
       const parsed = JSON.parse(String(raw).replace(/```json\n?|```/g, '').trim());
       return _withEvidenceMeta({
