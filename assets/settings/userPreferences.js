@@ -682,10 +682,7 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
         uploadedText: uploaded.text,
         uploadedDocumentName: uploaded.name
       };
-      const result = await Promise.race([
-        LLMService.refineCompanyContext(refineInput),
-        new Promise(resolve => setTimeout(() => resolve(buildLocalUserCompanyContextFallback(refineInput)), 8000))
-      ]);
+      const result = buildLocalUserCompanyContextFallback(refineInput);
       applyUserCompanyContextResult(result);
       companyRefinementHistory.push({ role: 'assistant', text: result.responseMessage || 'I refined the company context based on your latest prompt.' });
       renderUserCompanyRefinementHistory();
