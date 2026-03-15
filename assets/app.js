@@ -6707,107 +6707,14 @@ function renderAdminSettings(activeSection = 'org') {
       <span class="form-help">This opens a review step so you can decide where the entity sits in the group.</span>
     </div>`
   });
-  const platformDefaultsSection = renderSettingsSection({
-    title: 'Platform Defaults And Governance',
-    scope: 'admin-settings',
-    description: 'These are fallback rules for the whole platform after the organisation tree and entity context are in place.',
-    meta: `${settings.geography} default geography`,
-    body: `<div class="grid-3">
-      <div class="form-group">
-        <label class="form-label" for="admin-warning-threshold">Warning Trigger (USD)</label>
-        <input class="form-input" id="admin-warning-threshold" type="number" min="0" step="100000" value="${settings.warningThresholdUsd}">
-        <span class="form-help">Amber signal when per-event P90 reaches this value.</span>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="admin-tolerance-threshold">Tolerance Threshold (USD)</label>
-        <input class="form-input" id="admin-tolerance-threshold" type="number" min="0" step="100000" value="${settings.toleranceThresholdUsd}">
-        <span class="form-help">Red trigger when per-event P90 exceeds this value.</span>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="admin-annual-threshold">Annual Review Trigger (USD)</label>
-        <input class="form-input" id="admin-annual-threshold" type="number" min="0" step="100000" value="${settings.annualReviewThresholdUsd}">
-        <span class="form-help">Used to flag high annual exposure in the results view.</span>
-      </div>
-    </div>
-    <div class="form-group mt-4">
-      <label class="form-label" for="admin-escalation-guidance">Escalation Guidance</label>
-      <textarea class="form-textarea" id="admin-escalation-guidance" rows="3">${settings.escalationGuidance}</textarea>
-    </div>
-    <div class="form-group mt-4">
-      <label class="form-label" for="admin-appetite">Risk Appetite Statement</label>
-      <textarea class="form-textarea" id="admin-appetite" rows="4">${settings.riskAppetiteStatement}</textarea>
-    </div>
-    <div class="grid-2 mt-4">
-      <div class="form-group">
-        <label class="form-label" for="admin-geo">Default Geography</label>
-        <input class="form-input" id="admin-geo" value="${settings.geography}">
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="admin-link-mode">Default Linked-Risk Mode</label>
-        <select class="form-select" id="admin-link-mode">
-          <option value="yes" ${settings.defaultLinkMode ? 'selected' : ''}>Enabled</option>
-          <option value="no" ${!settings.defaultLinkMode ? 'selected' : ''}>Disabled</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-group mt-4">
-      <label class="form-label" for="admin-context-summary">Admin Context Summary</label>
-      <textarea class="form-textarea" id="admin-context-summary" rows="2">${settings.adminContextSummary}</textarea>
-    </div>
-    <div class="form-group mt-4">
-      <label class="form-label">Applicable Regulations</label>
-      <div class="tag-input-wrap" id="ti-admin-regulations"></div>
-    </div>
-    <div class="form-group mt-4">
-      <label class="form-label">Typical Departments</label>
-      <div class="tag-input-wrap" id="ti-admin-typical-departments"></div>
-      <span class="form-help">These appear as suggested department names when BU admins or global admin add a new function or department.</span>
-    </div>
-    <div class="form-group mt-4">
-      <label class="form-label" for="admin-ai-instructions">AI Guidance</label>
-      <textarea class="form-textarea" id="admin-ai-instructions" rows="3">${settings.aiInstructions}</textarea>
-    </div>
-    <div class="form-group mt-4">
-      <label class="form-label" for="admin-benchmark-strategy">Benchmark Strategy</label>
-      <textarea class="form-textarea" id="admin-benchmark-strategy" rows="3">${settings.benchmarkStrategy}</textarea>
-      <span class="form-help">Explain whether the AI should prefer GCC or UAE references first, and how it should justify any global fallback.</span>
-    </div>
-    <div class="admin-inline-actions mt-4">
-      <a class="btn btn--secondary" href="#/admin/bu">Open Org Customisation</a>
-      <a class="btn btn--secondary" href="#/admin/docs">Open Document Library</a>
-    </div>`
-  });
+  const platformDefaultsSection = AdminPlatformDefaultsSection.renderSection({ settings });
   const systemAccessSection = AdminSystemAccessSection.renderSection({
     directCompass,
     sessionLLM
   });
   const auditCache = AppState.auditLogCache || { loaded: false, loading: false, entries: [], summary: null, error: '' };
-  const auditSummary = auditCache.summary || {};
-  const auditEntries = Array.isArray(auditCache.entries) ? auditCache.entries.slice(0, 25) : [];
-  const auditLogSection = renderSettingsSection({
-    title: 'Audit Log',
-    scope: 'admin-settings',
-    description: 'Short-retention PoC audit trail for login activity, user management, and shared settings changes.',
-    meta: auditSummary.total ? `${auditSummary.total} retained events` : 'Demo retention only',
-    body: `<div class="admin-overview-grid">
-      <div class="admin-overview-card"><div class="admin-overview-label">Login Success</div><div class="admin-overview-value">${auditSummary.loginSuccessCount || 0}</div></div>
-      <div class="admin-overview-card"><div class="admin-overview-label">Login Failure</div><div class="admin-overview-value">${auditSummary.loginFailureCount || 0}</div></div>
-      <div class="admin-overview-card"><div class="admin-overview-label">Logout</div><div class="admin-overview-value">${auditSummary.logoutCount || 0}</div></div>
-      <div class="admin-overview-card"><div class="admin-overview-label">Admin Actions</div><div class="admin-overview-value">${auditSummary.adminActionCount || 0}</div></div>
-      <div class="admin-overview-card"><div class="admin-overview-label">BU Admin Actions</div><div class="admin-overview-value">${auditSummary.buAdminActionCount || 0}</div></div>
-      <div class="admin-overview-card"><div class="admin-overview-label">User Actions</div><div class="admin-overview-value">${auditSummary.userActionCount || 0}</div></div>
-    </div>
-    <div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap">
-      <button class="btn btn--secondary" id="btn-refresh-audit-log" type="button">${auditCache.loading ? 'Refreshing…' : 'Refresh Audit Log'}</button>
-      <span class="form-help" id="audit-log-status">${auditCache.error || `Retention is capped at ${auditSummary.retainedCapacity || 200} recent events and older entries are overwritten.`}</span>
-    </div>
-    <div class="table-wrap mt-4">
-      <table>
-        <thead><tr><th>Time</th><th>Actor</th><th>Role</th><th>Event</th><th>Target</th><th>Status</th><th>Details</th></tr></thead>
-        <tbody>${auditEntries.length ? auditEntries.map(entry => `<tr><td>${new Date(entry.ts).toLocaleString()}</td><td>${entry.actorUsername || 'system'}</td><td>${entry.actorRole || 'system'}</td><td>${entry.eventType || 'event'}</td><td>${entry.target || '—'}</td><td>${entry.status || 'success'}</td><td>${formatAuditDetails(entry.details) || '—'}</td></tr>`).join('') : '<tr><td colspan="7">No audit activity has been loaded yet.</td></tr>'}</tbody>
-      </table>
-    </div>`
-  });
+  const auditLogSection = AdminAuditLogSection.renderSection({ auditCache });
+
 
   const userControlsSection = AdminUserAccountsSection.renderSection({
     settings,
@@ -6895,24 +6802,12 @@ function renderAdminSettings(activeSection = 'org') {
   });
   document.getElementById('btn-admin-logout').addEventListener('click', () => { performLogout(); });
   if (currentSettingsSection === 'audit') {
-    document.getElementById('btn-refresh-audit-log')?.addEventListener('click', async () => {
-      try {
-        await loadAuditLog();
-        rerenderCurrentAdminSection();
-      } catch (error) {
-        UI.toast(`Audit log refresh failed: ${error instanceof Error ? error.message : String(error)}`, 'warning');
-      }
-    });
-    if (!AppState.auditLogCache.loaded && !AppState.auditLogCache.loading) {
-      loadAuditLog().then(() => {
-        rerenderCurrentAdminSection();
-      }).catch(() => {});
-    }
+    AdminAuditLogSection.bind({ rerenderCurrentAdminSection });
   }
-  const regsHost = currentSettingsSection === 'defaults' ? document.getElementById('ti-admin-regulations') : null;
-  const regsInput = regsHost ? UI.tagInput('ti-admin-regulations', settings.applicableRegulations) : null;
-  const typicalDepartmentsHost = currentSettingsSection === 'defaults' ? document.getElementById('ti-admin-typical-departments') : null;
-  const typicalDepartmentsInput = typicalDepartmentsHost ? UI.tagInput('ti-admin-typical-departments', getTypicalDepartments(settings)) : null;
+  const defaultsBindings = currentSettingsSection === 'defaults'
+    ? AdminPlatformDefaultsSection.bind({ settings })
+    : { regsInput: null, typicalDepartmentsInput: null };
+  const { regsInput, typicalDepartmentsInput } = defaultsBindings;
   const structureSummaryEl = currentSettingsSection === 'org' ? document.getElementById('admin-company-structure-summary') : null;
   const layerSummaryEl = currentSettingsSection === 'org' ? document.getElementById('admin-layer-summary-list') : null;
   const profileEl = currentSettingsSection === 'company' ? document.getElementById('admin-company-profile') : null;
