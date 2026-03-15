@@ -1960,7 +1960,7 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
     });
   }
 
-  document.getElementById('btn-org-refine-context').addEventListener('click', async () => {
+  document.getElementById('btn-org-refine-context').addEventListener('click', () => {
     const prompt = contextFollowupEl?.value.trim() || '';
     if (!prompt) {
       UI.toast('Enter a follow-up prompt first.', 'warning');
@@ -1969,10 +1969,10 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
     const btn = document.getElementById('btn-org-refine-context');
     btn.disabled = true;
     btn.textContent = 'Applying…';
-    if (contextRefineStatusEl) contextRefineStatusEl.textContent = 'Refining the context using your latest instruction…';
-    contextRefinementHistory.push({ role: 'user', text: prompt });
-    renderOrgContextRefinementHistory();
     try {
+      if (contextRefineStatusEl) contextRefineStatusEl.textContent = 'Applying your latest instruction to the context…';
+      contextRefinementHistory.push({ role: 'user', text: prompt });
+      renderOrgContextRefinementHistory();
       const llmConfig = getAdminLLMConfig();
       LLMService.setCompassConfig(llmConfig);
       if (departmentEditorMode) {
@@ -2040,7 +2040,7 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
       }
       renderOrgContextRefinementHistory();
       if (contextFollowupEl) contextFollowupEl.value = '';
-      if (contextRefineStatusEl) contextRefineStatusEl.textContent = 'Latest refinement applied. Keep iterating until the context feels right.';
+      if (contextRefineStatusEl) contextRefineStatusEl.textContent = 'Latest follow-up applied. Keep iterating until the context feels right.';
       UI.toast(departmentEditorMode ? 'Function context refined.' : 'Entity context refined.', 'success', 5000);
     } catch (error) {
       UI.toast('Context refinement failed: ' + error.message, 'danger', 6000);
@@ -2295,7 +2295,7 @@ function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), o
       btn.textContent = 'Build with AI';
     }
   });
-  document.getElementById('btn-entity-layer-refine').addEventListener('click', async () => {
+  document.getElementById('btn-entity-layer-refine').addEventListener('click', () => {
     const prompt = followupEl.value.trim();
     if (!prompt) {
       UI.toast('Enter a follow-up prompt first.', 'warning');
@@ -2305,10 +2305,10 @@ function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), o
     const llmConfig = getSessionLLMConfig();
     btn.disabled = true;
     btn.textContent = 'Applying…';
-    if (refineStatusEl) refineStatusEl.textContent = 'Refining the context using your latest instruction…';
-    refinementHistory.push({ role: 'user', text: prompt });
-    renderRefinementHistory();
     try {
+      if (refineStatusEl) refineStatusEl.textContent = 'Applying your latest instruction to the context…';
+      refinementHistory.push({ role: 'user', text: prompt });
+      renderRefinementHistory();
       LLMService.setCompassConfig({
         apiUrl: llmConfig.apiUrl || DEFAULT_COMPASS_PROXY_URL,
         model: llmConfig.model || 'gpt-5.1',
@@ -2327,7 +2327,7 @@ function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), o
       refinementHistory.push({ role: 'assistant', text: result.responseMessage || 'I refined the context based on your latest prompt.' });
       renderRefinementHistory();
       followupEl.value = '';
-      if (refineStatusEl) refineStatusEl.textContent = 'Latest refinement applied. Keep iterating until you are comfortable with the context.';
+      if (refineStatusEl) refineStatusEl.textContent = 'Latest follow-up applied. Keep iterating until you are comfortable with the context.';
       UI.toast(`Context refined for ${entity.name}.`, 'success', 5000);
     } catch (error) {
       UI.toast('Context refinement failed: ' + error.message, 'danger', 6000);
@@ -4198,7 +4198,7 @@ ${topItems}${impactAssessment.impacts.length > 3 ? `\n- +${impactAssessment.impa
       btn.textContent = 'Build from Website';
     }
   });
-  if (currentSettingsSection === 'company') document.getElementById('btn-refine-admin-company-context')?.addEventListener('click', async () => {
+  if (currentSettingsSection === 'company') document.getElementById('btn-refine-admin-company-context')?.addEventListener('click', () => {
     const prompt = adminCompanyFollowupEl?.value.trim() || '';
     const websiteUrl = websiteEl?.value.trim() || '';
     const llmConfig = {
@@ -4217,10 +4217,10 @@ ${topItems}${impactAssessment.impacts.length > 3 ? `\n- +${impactAssessment.impa
     const btn = document.getElementById('btn-refine-admin-company-context');
     btn.disabled = true;
     btn.textContent = 'Applying…';
-    if (adminCompanyRefineStatusEl) adminCompanyRefineStatusEl.textContent = 'Refining the company context using your latest instruction…';
-    adminCompanyRefinementHistory.push({ role: 'user', text: prompt });
-    renderAdminCompanyRefinementHistory();
     try {
+      if (adminCompanyRefineStatusEl) adminCompanyRefineStatusEl.textContent = 'Applying your latest instruction to the company context…';
+      adminCompanyRefinementHistory.push({ role: 'user', text: prompt });
+      renderAdminCompanyRefinementHistory();
       LLMService.setCompassConfig(llmConfig);
       const refineInput = {
         websiteUrl,
@@ -4238,7 +4238,7 @@ ${topItems}${impactAssessment.impacts.length > 3 ? `\n- +${impactAssessment.impa
       adminCompanyRefinementHistory.push({ role: 'assistant', text: result.responseMessage || 'I refined the company context based on your latest prompt.' });
       renderAdminCompanyRefinementHistory();
       if (adminCompanyFollowupEl) adminCompanyFollowupEl.value = '';
-      if (adminCompanyRefineStatusEl) adminCompanyRefineStatusEl.textContent = 'Latest refinement applied. Keep iterating until the context feels right.';
+      if (adminCompanyRefineStatusEl) adminCompanyRefineStatusEl.textContent = 'Latest follow-up applied. Keep iterating until the context feels right.';
       UI.toast('Admin company context refined.', 'success', 5000);
     } catch (error) {
       UI.toast('Company context refinement failed: ' + error.message, 'danger', 6000);

@@ -650,7 +650,7 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
     }
   });
 
-  document.getElementById('btn-refine-user-context').addEventListener('click', async () => {
+  document.getElementById('btn-refine-user-context').addEventListener('click', () => {
     const prompt = companyFollowupEl.value.trim();
     const websiteUrl = websiteEl.value.trim();
     const llmConfig = getSessionLLMConfig();
@@ -665,10 +665,10 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
     const btn = document.getElementById('btn-refine-user-context');
     btn.disabled = true;
     btn.textContent = 'Applying…';
-    if (companyRefineStatusEl) companyRefineStatusEl.textContent = 'Refining the company context using your latest instruction…';
-    companyRefinementHistory.push({ role: 'user', text: prompt });
-    renderUserCompanyRefinementHistory();
     try {
+      if (companyRefineStatusEl) companyRefineStatusEl.textContent = 'Applying your latest instruction to the company context…';
+      companyRefinementHistory.push({ role: 'user', text: prompt });
+      renderUserCompanyRefinementHistory();
       LLMService.setCompassConfig(llmConfig);
       const refineInput = {
         websiteUrl,
@@ -686,7 +686,7 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
       companyRefinementHistory.push({ role: 'assistant', text: result.responseMessage || 'I refined the company context based on your latest prompt.' });
       renderUserCompanyRefinementHistory();
       companyFollowupEl.value = '';
-      if (companyRefineStatusEl) companyRefineStatusEl.textContent = 'Latest refinement applied. Keep iterating until the context feels right.';
+      if (companyRefineStatusEl) companyRefineStatusEl.textContent = 'Latest follow-up applied. Keep iterating until the context feels right.';
       UI.toast('Personal company context refined.', 'success', 5000);
     } catch (error) {
       UI.toast('Company context refinement failed: ' + error.message, 'danger', 6000);
