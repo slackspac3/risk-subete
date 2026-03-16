@@ -699,12 +699,14 @@ function renderResults(id, isShared) {
     challengeButton.disabled = true;
     if (status) status.textContent = 'Reviewing the assessment challenge points...';
     try {
+      const aiContext = buildCurrentAIAssistContext({ buId: assessment.buId });
       const result = await LLMService.challengeAssessment({
         scenarioTitle: assessment.scenarioTitle,
         narrative: assessment.enhancedNarrative || assessment.narrative || '',
         geography: assessment.geography,
         businessUnitName: assessment.buName,
-        businessUnit: getBusinessUnitById(assessment.buId),
+        businessUnit: aiContext.businessUnit || getBusinessUnitById(assessment.buId),
+        adminSettings: aiContext.adminSettings,
         confidence: assessmentIntelligence.confidence,
         drivers: assessmentIntelligence.drivers,
         assumptions: assessmentIntelligence.assumptions,

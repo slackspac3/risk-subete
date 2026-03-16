@@ -440,11 +440,14 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
       },
       organisationContext: {
         businessUnitContext: businessEntity?.profile || getEntityLayerById(globalSettings, businessEntity?.id || '')?.contextSummary || '',
-        departmentContext: departmentEntity?.profile || getEntityLayerById(globalSettings, departmentEntity?.id || '')?.contextSummary || ''
+        departmentContext: departmentEntity?.profile || getEntityLayerById(globalSettings, departmentEntity?.id || '')?.contextSummary || '',
+        companyStructureContext: buildOrganisationContextSummary(globalSettings),
+        companyContextProfile: globalSettings.companyContextProfile || ''
       },
       currentSettings: {
         aiInstructions: document.getElementById('user-ai-instructions').value.trim(),
-        adminContextSummary: document.getElementById('user-context-summary').value.trim()
+        adminContextSummary: document.getElementById('user-context-summary').value.trim(),
+        userProfileSummary: buildUserProfileSummary(normaliseUserProfile(profile, AppState.currentUser))
       },
       uploadedText: sourceText
     };

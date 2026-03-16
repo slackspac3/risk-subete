@@ -1467,6 +1467,110 @@ function getEffectiveSettings() {
   return merged;
 }
 
+
+function joinDistinctText(parts = []) {
+  const seen = new Set();
+  return (Array.isArray(parts) ? parts : [])
+    .map(part => String(part || '').trim())
+    .filter(Boolean)
+    .filter(part => {
+      const key = part.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join('\n\n');
+}
+
+function buildCurrentAIAssistContext(options = {}) {
+  const globalSettings = getAdminSettings();
+  const user = AuthService.getCurrentUser();
+  const userSettings = getUserSettings();
+  const effective = getEffectiveSettings();
+  const selection = resolveUserOrganisationSelection(user, userSettings, globalSettings);
+  const draftBu = options.buId ? getBUList().find(item => item.id === options.buId) : (AppState.draft?.buId ? getBUList().find(item => item.id === AppState.draft.buId) : null);
+  const scopedBusinessUnitEntityId = String(options.businessUnitEntityId || draftBu?.orgEntityId || selection.businessUnitEntityId || '').trim();
+  const scopedDepartmentEntityId = String(options.departmentEntityId || selection.departmentEntityId || '').trim();
+  const businessNode = getEntityById(globalSettings.companyStructure || [], scopedBusinessUnitEntityId);
+  const departmentNode = getEntityById(globalSettings.companyStructure || [], scopedDepartmentEntityId);
+  const businessLayer = getEntityLayerById(globalSettings, scopedBusinessUnitEntityId);
+  const departmentLayer = getEntityLayerById(globalSettings, scopedDepartmentEntityId);
+  const buOverride = draftBu || getBUList().find(item => item.orgEntityId === scopedBusinessUnitEntityId) || null;
+  const inherited = applyBUOverrideToSettings(
+    applyEntityLayerToSettings(
+      applyEntityLayerToSettings(globalSettings, businessLayer, businessNode),
+      departmentLayer,
+      departmentNode
+    ),
+    buOverride
+  );
+  const userProfile = normaliseUserProfile(userSettings.userProfile, user);
+  const userProfileSummary = buildUserProfileSummary(userProfile);
+  const businessUnitContext = String(businessLayer?.contextSummary || buOverride?.contextSummary || businessNode?.profile || '').trim();
+  const departmentContext = String(departmentLayer?.contextSummary || departmentNode?.profile || '').trim();
+  const inheritedContextSummary = String(inherited.adminContextSummary || '').trim();
+  const personalContextSummary = String(userSettings.adminContextSummary || effective.adminContextSummary || '').trim();
+  const combinedContextSummary = joinDistinctText([
+    businessUnitContext ? `Business unit context: ${businessUnitContext}` : '',
+    departmentContext ? `Function context: ${departmentContext}` : '',
+    inheritedContextSummary ? `Inherited organisation context: ${inheritedContextSummary}` : '',
+    personalContextSummary ? `User context: ${personalContextSummary}` : ''
+  ]);
+  const companyStructureContext = buildOrganisationContextSummary(globalSettings);
+  const adminSettings = {
+    ...effective,
+    geography: inherited.geography || effective.geography,
+    applicableRegulations: Array.from(new Set([
+      ...(inherited.applicableRegulations || []),
+      ...(effective.applicableRegulations || [])
+    ].map(String).filter(Boolean))),
+    aiInstructions: joinDistinctText([
+      inherited.aiInstructions,
+      effective.aiInstructions,
+      userSettings.aiInstructions
+    ]),
+    benchmarkStrategy: String(userSettings.benchmarkStrategy || effective.benchmarkStrategy || inherited.benchmarkStrategy || '').trim(),
+    riskAppetiteStatement: String(userSettings.riskAppetiteStatement || effective.riskAppetiteStatement || inherited.riskAppetiteStatement || '').trim(),
+    adminContextSummary: combinedContextSummary || effective.adminContextSummary || inheritedContextSummary,
+    inheritedContextSummary,
+    personalContextSummary,
+    businessUnitContext,
+    departmentContext,
+    companyStructureContext,
+    userProfileSummary,
+    selectedBusinessEntity: businessNode,
+    selectedDepartmentEntity: departmentNode
+  };
+  const businessUnit = (() => {
+    const base = draftBu || (businessNode ? buildBUFromOrgEntity(businessNode, globalSettings) : null);
+    if (!base) return null;
+    return {
+      ...base,
+      geography: String(base.geography || adminSettings.geography || '').trim(),
+      regulatoryTags: Array.from(new Set([
+        ...(base.regulatoryTags || []),
+        ...(businessLayer?.applicableRegulations || []),
+        ...(departmentLayer?.applicableRegulations || []),
+        ...(adminSettings.applicableRegulations || [])
+      ].map(String).filter(Boolean))),
+      contextSummary: businessUnitContext || base.contextSummary || '',
+      aiGuidance: joinDistinctText([businessLayer?.aiInstructions, departmentLayer?.aiInstructions, base.aiGuidance, adminSettings.aiInstructions]),
+      benchmarkStrategy: String(base.benchmarkStrategy || adminSettings.benchmarkStrategy || '').trim(),
+      companyStructureContext,
+      userProfileSummary,
+      selectedDepartmentContext: departmentContext
+    };
+  })();
+  return {
+    adminSettings,
+    businessUnit,
+    selectedBusinessEntity: businessNode,
+    selectedDepartmentEntity: departmentNode,
+    businessLayer,
+    departmentLayer
+  };
+}
+
 function getToleranceThreshold() {
   const value = Number(getEffectiveSettings().toleranceThresholdUsd);
   return Number.isFinite(value) && value > 0 ? value : TOLERANCE_THRESHOLD;

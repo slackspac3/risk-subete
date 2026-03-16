@@ -276,13 +276,15 @@ function renderWizard3() {
     const btn = document.getElementById('btn-treatment-ai-assist');
     if (btn) { btn.disabled = true; btn.textContent = 'Adjusting…'; }
     try {
-      const buContext = getBUList().find(b => b.id === draft.buId) || bu || null;
+      const aiContext = buildCurrentAIAssistContext({ buId: draft.buId });
+      const buContext = aiContext.businessUnit || getBUList().find(b => b.id === draft.buId) || bu || null;
       const citations = await RAGService.retrieveRelevantDocs(draft.buId, `${baselineAssessment.scenarioTitle || ''}
 ${request}`, 5);
       const result = await LLMService.suggestTreatmentImprovement({
         baselineAssessment,
         improvementRequest: request,
         businessUnit: buContext,
+        adminSettings: aiContext.adminSettings,
         citations
       });
       applySuggestedTreatmentInputs(result.suggestedInputs || {});

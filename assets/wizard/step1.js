@@ -396,20 +396,18 @@ async function runIntakeAssist() {
   }
   output.innerHTML = `<div class="card">${UI.skeletonBlock(18)}<div class="mt-3">${UI.skeletonBlock(14, 4)}</div><div class="mt-3">${UI.skeletonBlock(90, 10)}</div></div>`;
   try {
+    const aiContext = buildCurrentAIAssistContext({ buId: bu?.id || AppState.draft.buId });
     const citations = await RAGService.retrieveRelevantDocs(bu?.id, assistSeed || AppState.draft.registerFindings, 5);
     const result = await LLMService.enhanceRiskContext({
       riskStatement: assistSeed || narrative,
       registerText: AppState.draft.registerFindings,
       registerMeta: AppState.draft.registerMeta,
-      businessUnit: bu,
+      businessUnit: aiContext.businessUnit || bu,
       geography: formatScenarioGeographies(getScenarioGeographies()),
-      applicableRegulations: deriveApplicableRegulations(bu, getSelectedRisks(), getScenarioGeographies()),
+      applicableRegulations: deriveApplicableRegulations(aiContext.businessUnit || bu, getSelectedRisks(), getScenarioGeographies()),
       guidedInput: { ...AppState.draft.guidedInput },
       citations,
-      adminSettings: {
-        ...getEffectiveSettings(),
-        companyStructureContext: buildOrganisationContextSummary(getAdminSettings())
-      }
+      adminSettings: aiContext.adminSettings
     });
     const nextNarrative = result.enhancedStatement || narrative;
     AppState.draft.llmAssisted = true;
@@ -450,20 +448,18 @@ async function enhanceNarrativeWithAI() {
   button.textContent = 'Enhancing…';
   output.innerHTML = `<div class="card">${UI.skeletonBlock(18)}<div class="mt-3">${UI.skeletonBlock(14, 4)}</div><div class="mt-3">${UI.skeletonBlock(90, 10)}</div></div>`;
   try {
+    const aiContext = buildCurrentAIAssistContext({ buId: bu?.id || AppState.draft.buId });
     const citations = await RAGService.retrieveRelevantDocs(bu?.id, assistSeed || narrative, 5);
     const result = await LLMService.enhanceRiskContext({
       riskStatement: assistSeed || narrative,
       registerText: '',
       registerMeta: null,
-      businessUnit: bu,
+      businessUnit: aiContext.businessUnit || bu,
       geography: formatScenarioGeographies(getScenarioGeographies()),
-      applicableRegulations: deriveApplicableRegulations(bu, getSelectedRisks(), getScenarioGeographies()),
+      applicableRegulations: deriveApplicableRegulations(aiContext.businessUnit || bu, getSelectedRisks(), getScenarioGeographies()),
       guidedInput: { ...AppState.draft.guidedInput },
       citations,
-      adminSettings: {
-        ...getEffectiveSettings(),
-        companyStructureContext: buildOrganisationContextSummary(getAdminSettings())
-      }
+      adminSettings: aiContext.adminSettings
     });
     const nextNarrative = result.enhancedStatement || narrative;
     AppState.draft.llmAssisted = true;
@@ -504,16 +500,14 @@ async function analyseUploadedRegister() {
   }
   const bu = getBUList().find(b => b.id === AppState.draft.buId);
   try {
+    const aiContext = buildCurrentAIAssistContext({ buId: bu?.id || AppState.draft.buId });
     const result = await LLMService.analyseRiskRegister({
       registerText: AppState.draft.registerFindings,
       registerMeta: AppState.draft.registerMeta,
-      businessUnit: bu,
+      businessUnit: aiContext.businessUnit || bu,
       geography: formatScenarioGeographies(getScenarioGeographies()),
       applicableRegulations: AppState.draft.applicableRegulations || [],
-      adminSettings: {
-        ...getEffectiveSettings(),
-        companyStructureContext: buildOrganisationContextSummary(getAdminSettings())
-      }
+      adminSettings: aiContext.adminSettings
     });
     const parsedFallback = parseRegisterText(AppState.draft.registerFindings).map(title => ({ title, source: 'register' }));
     const extractedRisks = result.risks || parsedFallback;

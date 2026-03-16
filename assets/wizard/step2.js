@@ -97,15 +97,18 @@ async function runLLMAssist() {
   output.innerHTML = `<div class="card mt-4">${UI.skeletonBlock(20)}<div style="margin-top:12px">${UI.skeletonBlock(14,4)}</div><div style="margin-top:8px">${UI.skeletonBlock(14,4)}</div></div>`;
   try {
     const bu = getBUList().find(b => b.id === AppState.draft.buId);
+    const aiContext = buildCurrentAIAssistContext({ buId: AppState.draft.buId });
     const scenarioText = buildScenarioNarrative(assistSeed);
     const citations = await RAGService.retrieveRelevantDocs(AppState.draft.buId, scenarioText);
     const result = await LLMService.generateScenarioAndInputs(scenarioText, {
-      ...bu,
-      regulatoryTags: deriveApplicableRegulations(bu, getSelectedRisks(), getScenarioGeographies()),
+      ...(aiContext.businessUnit || bu || {}),
+      regulatoryTags: deriveApplicableRegulations(aiContext.businessUnit || bu, getSelectedRisks(), getScenarioGeographies()),
       geography: formatScenarioGeographies(getScenarioGeographies()),
-      benchmarkStrategy: getEffectiveSettings().benchmarkStrategy,
-      companyContextProfile: getEffectiveSettings().companyContextProfile,
-      companyStructureContext: buildOrganisationContextSummary(getAdminSettings())
+      benchmarkStrategy: aiContext.adminSettings.benchmarkStrategy,
+      companyContextProfile: aiContext.adminSettings.companyContextProfile,
+      companyStructureContext: aiContext.adminSettings.companyStructureContext,
+      userProfileSummary: aiContext.adminSettings.userProfileSummary,
+      selectedDepartmentContext: aiContext.adminSettings.departmentContext
     }, citations);
     AppState.draft.scenarioTitle = result.scenarioTitle;
     AppState.draft.structuredScenario = result.structuredScenario;

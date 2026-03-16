@@ -292,9 +292,9 @@ const LLMService = (() => {
       const kind = _classifyEvidenceSource(item);
       counts[kind] = (counts[kind] || 0) + 1;
     });
-    const hasBuContext = Boolean(options.businessUnit?.contextSummary || options.businessUnit?.notes || options.businessUnit?.aiGuidance || options.businessUnit?.criticalServices?.length);
-    const hasOrgContext = Boolean(options.organisationContext || options.businessUnit?.companyStructureContext || options.adminSettings?.companyContextProfile || options.adminSettings?.companyStructureContext);
-    const hasUserContext = Boolean(options.userProfile || options.businessUnit?.userProfileSummary || options.adminSettings?.userProfileSummary);
+    const hasBuContext = Boolean(options.businessUnit?.contextSummary || options.businessUnit?.notes || options.businessUnit?.aiGuidance || options.businessUnit?.criticalServices?.length || options.adminSettings?.businessUnitContext || options.adminSettings?.departmentContext);
+    const hasOrgContext = Boolean(options.organisationContext || options.businessUnit?.companyStructureContext || options.adminSettings?.companyContextProfile || options.adminSettings?.companyStructureContext || options.adminSettings?.inheritedContextSummary);
+    const hasUserContext = Boolean(options.userProfile || options.businessUnit?.userProfileSummary || options.adminSettings?.userProfileSummary || options.adminSettings?.personalContextSummary);
     const hasUploadedText = Boolean(String(options.uploadedText || '').trim());
     const hasRegisterText = Boolean(String(options.registerText || '').trim());
     const hasGeography = Boolean(String(options.geography || options.businessUnit?.geography || options.adminSettings?.geography || '').trim());
@@ -376,6 +376,23 @@ const LLMService = (() => {
       .filter(Boolean)
       .slice(0, limit);
     return items.length ? items.join('\n') : '(no external citations available)';
+  }
+
+
+  function _buildContextPromptBlock(settings = {}, businessUnit = null) {
+    const parts = [
+      settings?.businessUnitContext ? `Live business-unit context:
+${settings.businessUnitContext}` : '',
+      settings?.departmentContext ? `Live function context:
+${settings.departmentContext}` : '',
+      settings?.inheritedContextSummary ? `Inherited organisation context:
+${settings.inheritedContextSummary}` : '',
+      settings?.personalContextSummary ? `User-specific working context:
+${settings.personalContextSummary}` : '',
+      businessUnit?.selectedDepartmentContext ? `Selected department context:
+${businessUnit.selectedDepartmentContext}` : ''
+    ].filter(Boolean);
+    return parts.length ? parts.join('\n\n') : '(no additional live BU/function/user context provided)';
   }
 
   function _withEvidenceMeta(result = {}, evidenceMeta = null) {
@@ -870,6 +887,8 @@ User profile context:
 ${buContext?.userProfileSummary || '(none)'}
 Organisation structure context:
 ${buContext?.companyStructureContext || '(none)'}
+Live scoped context:
+${_buildContextPromptBlock(buContext, buContext)}
 Scenario taxonomy hint:
 ${classification.scenarioType} | ${classification.attackType} | ${classification.effect}
 
@@ -981,6 +1000,8 @@ User profile context:
 ${input.adminSettings?.userProfileSummary || '(none)'}
 Organisation structure context:
 ${input.adminSettings?.companyStructureContext || '(none)'}
+Live scoped context:
+${_buildContextPromptBlock(input.adminSettings, input.businessUnit)}
 Register metadata: ${input.registerMeta ? JSON.stringify(input.registerMeta) : '(none)'}
 
 Risk statement:
@@ -1068,6 +1089,8 @@ User profile context:
 ${input.adminSettings?.userProfileSummary || '(none)'}
 Organisation structure context:
 ${input.adminSettings?.companyStructureContext || '(none)'}
+Live scoped context:
+${_buildContextPromptBlock(input.adminSettings, input.businessUnit)}
 
 Risk register content:
 ${input.registerText || '(none)'}
@@ -1653,7 +1676,7 @@ ${evidenceMeta.promptBlock}`;
     }
   }
 }`;
-        const evidenceMeta = _buildEvidenceMeta({ citations: input.citations || [], businessUnit: input.businessUnit, geography: input.baselineAssessment?.geography || input.businessUnit?.geography, applicableRegulations: input.baselineAssessment?.applicableRegulations, organisationContext: input.baselineAssessment?.narrative, uploadedText: input.improvementRequest });
+        const evidenceMeta = _buildEvidenceMeta({ citations: input.citations || [], businessUnit: input.businessUnit, geography: input.baselineAssessment?.geography || input.businessUnit?.geography, applicableRegulations: input.baselineAssessment?.applicableRegulations, organisationContext: input.baselineAssessment?.narrative, uploadedText: input.improvementRequest, adminSettings: input.adminSettings, userProfile: input.adminSettings?.userProfileSummary });
         const userPrompt = `Baseline scenario title: ${input.baselineAssessment?.scenarioTitle || 'Untitled scenario'}
 Baseline narrative: ${input.baselineAssessment?.enhancedNarrative || input.baselineAssessment?.narrative || ''}
 Business unit: ${input.businessUnit?.name || 'Unknown'}
@@ -1662,7 +1685,9 @@ User improvement request: ${input.improvementRequest || '(none)'}
 Current FAIR inputs:
 ${JSON.stringify(input.baselineAssessment?.fairParams || input.baselineAssessment?.results?.inputs || {}, null, 2)}
 Relevant citations:
-${(input.citations || []).map(c => `- ${c.title}: ${c.excerpt}`).join('\n')}
+${_buildCitationPromptBlock(input.citations || [])}
+Live scoped context:
+${_buildContextPromptBlock(input.adminSettings, input.businessUnit)}
 Instructions:
 - treat this as a future-state comparison case, not a rewrite of the original scenario
 - adjust only the FAIR inputs that are plausibly improved by the user's request
@@ -1706,7 +1731,7 @@ ${evidenceMeta.promptBlock}`;
         console.warn('suggestTreatmentImprovement fallback:', error.message);
       }
     }
-    return _withEvidenceMeta(stub, _buildEvidenceMeta({ citations: input.citations || [], businessUnit: input.businessUnit, geography: input.baselineAssessment?.geography || input.businessUnit?.geography, applicableRegulations: input.baselineAssessment?.applicableRegulations, organisationContext: input.baselineAssessment?.narrative, uploadedText: input.improvementRequest }));
+    return _withEvidenceMeta(stub, _buildEvidenceMeta({ citations: input.citations || [], businessUnit: input.businessUnit, geography: input.baselineAssessment?.geography || input.businessUnit?.geography, applicableRegulations: input.baselineAssessment?.applicableRegulations, organisationContext: input.baselineAssessment?.narrative, uploadedText: input.improvementRequest, adminSettings: input.adminSettings, userProfile: input.adminSettings?.userProfileSummary }));
   }
 
   function _buildAssessmentChallengeStub(input = {}) {
@@ -1752,7 +1777,9 @@ ${evidenceMeta.promptBlock}`;
       geography: input.geography,
       applicableRegulations: input.applicableRegulations,
       organisationContext: input.narrative,
-      uploadedText: (Array.isArray(input.assumptions) ? input.assumptions.map(item => item.text).join('\n') : '')
+      uploadedText: (Array.isArray(input.assumptions) ? input.assumptions.map(item => item.text).join('\n') : ''),
+      adminSettings: input.adminSettings,
+      userProfile: input.adminSettings?.userProfileSummary
     });
     if (_compassApiKey || !_isDirectCompassUrl(_compassApiUrl)) {
       try {
@@ -1780,7 +1807,9 @@ ${(input.assumptions || []).map(item => `- ${item.category}: ${item.text}`).join
 Missing information:
 ${(input.missingInformation || []).map(item => `- ${item}`).join('\n')}
 Relevant citations:
-${(input.citations || []).map(c => `- ${c.title}: ${c.excerpt}`).join('\n')}
+${_buildCitationPromptBlock(input.citations || [])}
+Live scoped context:
+${_buildContextPromptBlock(input.adminSettings, input.businessUnit)}
 Instructions:
 - act like a risk committee or challenge session reviewer
 - do not restate the full scenario

@@ -228,11 +228,14 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
             },
             organisationContext: {
               businessUnitContext: businessEntity?.profile || getEntityLayerById(globalSettings, businessEntity?.id || '')?.contextSummary || '',
-              departmentContext: departmentEntity?.profile || getEntityLayerById(globalSettings, departmentEntity?.id || '')?.contextSummary || ''
+              departmentContext: departmentEntity?.profile || getEntityLayerById(globalSettings, departmentEntity?.id || '')?.contextSummary || '',
+              companyStructureContext: buildOrganisationContextSummary(globalSettings),
+              companyContextProfile: globalSettings.companyContextProfile || ''
             },
             currentSettings: {
               aiInstructions: draftSettings.aiInstructions || globalSettings.aiInstructions,
-              adminContextSummary: draftSettings.adminContextSummary || globalSettings.adminContextSummary
+              adminContextSummary: draftSettings.adminContextSummary || globalSettings.adminContextSummary,
+              userProfileSummary: buildUserProfileSummary(normaliseUserProfile(draftSettings.userProfile, AppState.currentUser))
             },
             uploadedText: sourceText
           });
