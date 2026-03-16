@@ -509,7 +509,6 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
   function persistUserSettings(showToast = false) {
     const { payload, businessUnitEntityId, departmentEntityId } = buildUserSettingsPayload();
     saveUserSettings(payload);
-    AuthService.updateSessionContext({ businessUnitEntityId, departmentEntityId });
     if (!AppState.draft.geography) AppState.draft.geography = getEffectiveSettings().geography;
     saveDraft();
     if (showToast) UI.toast('Personal settings saved.', 'success');
@@ -641,8 +640,8 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
           currentRegulations: regsInput.getTags(),
           history: [],
           userPrompt: 'Incorporate the uploaded strategy, policy, procedure, and operating-model material into this company context draft while keeping it concise and grounded.',
-          uploadedText: '',
-          uploadedDocumentName: ''
+          uploadedText: uploaded.text,
+          uploadedDocumentName: uploaded.name
         });
         applyUserCompanyContextResult(result);
       }
@@ -651,14 +650,14 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
       if (companyRefineStatusEl) companyRefineStatusEl.textContent = 'Initial AI draft applied. Use the follow-up prompt box below to keep refining it.';
       UI.toast('Personal company context built from public sources.', 'success', 5000);
     } catch (error) {
-      UI.toast('Company context build failed: ' + error.message, 'danger', 6000);
+      UI.toast('Company context build failed. Try again or shorten the source material.', 'danger', 6000);
     } finally {
       btn.disabled = false;
       btn.textContent = 'Build from Website';
     }
   });
 
-  document.getElementById('btn-refine-user-context').addEventListener('click', () => {
+  document.getElementById('btn-refine-user-context').addEventListener('click', async () => {
     const prompt = companyFollowupEl.value.trim();
     const websiteUrl = websiteEl.value.trim();
     const llmConfig = getSessionLLMConfig();
@@ -678,6 +677,7 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
       companyRefinementHistory.push({ role: 'user', text: prompt });
       renderUserCompanyRefinementHistory();
       LLMService.setCompassConfig(llmConfig);
+      const uploaded = await loadContextSupportSource('user-company-source-file', 'user-company-source-help');
       const refineInput = {
         websiteUrl,
         currentSections: getCurrentUserCompanySections(),
@@ -686,10 +686,15 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
         currentRegulations: regsInput.getTags(),
         history: companyRefinementHistory,
         userPrompt: prompt,
-        uploadedText: '',
-        uploadedDocumentName: ''
+        uploadedText: uploaded.text,
+        uploadedDocumentName: uploaded.name
       };
-      const result = buildLocalUserCompanyContextFallback(refineInput);
+      let result;
+      try {
+        result = await LLMService.refineCompanyContext(refineInput);
+      } catch {
+        result = buildLocalUserCompanyContextFallback(refineInput);
+      }
       applyUserCompanyContextResult(result);
       companyRefinementHistory.push({ role: 'assistant', text: result.responseMessage || 'I refined the company context based on your latest prompt.' });
       renderUserCompanyRefinementHistory();
@@ -697,8 +702,8 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
       if (companyRefineStatusEl) companyRefineStatusEl.textContent = 'Latest follow-up applied. Keep iterating until the context feels right.';
       UI.toast('Personal company context refined.', 'success', 5000);
     } catch (error) {
-      UI.toast('Company context refinement failed: ' + error.message, 'danger', 6000);
-      if (companyRefineStatusEl) companyRefineStatusEl.textContent = `Company context refinement failed: ${error.message}`;
+      UI.toast('Company context refinement failed. Try again or shorten the prompt.', 'danger', 6000);
+      if (companyRefineStatusEl) companyRefineStatusEl.textContent = 'Company context refinement failed. Try again or shorten the prompt.';
     } finally {
       btn.disabled = false;
       btn.textContent = 'Apply Follow-Up Now';
@@ -725,7 +730,7 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
       }
       UI.toast('Role context and preferred output style drafted.', 'success', 5000);
     } catch (error) {
-      UI.toast('AI assist failed: ' + error.message, 'danger', 6000);
+      UI.toast('AI assist failed. Try again in a moment.', 'danger', 6000);
     } finally {
       btn.disabled = false;
       btn.textContent = 'AI Assist Role Context';
@@ -749,7 +754,7 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
       document.getElementById('user-ai-instructions').value = result.aiInstructions || document.getElementById('user-ai-instructions').value;
       UI.toast('Personal defaults drafted from your source material.', 'success', 5000);
     } catch (error) {
-      UI.toast('AI assist failed: ' + error.message, 'danger', 6000);
+      UI.toast('AI assist failed. Try again in a moment.', 'danger', 6000);
     } finally {
       btn.disabled = false;
       btn.textContent = 'AI Assist Personal Defaults';

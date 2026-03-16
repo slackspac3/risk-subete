@@ -301,8 +301,8 @@ ${request}`, 5);
       renderWizard3();
       UI.toast('The better-outcome case has been adjusted. Review the numbers before rerunning.', 'success');
     } catch (error) {
-      if (statusEl) statusEl.textContent = `AI assist failed: ${error instanceof Error ? error.message : String(error)}`;
-      UI.toast(`AI assist failed: ${error instanceof Error ? error.message : String(error)}`, 'danger');
+      if (statusEl) statusEl.textContent = 'AI assist failed. Try again in a moment.';
+      UI.toast('AI assist failed. Try again in a moment.', 'danger');
       if (btn) { btn.disabled = false; btn.textContent = 'AI Assist This Better Outcome'; }
     }
   });

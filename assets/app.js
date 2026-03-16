@@ -8,7 +8,7 @@
 const TOLERANCE_THRESHOLD = 5_000_000;
 const DEFAULT_FX_RATE = 3.6725;
 const DEFAULT_COMPASS_PROXY_URL = resolveCompassProxyUrl();
-const APP_ASSET_VERSION = '20260312bb';
+const APP_ASSET_VERSION = '20260312bc';
 const GLOBAL_ADMIN_STORAGE_KEY = 'rq_admin_settings';
 const USER_SETTINGS_STORAGE_PREFIX = 'rq_user_settings';
 const ASSESSMENTS_STORAGE_PREFIX = 'rq_assessments';
@@ -858,6 +858,16 @@ function getManagedAccountsForAdmin(settings = getAdminSettings()) {
 function resolveUserOrganisationSelection(user = AuthService.getCurrentUser(), userSettings = getUserSettings(), settings = getAdminSettings()) {
   const profile = normaliseUserProfile(userSettings.userProfile, user);
   const fallback = getDefaultOrgAssignmentForUser(user?.username || '', settings);
+  const structure = Array.isArray(settings.companyStructure) ? settings.companyStructure : [];
+  const safeUsername = String(user?.username || '').trim().toLowerCase();
+  const ownsBusiness = structure.some(node => isCompanyEntityType(node.type) && String(node.ownerUsername || '').trim().toLowerCase() === safeUsername);
+  const ownsDepartment = structure.some(node => isDepartmentEntityType(node.type) && String(node.ownerUsername || '').trim().toLowerCase() === safeUsername);
+  if (!ownsBusiness && !ownsDepartment) {
+    return {
+      businessUnitEntityId: String(user?.businessUnitEntityId || fallback.businessUnitEntityId || '').trim(),
+      departmentEntityId: String(user?.departmentEntityId || fallback.departmentEntityId || '').trim()
+    };
+  }
   const businessUnitEntityId = String(user?.businessUnitEntityId || profile.businessUnitEntityId || fallback.businessUnitEntityId || '').trim();
   const departmentEntityId = String(user?.departmentEntityId || profile.departmentEntityId || fallback.departmentEntityId || '').trim();
   return { businessUnitEntityId, departmentEntityId };
@@ -2247,7 +2257,7 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
         if (contextRefineStatusEl) contextRefineStatusEl.textContent = 'Initial AI draft applied. Use the follow-up prompt box below to keep refining it.';
         UI.toast('Function context drafted from the parent business context.', 'success', 5000);
       } catch (error) {
-        UI.toast('Context build failed: ' + error.message, 'danger', 6000);
+        UI.toast('Context build failed. Try again or shorten the source material.', 'danger', 6000);
       } finally {
         btn.disabled = false;
         btn.textContent = 'AI Assist Context';
@@ -2292,8 +2302,8 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
         if (contextRefineStatusEl) contextRefineStatusEl.textContent = 'Initial AI draft applied. Use the follow-up prompt box below to keep refining it.';
         UI.toast('Company context built. Review the entity details and save it into the organisation tree.', 'success', 5000);
       } catch (error) {
-        UI.toast('Company context build failed: ' + error.message, 'danger', 6000);
-        if (contextRefineStatusEl) contextRefineStatusEl.textContent = `Company context build failed: ${error.message}`;
+        UI.toast('Company context build failed. Try again or shorten the source material.', 'danger', 6000);
+        if (contextRefineStatusEl) contextRefineStatusEl.textContent = 'Company context build failed. Try again or shorten the source material.';
       } finally {
         btn.disabled = false;
         btn.textContent = 'Build Context from Website';
@@ -2301,7 +2311,7 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
     });
   }
 
-  document.getElementById('btn-org-refine-context').addEventListener('click', () => {
+  document.getElementById('btn-org-refine-context').addEventListener('click', async () => {
     const prompt = contextFollowupEl?.value.trim() || '';
     if (!prompt) {
       UI.toast('Enter a follow-up prompt first.', 'warning');
@@ -2316,6 +2326,7 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
       renderOrgContextRefinementHistory();
       const llmConfig = getAdminLLMConfig();
       LLMService.setCompassConfig(llmConfig);
+      const uploaded = await loadContextSupportSource('org-context-source-file', 'org-context-source-help');
       if (departmentEditorMode) {
         const settings = getAdminSettings();
         const parentId = parentEl.value || node.parentId || seed.parentId || '';
@@ -2356,10 +2367,15 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
           },
           history: contextRefinementHistory,
           userPrompt: prompt,
-          uploadedText: '',
-          uploadedDocumentName: ''
+          uploadedText: uploaded.text,
+          uploadedDocumentName: uploaded.name
         };
-        const result = buildLocalEntityContextFallback(refineInput);
+        let result;
+        try {
+          result = await LLMService.refineEntityContext(refineInput);
+        } catch {
+          result = buildLocalEntityContextFallback(refineInput);
+        }
         if (result.contextSummary) profileEl.value = result.contextSummary;
         contextRefinementHistory.push({ role: 'assistant', text: result.responseMessage || 'I refined the function context based on your latest prompt.' });
       } else {
@@ -2372,10 +2388,15 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
           currentRegulations: Array.isArray(settings.applicableRegulations) ? settings.applicableRegulations : [],
           history: contextRefinementHistory,
           userPrompt: prompt,
-          uploadedText: '',
-          uploadedDocumentName: ''
+          uploadedText: uploaded.text,
+          uploadedDocumentName: uploaded.name
         };
-        const result = buildLocalCompanyContextFallback(refineInput);
+        let result;
+        try {
+          result = await LLMService.refineCompanyContext(refineInput);
+        } catch {
+          result = buildLocalCompanyContextFallback(refineInput);
+        }
         applyOrgCompanyContextResult(result);
         contextRefinementHistory.push({ role: 'assistant', text: result.responseMessage || 'I refined the company context based on your latest prompt.' });
       }
@@ -2384,8 +2405,8 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
       if (contextRefineStatusEl) contextRefineStatusEl.textContent = 'Latest follow-up applied. Keep iterating until the context feels right.';
       UI.toast(departmentEditorMode ? 'Function context refined.' : 'Entity context refined.', 'success', 5000);
     } catch (error) {
-      UI.toast('Context refinement failed: ' + error.message, 'danger', 6000);
-      if (contextRefineStatusEl) contextRefineStatusEl.textContent = `Context refinement failed: ${error.message}`;
+      UI.toast('Context refinement failed. Try again or shorten the prompt.', 'danger', 6000);
+      if (contextRefineStatusEl) contextRefineStatusEl.textContent = 'Context refinement failed. Try again or shorten the prompt.';
     } finally {
       btn.disabled = false;
       btn.textContent = 'Apply Follow-Up Now';
@@ -2621,8 +2642,8 @@ function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), o
       const uploaded = await loadContextSupportSource('entity-layer-source-file', 'entity-layer-source-help');
       const result = await LLMService.buildEntityContext({
         ...contextRequest,
-        uploadedText: '',
-        uploadedDocumentName: ''
+        uploadedText: uploaded.text,
+        uploadedDocumentName: uploaded.name
       });
       applyContextResult(result, { onlyEmptyGeography: true });
       refinementHistory.push({ role: 'assistant', text: uploaded.text ? `Initial context draft created for ${entity.name} and grounded with the uploaded source material. Review it or use follow-up prompts below to shape it further.` : `Initial context draft created for ${entity.name}. Review it or use follow-up prompts below to shape it further.` });
@@ -2630,13 +2651,13 @@ function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), o
       if (refineStatusEl) refineStatusEl.textContent = 'Initial AI draft applied. Use a follow-up prompt below if you want to reshape it further.';
       UI.toast(`Context built for ${entity.name}. Review and save it.`, 'success', 5000);
     } catch (error) {
-      UI.toast('Context build failed: ' + error.message, 'danger', 6000);
+      UI.toast('Context build failed. Try again or shorten the source material.', 'danger', 6000);
     } finally {
       btn.disabled = false;
       btn.textContent = 'Build with AI';
     }
   });
-  document.getElementById('btn-entity-layer-refine').addEventListener('click', () => {
+  document.getElementById('btn-entity-layer-refine').addEventListener('click', async () => {
     const prompt = followupEl.value.trim();
     if (!prompt) {
       UI.toast('Enter a follow-up prompt first.', 'warning');
@@ -2655,15 +2676,21 @@ function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), o
         model: llmConfig.model || 'gpt-5.1',
         apiKey: llmConfig.apiKey || ''
       });
+      const uploaded = await loadContextSupportSource('entity-layer-source-file', 'entity-layer-source-help');
       const refineInput = {
         ...contextRequest,
         currentContext: getCurrentContextDraft(),
         history: refinementHistory,
         userPrompt: prompt,
-        uploadedText: '',
-        uploadedDocumentName: ''
+        uploadedText: uploaded.text,
+        uploadedDocumentName: uploaded.name
       };
-      const result = buildLocalEntityContextFallback(refineInput);
+      let result;
+      try {
+        result = await LLMService.refineEntityContext(refineInput);
+      } catch {
+        result = buildLocalEntityContextFallback(refineInput);
+      }
       applyContextResult(result);
       refinementHistory.push({ role: 'assistant', text: result.responseMessage || 'I refined the context based on your latest prompt.' });
       renderRefinementHistory();
@@ -2671,8 +2698,8 @@ function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), o
       if (refineStatusEl) refineStatusEl.textContent = 'Latest follow-up applied. Keep iterating until you are comfortable with the context.';
       UI.toast(`Context refined for ${entity.name}.`, 'success', 5000);
     } catch (error) {
-      UI.toast('Context refinement failed: ' + error.message, 'danger', 6000);
-      if (refineStatusEl) refineStatusEl.textContent = `Context refinement failed: ${error.message}`;
+      UI.toast('Context refinement failed. Try again or shorten the prompt.', 'danger', 6000);
+      if (refineStatusEl) refineStatusEl.textContent = 'Context refinement failed. Try again or shorten the prompt.';
     } finally {
       btn.disabled = false;
       btn.textContent = 'Apply Follow-Up Now';
@@ -4567,14 +4594,14 @@ ${topItems}${impactAssessment.impacts.length > 3 ? `\n- +${impactAssessment.impa
       });
       UI.toast('Company context built from public sources. Review the entity and place it into the organisation tree.', 'success', 5000);
     } catch (error) {
-      UI.toast('Company context build failed: ' + error.message, 'danger', 6000);
-      if (adminCompanyRefineStatusEl) adminCompanyRefineStatusEl.textContent = `Company context build failed: ${error.message}`;
+      UI.toast('Company context build failed. Try again or shorten the source material.', 'danger', 6000);
+      if (adminCompanyRefineStatusEl) adminCompanyRefineStatusEl.textContent = 'Company context build failed. Try again or shorten the source material.';
     } finally {
       btn.disabled = false;
       btn.textContent = 'Build from Website';
     }
   });
-  if (currentSettingsSection === 'company') document.getElementById('btn-refine-admin-company-context')?.addEventListener('click', () => {
+  if (currentSettingsSection === 'company') document.getElementById('btn-refine-admin-company-context')?.addEventListener('click', async () => {
     const prompt = adminCompanyFollowupEl?.value.trim() || '';
     const websiteUrl = websiteEl?.value.trim() || '';
     const llmConfig = {
@@ -4598,6 +4625,7 @@ ${topItems}${impactAssessment.impacts.length > 3 ? `\n- +${impactAssessment.impa
       adminCompanyRefinementHistory.push({ role: 'user', text: prompt });
       renderAdminCompanyRefinementHistory();
       LLMService.setCompassConfig(llmConfig);
+      const uploaded = await loadContextSupportSource('admin-company-source-file', 'admin-company-source-help');
       const refineInput = {
         websiteUrl,
         currentSections: getCurrentAdminCompanySections(),
@@ -4606,10 +4634,15 @@ ${topItems}${impactAssessment.impacts.length > 3 ? `\n- +${impactAssessment.impa
         currentRegulations: regsInput?.getTags ? regsInput.getTags() : [],
         history: adminCompanyRefinementHistory,
         userPrompt: prompt,
-        uploadedText: '',
-        uploadedDocumentName: ''
+        uploadedText: uploaded.text,
+        uploadedDocumentName: uploaded.name
       };
-      const result = buildLocalCompanyContextFallback(refineInput);
+      let result;
+      try {
+        result = await LLMService.refineCompanyContext(refineInput);
+      } catch {
+        result = buildLocalCompanyContextFallback(refineInput);
+      }
       applyAdminCompanyContextResult(result);
       adminCompanyRefinementHistory.push({ role: 'assistant', text: result.responseMessage || 'I refined the company context based on your latest prompt.' });
       renderAdminCompanyRefinementHistory();
@@ -4617,8 +4650,8 @@ ${topItems}${impactAssessment.impacts.length > 3 ? `\n- +${impactAssessment.impa
       if (adminCompanyRefineStatusEl) adminCompanyRefineStatusEl.textContent = 'Latest follow-up applied. Keep iterating until the context feels right.';
       UI.toast('Admin company context refined.', 'success', 5000);
     } catch (error) {
-      UI.toast('Company context refinement failed: ' + error.message, 'danger', 6000);
-      if (adminCompanyRefineStatusEl) adminCompanyRefineStatusEl.textContent = `Company context refinement failed: ${error.message}`;
+      UI.toast('Company context refinement failed. Try again or shorten the prompt.', 'danger', 6000);
+      if (adminCompanyRefineStatusEl) adminCompanyRefineStatusEl.textContent = 'Company context refinement failed. Try again or shorten the prompt.';
     } finally {
       btn.disabled = false;
       btn.textContent = 'Apply Follow-Up Now';

@@ -243,7 +243,7 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
           document.getElementById('onboard-preferred-outputs').value = result.preferredOutputs || document.getElementById('onboard-preferred-outputs').value;
           UI.toast(`Drafted this step${onboardingAiSourceName ? ` using ${onboardingAiSourceName}` : ''}.`, 'success');
         } catch (error) {
-          UI.toast('AI assist failed: ' + error.message, 'danger');
+          UI.toast('AI assist failed. Try again in a moment.', 'danger');
         } finally {
           btn.disabled = false;
           btn.textContent = 'AI Assist This Step';
@@ -304,10 +304,6 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
         ...draftSettings,
         onboardedAt: new Date().toISOString(),
         adminContextSummary: draftSettings.userProfile.workingContext || draftSettings.adminContextSummary || globalSettings.adminContextSummary
-      });
-      await AuthService.updateManagedAccount(AppState.currentUser?.username, {
-        businessUnitEntityId: draftSettings.userProfile.businessUnitEntityId || '',
-        departmentEntityId: draftSettings.userProfile.departmentEntityId || ''
       });
       if (!AppState.draft.geography) AppState.draft.geography = draftSettings.geography || globalSettings.geography;
       saveDraft();

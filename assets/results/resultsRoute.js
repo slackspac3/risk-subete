@@ -867,14 +867,6 @@ function renderLoginOrganisationSelection(currentUser, existingSettings = getUse
           departmentEntityId: departmentEntity?.id || ''
         }
       });
-      await AuthService.updateManagedAccount(currentUser.username, {
-        businessUnitEntityId,
-        departmentEntityId: departmentEntity?.id || ''
-      });
-      AuthService.updateSessionContext({
-        businessUnitEntityId,
-        departmentEntityId: departmentEntity?.id || ''
-      });
       activateAuthenticatedState();
       Router.navigate('/dashboard');
     });
