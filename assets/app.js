@@ -844,6 +844,81 @@ function resolveUserOrganisationSelection(user = AuthService.getCurrentUser(), u
   return { businessUnitEntityId, departmentEntityId };
 }
 
+function getNonAdminCapabilityState(user = AuthService.getCurrentUser(), userSettings = getUserSettings(), settings = getAdminSettings()) {
+  const safeUsername = String(user?.username || '').trim().toLowerCase();
+  const structure = Array.isArray(settings.companyStructure) ? settings.companyStructure : [];
+  const selection = resolveUserOrganisationSelection(user, userSettings, settings);
+  const managedBusiness = structure.find(node => isCompanyEntityType(node.type) && String(node.ownerUsername || '').trim().toLowerCase() == safeUsername) || null;
+  const managedDepartment = structure.find(node => isDepartmentEntityType(node.type) && String(node.ownerUsername || '').trim().toLowerCase() == safeUsername) || null;
+  const selectedBusiness = getEntityById(structure, selection.businessUnitEntityId);
+  const selectedDepartment = getEntityById(structure, selection.departmentEntityId);
+  const canManageBusinessUnit = !!managedBusiness || (user?.role === 'bu_admin' && !!selection.businessUnitEntityId);
+  const canManageDepartment = !!managedDepartment || (!!selectedDepartment && String(selectedDepartment.ownerUsername || '').trim().toLowerCase() === safeUsername);
+  const managedBusinessId = managedBusiness?.id || selection.businessUnitEntityId || '';
+  const managedDepartmentId = managedDepartment?.id || (canManageDepartment ? selection.departmentEntityId : '');
+  const roleKey = canManageBusinessUnit ? 'bu_admin' : canManageDepartment ? 'function_admin' : 'standard_user';
+  const roleLabel = canManageBusinessUnit ? 'Business unit admin' : canManageDepartment ? 'Function admin' : 'Standard user';
+  const guideItems = canManageBusinessUnit
+    ? [
+        'Use your dashboard to start or review risk assessments for your area.',
+        'Open Settings to add or update functions under your assigned business unit.',
+        'Use Manage Context to improve BU and function context before running assessments.',
+        'Review results first on the executive view, then use the technical tab when you need detail.'
+      ]
+    : canManageDepartment
+      ? [
+          'Use your dashboard to start or review risk assessments for your function.',
+          'Open Settings and use Manage Department Context to keep the function summary accurate.',
+          'Use AI assist to improve function context and personal defaults before assessing new scenarios.',
+          'Review the executive result first, then open technical detail if you need the FAIR inputs.'
+        ]
+      : [
+          'Start a new risk assessment from your dashboard when you want to analyse a scenario.',
+          'Use AI assist in each step as a starting point, then adjust the wording and numbers in plain English.',
+          'Open Personal Settings to keep your role, business context, and output preferences up to date.',
+          'Use the executive result view first to understand the impact, then open technical detail only if needed.'
+        ];
+  return {
+    roleKey,
+    roleLabel,
+    guideItems,
+    selection,
+    canManageBusinessUnit,
+    canManageDepartment,
+    managedBusinessId,
+    managedDepartmentId,
+    managedBusiness,
+    managedDepartment,
+    selectedBusiness,
+    selectedDepartment
+  };
+}
+
+function renderNonAdminHowToGuide(capability = getNonAdminCapabilityState()) {
+  const heading = capability.roleKey === 'bu_admin'
+    ? 'How to use this platform as a BU admin'
+    : capability.roleKey === 'function_admin'
+      ? 'How to use this platform as a function admin'
+      : 'How to use this platform';
+  return `
+    <div class="card card--elevated" style="padding:var(--sp-6)">
+      <div class="flex items-center justify-between" style="gap:var(--sp-3);flex-wrap:wrap">
+        <div>
+          <div class="context-panel-title">${heading}</div>
+          <div class="form-help" style="margin-top:6px">Simple guidance for your current role: <strong>${capability.roleLabel}</strong>.</div>
+        </div>
+        <span class="badge badge--gold">Role guide</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:var(--sp-5)">
+        ${capability.guideItems.map((item, index) => `
+          <div style="display:flex;gap:12px;align-items:flex-start;background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)">
+            <div style="width:28px;height:28px;border-radius:999px;background:rgba(244,193,90,.18);display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;color:var(--accent-gold);flex-shrink:0">${index + 1}</div>
+            <div style="font-size:.9rem;line-height:1.6">${item}</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
 function applyEntityLayerToSettings(baseSettings, layer = null, node = null) {
   if (!layer && !node) return baseSettings;
   return {
@@ -3107,7 +3182,6 @@ function renderAppBar() {
       <a href="${homeHref}" class="bar-logo">Risk <span>Intelligence</span> Platform</a>
       <nav class="flex items-center gap-3">
         <a href="${homeHref}" class="bar-nav-link">${currentUser?.role === 'admin' ? 'Global Admin' : currentUser ? 'Dashboard' : 'Home'}</a>
-        ${currentUser && currentUser.role !== 'admin' ? `<a href="#/settings" class="bar-nav-link">Settings</a>` : ''}
       </nav>
       <div class="bar-spacer"></div>
       ${currentUser ? `

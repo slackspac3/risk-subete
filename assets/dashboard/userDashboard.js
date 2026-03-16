@@ -14,6 +14,7 @@ function renderUserDashboard() {
   const user = AppState.currentUser || AuthService.getCurrentUser();
   const globalSettings = getAdminSettings();
   const profile = normaliseUserProfile(settings.userProfile, user);
+  const capability = getNonAdminCapabilityState(user, settings, globalSettings);
   const allAssessments = getAssessments();
   const assessments = allAssessments
     .filter(a => !a?.archivedAt)
@@ -80,6 +81,7 @@ function renderUserDashboard() {
               <div class="context-panel-title">Your saved context</div>
               <div class="context-panel-copy" style="margin-top:8px">${profile.jobTitle || 'Role not yet set'} · ${profile.businessUnit || user?.businessUnit || 'Business unit not yet set'}${profile.department || user?.department ? ` · ${profile.department || user?.department}` : ''}</div>
               <div class="form-help" style="margin-top:10px;color:rgba(255,255,255,.65)">Default geography: ${settings.geographyPrimary || settings.geography || globalSettings.geography}</div>
+              <div class="form-help" style="margin-top:10px;color:rgba(255,255,255,.65)">Current role mode: ${capability.roleLabel}</div>
             </div>
           </div>
         </section>
@@ -105,6 +107,10 @@ function renderUserDashboard() {
             <div class="admin-overview-value" style="font-size:1.2rem">${assessmentsNeedingReview.length}</div>
             <div class="admin-overview-foot">${assessmentsNeedingReview.length ? 'Scenarios near or above tolerance are ready for review.' : 'No high-priority reviews waiting right now.'}</div>
           </div>
+        </section>
+
+        <section style="margin-top:var(--sp-8)">
+          ${renderNonAdminHowToGuide(capability)}
         </section>
 
         <section class="grid-2" style="margin-top:var(--sp-8);align-items:start">

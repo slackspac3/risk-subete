@@ -31,12 +31,13 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
   const profile = normaliseUserProfile(settings.userProfile);
   const companyStructure = Array.isArray(globalSettings.companyStructure) ? globalSettings.companyStructure : [];
   const companyOptions = getCompanyEntities(companyStructure);
-  const selectedBusinessId = profile.businessUnitEntityId || resolveUserOrganisationSelection(AppState.currentUser, settings, globalSettings).businessUnitEntityId;
+  const capability = getNonAdminCapabilityState(AppState.currentUser, settings, globalSettings);
+  const selectedBusinessId = capability.managedBusinessId || profile.businessUnitEntityId || capability.selection.businessUnitEntityId;
   const selectedBusinessEntity = getEntityById(companyStructure, selectedBusinessId);
   const selectedBusinessDepartments = getDepartmentEntities(companyStructure, selectedBusinessId);
-  const businessOwner = (AppState.currentUser?.role === 'bu_admin' && selectedBusinessEntity?.id === AppState.currentUser?.businessUnitEntityId) || selectedBusinessEntity?.ownerUsername === AppState.currentUser?.username;
-  const selectedDepartment = getEntityById(companyStructure, profile.departmentEntityId);
-  const departmentOwner = selectedDepartment?.ownerUsername === AppState.currentUser?.username;
+  const businessOwner = !!capability.canManageBusinessUnit && (!!capability.managedBusinessId ? capability.managedBusinessId === selectedBusinessId : true);
+  const selectedDepartment = getEntityById(companyStructure, capability.managedDepartmentId || profile.departmentEntityId || capability.selection.departmentEntityId);
+  const departmentOwner = !!capability.canManageDepartment;
   const companyContextSections = settings.companyContextSections || buildCompanyContextSections({
     companySummary: settings.adminContextSummary || '',
     businessProfile: settings.companyContextProfile || ''
@@ -295,6 +296,10 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
               <div class="admin-overview-value" style="font-size:1.1rem">${settings.geography || globalSettings.geography}</div>
               <div class="admin-overview-foot">Used as your default context in new assessments</div>
             </div>
+          </div>
+
+          <div class="mb-6">
+            ${renderNonAdminHowToGuide(capability)}
           </div>
 
           <div class="settings-accordion">
