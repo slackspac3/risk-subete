@@ -60,7 +60,7 @@ function getDefaultSettings() {
     buOverrides: [],
     docOverrides: [],
     riskAppetiteStatement: 'Moderate. Escalate risks that threaten regulated operations, cross-border data movement, or strategic platforms.',
-    applicableRegulations: ['UAE PDPL', 'BIS Export Controls', 'OFAC Sanctions', 'UAE Cybersecurity Council Guidance'],
+    applicableRegulations: ['UAE PDPL', 'BIS Export Controls', 'OFAC Sanctions', 'UAE Cybersecurity Council Guidance', 'NIST SP 800-53', 'NIST RMF', 'ISO 27001', 'ISO 27002', 'ISO 27005', 'ISO 27017', 'ISO 27018', 'ISO 27701', 'ISO 22301', 'ISO 22313', 'ISO 27036', 'ISO 28000', 'ISO 31000'],
     aiInstructions: 'Prioritise operational, regulatory, and strategic impact. Use British English.',
     benchmarkStrategy: 'Prefer GCC and UAE benchmark references where relevant. Where GCC data is thin, use the best available global benchmark and explain the fallback clearly.',
     defaultLinkMode: true,
@@ -75,10 +75,14 @@ function getDefaultSettings() {
 
 function normaliseSettings(settings = {}) {
   const defaults = getDefaultSettings();
+  const mergedRegulations = Array.from(new Set([
+    ...defaults.applicableRegulations,
+    ...(Array.isArray(settings.applicableRegulations) ? settings.applicableRegulations : [])
+  ].map(value => String(value || '').trim()).filter(Boolean)));
   return {
     ...defaults,
     ...settings,
-    applicableRegulations: Array.isArray(settings.applicableRegulations) ? settings.applicableRegulations : [...defaults.applicableRegulations],
+    applicableRegulations: mergedRegulations,
     companyContextSections: settings.companyContextSections && typeof settings.companyContextSections === 'object' ? settings.companyContextSections : null,
     companyStructure: Array.isArray(settings.companyStructure) ? settings.companyStructure : [],
     entityContextLayers: Array.isArray(settings.entityContextLayers) ? settings.entityContextLayers : [],
