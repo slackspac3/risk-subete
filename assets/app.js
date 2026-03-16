@@ -848,39 +848,39 @@ function getNonAdminCapabilityState(user = AuthService.getCurrentUser(), userSet
   const safeUsername = String(user?.username || '').trim().toLowerCase();
   const structure = Array.isArray(settings.companyStructure) ? settings.companyStructure : [];
   const selection = resolveUserOrganisationSelection(user, userSettings, settings);
-  const managedBusiness = structure.find(node => isCompanyEntityType(node.type) && String(node.ownerUsername || '').trim().toLowerCase() == safeUsername) || null;
-  const managedDepartment = structure.find(node => isDepartmentEntityType(node.type) && String(node.ownerUsername || '').trim().toLowerCase() == safeUsername) || null;
+  const managedBusiness = structure.find(node => isCompanyEntityType(node.type) && String(node.ownerUsername || '').trim().toLowerCase() === safeUsername) || null;
+  const managedDepartment = structure.find(node => isDepartmentEntityType(node.type) && String(node.ownerUsername || '').trim().toLowerCase() === safeUsername) || null;
   const selectedBusiness = getEntityById(structure, selection.businessUnitEntityId);
   const selectedDepartment = getEntityById(structure, selection.departmentEntityId);
   const canManageBusinessUnit = !!managedBusiness || (user?.role === 'bu_admin' && !!selection.businessUnitEntityId);
   const canManageDepartment = !!managedDepartment || (!!selectedDepartment && String(selectedDepartment.ownerUsername || '').trim().toLowerCase() === safeUsername);
   const managedBusinessId = managedBusiness?.id || selection.businessUnitEntityId || '';
   const managedDepartmentId = managedDepartment?.id || (canManageDepartment ? selection.departmentEntityId : '');
-  const roleKey = canManageBusinessUnit ? 'bu_admin' : canManageDepartment ? 'function_admin' : 'standard_user';
-  const roleLabel = canManageBusinessUnit ? 'Business unit admin' : canManageDepartment ? 'Function admin' : 'Standard user';
-  const guideItems = canManageBusinessUnit
-    ? [
-        'Use your dashboard to start or review risk assessments for your area.',
-        'Open Settings to add or update functions under your assigned business unit.',
-        'Use Manage Context to improve BU and function context before running assessments.',
-        'Review results first on the executive view, then use the technical tab when you need detail.'
-      ]
-    : canManageDepartment
-      ? [
-          'Use your dashboard to start or review risk assessments for your function.',
-          'Open Settings and use Manage Department Context to keep the function summary accurate.',
-          'Use AI assist to improve function context and personal defaults before assessing new scenarios.',
-          'Review the executive result first, then open technical detail if you need the FAIR inputs.'
-        ]
-      : [
-          'Start a new risk assessment from your dashboard when you want to analyse a scenario.',
-          'Use AI assist in each step as a starting point, then adjust the wording and numbers in plain English.',
-          'Open Personal Settings to keep your role, business context, and output preferences up to date.',
-          'Use the executive result view first to understand the impact, then open technical detail only if needed.'
-        ];
+  const roleKeys = [
+    canManageBusinessUnit ? 'bu_admin' : null,
+    canManageDepartment ? 'function_admin' : null,
+    !canManageBusinessUnit && !canManageDepartment ? 'standard_user' : null
+  ].filter(Boolean);
+  const roleLabels = [
+    canManageBusinessUnit ? 'Business unit admin' : null,
+    canManageDepartment ? 'Function admin' : null,
+    !canManageBusinessUnit && !canManageDepartment ? 'Standard user' : null
+  ].filter(Boolean);
+  const guideItems = Array.from(new Set([
+    'Start or review risk assessments from your dashboard for the areas you support.',
+    'Review the executive result first, then open technical detail only when you need the FAIR inputs or evidence.',
+    canManageBusinessUnit ? 'Open Settings to add or update functions under your assigned business unit and keep BU context accurate.' : null,
+    canManageBusinessUnit ? 'Use Manage Context to improve business-unit and function summaries before new assessments are started.' : null,
+    canManageDepartment ? 'Use Settings to maintain the department context you own so function-level assessments stay grounded.' : null,
+    canManageDepartment ? 'Use AI assist to refine function context and keep role-specific defaults aligned to the work your team actually does.' : null,
+    !canManageBusinessUnit && !canManageDepartment ? 'Use AI assist in each step as a starting point, then adjust the wording and numbers in plain English.' : null,
+    !canManageBusinessUnit && !canManageDepartment ? 'Open Personal Settings to keep your role, business context, and output preferences up to date.' : null
+  ].filter(Boolean)));
+  const roleSummary = roleLabels.join(' + ');
   return {
-    roleKey,
-    roleLabel,
+    roleKeys,
+    roleLabels,
+    roleSummary,
     guideItems,
     selection,
     canManageBusinessUnit,
@@ -895,17 +895,19 @@ function getNonAdminCapabilityState(user = AuthService.getCurrentUser(), userSet
 }
 
 function renderNonAdminHowToGuide(capability = getNonAdminCapabilityState()) {
-  const heading = capability.roleKey === 'bu_admin'
-    ? 'How to use this platform as a BU admin'
-    : capability.roleKey === 'function_admin'
-      ? 'How to use this platform as a function admin'
-      : 'How to use this platform';
+  const heading = capability.canManageBusinessUnit && capability.canManageDepartment
+    ? 'How to use this platform as a BU admin and function admin'
+    : capability.canManageBusinessUnit
+      ? 'How to use this platform as a BU admin'
+      : capability.canManageDepartment
+        ? 'How to use this platform as a function admin'
+        : 'How to use this platform';
   return `
     <div class="card card--elevated" style="padding:var(--sp-6)">
       <div class="flex items-center justify-between" style="gap:var(--sp-3);flex-wrap:wrap">
         <div>
           <div class="context-panel-title">${heading}</div>
-          <div class="form-help" style="margin-top:6px">Simple guidance for your current role: <strong>${capability.roleLabel}</strong>.</div>
+          <div class="form-help" style="margin-top:6px">Simple guidance for your current access: <strong>${capability.roleSummary}</strong>.</div>
         </div>
         <span class="badge badge--gold">Role guide</span>
       </div>
