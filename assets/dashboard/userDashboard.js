@@ -63,6 +63,12 @@ function renderUserDashboard() {
       : 'Your working context is still thin. Add a few lines in Personal Settings to improve the usefulness of generated outputs.'
   ];
 
+  const quickStatus = hasDraft
+    ? 'You have a draft in progress and can resume it immediately.'
+    : assessmentsNeedingReview.length
+      ? 'You have completed assessments that need review.'
+      : 'You are ready to start a new assessment.';
+
   setPage(`
     <main class="page">
       <div class="container container--wide" style="padding:var(--sp-10) var(--sp-6)">
@@ -71,46 +77,38 @@ function renderUserDashboard() {
             <div style="max-width:760px">
               <div class="landing-badge">Personal Dashboard</div>
               <h2 style="margin-top:var(--sp-4)">Welcome back, ${user?.displayName || 'there'}.</h2>
-              <p style="margin-top:10px;color:rgba(255,255,255,.74);max-width:680px">This is your main working space. Use it to start a new risk assessment, keep track of what you have already analysed, and stay on top of the context that shapes your outputs.</p>
+              <p style="margin-top:10px;color:rgba(255,255,255,.74);max-width:680px">This is your main working space. Start a new assessment, resume unfinished work, or review completed results from here.</p>
               <div class="flex items-center gap-3 mt-6" style="flex-wrap:wrap">
                 <button class="btn btn--primary btn--lg" id="btn-dashboard-new-assessment">Start a New Risk Assessment</button>
-                <button class="btn btn--secondary" id="btn-dashboard-open-settings">Review Personal Settings</button>
+                <button class="btn btn--secondary" id="btn-dashboard-continue-draft" ${hasDraft ? '' : 'disabled'}>Resume Draft</button>
+                <button class="btn btn--ghost" id="btn-dashboard-open-settings">Open Personal Settings</button>
               </div>
             </div>
-            <div class="card" style="min-width:280px;max-width:340px;padding:var(--sp-5);background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08)">
-              <div class="context-panel-title">Your saved context</div>
-              <div class="context-panel-copy" style="margin-top:8px">${profile.jobTitle || 'Role not yet set'} · ${profile.businessUnit || user?.businessUnit || 'Business unit not yet set'}${profile.department || user?.department ? ` · ${profile.department || user?.department}` : ''}</div>
+            <div class="card" style="min-width:280px;max-width:360px;padding:var(--sp-5);background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08)">
+              <div class="context-panel-title">What to do next</div>
+              <div class="context-panel-copy" style="margin-top:8px">${quickStatus}</div>
+              <div class="form-help" style="margin-top:10px;color:rgba(255,255,255,.65)">Current access: ${capability.roleSummary}</div>
               <div class="form-help" style="margin-top:10px;color:rgba(255,255,255,.65)">Default geography: ${settings.geographyPrimary || settings.geography || globalSettings.geography}</div>
-              <div class="form-help" style="margin-top:10px;color:rgba(255,255,255,.65)">Current role mode: ${capability.roleLabel}</div>
             </div>
           </div>
         </section>
 
         <section class="admin-overview-grid" style="margin-top:var(--sp-8)">
           <div class="admin-overview-card">
-            <div class="admin-overview-label">Assessments Completed</div>
+            <div class="admin-overview-label">Open work</div>
+            <div class="admin-overview-value" style="font-size:1.2rem">${openAssessmentRows.length}</div>
+            <div class="admin-overview-foot">Drafts and results that are most likely to need attention now.</div>
+          </div>
+          <div class="admin-overview-card">
+            <div class="admin-overview-label">Completed assessments</div>
             <div class="admin-overview-value" style="font-size:1.2rem">${assessments.length}</div>
             <div class="admin-overview-foot">${latestAssessment ? `Latest: ${new Date(latestAssessment.completedAt || latestAssessment.createdAt || Date.now()).toLocaleDateString('en-AE', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'No completed assessments yet'}</div>
           </div>
           <div class="admin-overview-card">
-            <div class="admin-overview-label">Focus Areas</div>
-            <div class="admin-overview-value" style="font-size:1.2rem">${focusAreas.length}</div>
-            <div class="admin-overview-foot">${focusAreas.length ? focusAreas.join(', ') : 'Add your priorities in Personal Settings'}</div>
-          </div>
-          <div class="admin-overview-card">
-            <div class="admin-overview-label">Templates Started</div>
-            <div class="admin-overview-value" style="font-size:1.2rem">${templateLoads}</div>
-            <div class="admin-overview-foot">${hasDraft ? 'You also have an assessment draft in progress' : 'No draft in progress right now'}</div>
-          </div>
-          <div class="admin-overview-card">
-            <div class="admin-overview-label">Needs Review</div>
+            <div class="admin-overview-label">Needs review</div>
             <div class="admin-overview-value" style="font-size:1.2rem">${assessmentsNeedingReview.length}</div>
-            <div class="admin-overview-foot">${assessmentsNeedingReview.length ? 'Scenarios near or above tolerance are ready for review.' : 'No high-priority reviews waiting right now.'}</div>
+            <div class="admin-overview-foot">${assessmentsNeedingReview.length ? 'Scenarios near or above tolerance are ready for review.' : 'Nothing currently stands out for urgent review.'}</div>
           </div>
-        </section>
-
-        <section style="margin-top:var(--sp-8)">
-          ${renderNonAdminHowToGuide(capability)}
         </section>
 
         <section class="grid-2" style="margin-top:var(--sp-8);align-items:start">
@@ -118,8 +116,8 @@ function renderUserDashboard() {
             <div class="card card--elevated" style="padding:var(--sp-6)">
               <div class="flex items-center justify-between" style="gap:var(--sp-3);flex-wrap:wrap">
                 <div>
-                  <div class="context-panel-title">Open work</div>
-                  <div class="form-help">The next assessments or reviews most likely to need your attention.</div>
+                  <div class="context-panel-title">Next up</div>
+                  <div class="form-help">Resume unfinished work or open the results that most likely need attention.</div>
                 </div>
                 <span class="badge badge--neutral">${openAssessmentRows.length}</span>
               </div>
@@ -166,69 +164,21 @@ function renderUserDashboard() {
                       <button type="button" class="btn btn--ghost btn--sm dashboard-delete-assessment" data-assessment-id="${assessment.id}">Delete</button>
                     </div>
                   </div>
-                `).join('') : `<div class="form-help">No completed assessments yet. Finished assessments will appear here for quick review and comparison.</div>`}
+                `).join('') : `<div class="form-help">No completed assessments yet. Finished assessments will appear here for quick review.</div>`}
               </div>
             </div>
           </div>
 
           <div style="display:flex;flex-direction:column;gap:var(--sp-5)">
-            <div class="card card--elevated" style="padding:var(--sp-6)">
-              <div class="flex items-center justify-between" style="gap:var(--sp-3);flex-wrap:wrap">
-                <div>
-                  <div class="context-panel-title">What to track next</div>
-                  <div class="form-help">A concise working view of what deserves attention.</div>
-                </div>
-                <span class="badge badge--neutral">${dashboardPriorities.length} items</span>
-              </div>
-              <div style="display:flex;flex-direction:column;gap:12px;margin-top:var(--sp-5)">
-                ${dashboardPriorities.map((item, index) => `
-                  <div style="display:flex;gap:12px;align-items:flex-start;background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)">
-                    <div style="width:28px;height:28px;border-radius:999px;background:rgba(244,193,90,.18);display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;color:var(--accent-gold);flex-shrink:0">${index + 1}</div>
-                    <div style="font-size:.9rem;line-height:1.6">${item}</div>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
+            ${renderNonAdminHowToGuide(capability)}
 
             <div class="card card--elevated" style="padding:var(--sp-6)">
-              <div class="context-panel-title">Items needing review</div>
-              <div class="form-help" style="margin-top:6px">Scenarios that are near tolerance, above tolerance, or ready for another management look.</div>
-              <div style="display:flex;flex-direction:column;gap:12px;margin-top:var(--sp-5)">
-                ${assessmentsNeedingReview.length ? assessmentsNeedingReview.map(assessment => `
-                  <div class="card dashboard-assessment-row" data-assessment-id="${assessment.id}" style="padding:var(--sp-4);background:var(--bg-elevated);text-align:left">
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-                      <div>
-                        <div style="font-weight:600;color:var(--text-primary)">${assessment.scenarioTitle || 'Untitled assessment'}</div>
-                        <div class="form-help" style="margin-top:6px">${assessment.buName || profile.businessUnit || user?.businessUnit || 'Business unit not set'} · ${new Date(assessment.completedAt || assessment.createdAt || Date.now()).toLocaleDateString('en-AE', { year: 'numeric', month: 'short', day: 'numeric' })}</div>
-                      </div>
-                      <span class="badge ${assessment.results?.toleranceBreached ? 'badge--danger' : 'badge--warning'}">${assessment.results?.toleranceBreached ? 'Escalate' : 'Review'}</span>
-                    </div>
-                    <div class="flex items-center gap-3" style="margin-top:10px;flex-wrap:wrap">
-                      <button type="button" class="btn btn--ghost btn--sm dashboard-open-action" data-assessment-id="${assessment.id}">Open Result</button>
-                      <button type="button" class="btn btn--ghost btn--sm dashboard-archive-assessment" data-assessment-id="${assessment.id}">Archive</button>
-                      <button type="button" class="btn btn--ghost btn--sm dashboard-delete-assessment" data-assessment-id="${assessment.id}">Delete</button>
-                    </div>
-                  </div>
-                `).join('') : `<div class="form-help">Nothing currently stands out for urgent review.</div>`}
-              </div>
-            </div>
-
-            <div class="card card--elevated" style="padding:var(--sp-6)">
-              <div class="context-panel-title">Current activity</div>
-              <div style="display:grid;gap:12px;margin-top:var(--sp-5)">
-                <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)">
-                  <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Setup status</div>
-                  <div style="margin-top:6px;font-weight:600">Completed on ${new Date(settings.onboardedAt).toLocaleDateString('en-AE', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
-                </div>
-                <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)">
-                  <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Draft assessment</div>
-                  <div style="margin-top:6px;font-weight:600">${draftTitle || 'No draft in progress'}</div>
-                  <div class="form-help" style="margin-top:6px">${hasDraft ? 'Continue from where you left off or start a new analysis.' : 'Your next assessment will start with a fresh draft.'}</div>
-                </div>
-              </div>
+              <div class="context-panel-title">Your saved context</div>
+              <div class="context-panel-copy" style="margin-top:10px">${profile.jobTitle || 'Role not yet set'} · ${profile.businessUnit || user?.businessUnit || 'Business unit not yet set'}${profile.department || user?.department ? ` · ${profile.department || user?.department}` : ''}</div>
+              <div class="form-help" style="margin-top:12px">${focusAreas.length ? `Focus areas: ${focusAreas.join(', ')}` : 'No focus areas saved yet.'}</div>
+              <div class="form-help" style="margin-top:8px">${profile.workingContext ? 'Working context is saved and will be reused in AI-assisted steps.' : 'Add working context in Personal Settings to improve AI-assisted outputs.'}</div>
               <div class="flex items-center gap-3 mt-5" style="flex-wrap:wrap">
-                <button class="btn btn--secondary" id="btn-dashboard-continue-draft" ${hasDraft ? '' : 'disabled'}>Resume Draft</button>
-                <button class="btn btn--ghost" id="btn-dashboard-settings-secondary">Open Settings</button>
+                <button class="btn btn--secondary" id="btn-dashboard-settings-secondary">Open Settings</button>
               </div>
             </div>
 
@@ -263,7 +213,6 @@ function renderUserDashboard() {
         </section>
       </div>
     </main>`);
-
   document.getElementById('btn-dashboard-new-assessment')?.addEventListener('click', () => {
     resetDraft();
     Router.navigate('/wizard/1');
