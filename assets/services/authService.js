@@ -12,14 +12,7 @@ const AuthService = (() => {
   const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
   const ADMIN_SECRET_KEY = 'rq_admin_api_secret';
   const DEFAULT_USERS_API_URL = resolveApiUrl('/api/users');
-  const DEFAULT_ACCOUNTS = [
-    { username: 'admin', password: 'Admin@Risk2026', displayName: 'Global Admin', role: 'admin' },
-    { username: 'alex.risk', password: 'RiskUser@01', displayName: 'Alex Risk', role: 'user' },
-    { username: 'nina.ops', password: 'RiskUser@02', displayName: 'Nina Ops', role: 'user' },
-    { username: 'omar.tech', password: 'RiskUser@03', displayName: 'Omar Tech', role: 'user' },
-    { username: 'priya.audit', password: 'RiskUser@04', displayName: 'Priya Audit', role: 'user' },
-    { username: 'samir.compliance', password: 'RiskUser@05', displayName: 'Samir Compliance', role: 'user' }
-  ];
+  const DEFAULT_ACCOUNTS = [];
   let accountsCache = DEFAULT_ACCOUNTS.slice();
 
 function resolveApiUrl(path) {
@@ -67,7 +60,7 @@ function resolveApiUrl(path) {
   }
 
   function saveCache(accounts) {
-    accountsCache = Array.isArray(accounts) && accounts.length ? accounts.map(normaliseAccount) : DEFAULT_ACCOUNTS.map(normaliseAccount);
+    accountsCache = Array.isArray(accounts) && accounts.length ? accounts.map(normaliseAccount) : [];
     localStorage.setItem(ACCOUNTS_CACHE_KEY, JSON.stringify(accountsCache));
   }
 

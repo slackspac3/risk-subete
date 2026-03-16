@@ -1,14 +1,18 @@
 const crypto = require('crypto');
 const { appendAuditEvent } = require('./_audit');
 
-const DEFAULT_ACCOUNTS = [
-  { username: 'admin', password: 'Admin@Risk2026', displayName: 'Global Admin', role: 'admin', businessUnitEntityId: '', departmentEntityId: '' },
-  { username: 'alex.risk', password: 'RiskUser@01', displayName: 'Alex Risk', role: 'user', businessUnitEntityId: '', departmentEntityId: '' },
-  { username: 'nina.ops', password: 'RiskUser@02', displayName: 'Nina Ops', role: 'user', businessUnitEntityId: '', departmentEntityId: '' },
-  { username: 'omar.tech', password: 'RiskUser@03', displayName: 'Omar Tech', role: 'user', businessUnitEntityId: '', departmentEntityId: '' },
-  { username: 'priya.audit', password: 'RiskUser@04', displayName: 'Priya Audit', role: 'user', businessUnitEntityId: '', departmentEntityId: '' },
-  { username: 'samir.compliance', password: 'RiskUser@05', displayName: 'Samir Compliance', role: 'user', businessUnitEntityId: '', departmentEntityId: '' }
-];
+const DEFAULT_ACCOUNTS = [];
+
+function getBootstrapAccounts() {
+  try {
+    const raw = String(process.env.BOOTSTRAP_ACCOUNTS_JSON || '').trim();
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(normaliseAccount).filter(account => account.username && account.password) : [];
+  } catch {
+    return [];
+  }
+}
 
 const USERS_KEY = process.env.USER_STORE_KEY || 'risk_calculator_users';
 const ADMIN_API_SECRET = process.env.ADMIN_API_SECRET || '';
@@ -64,7 +68,7 @@ function isAdminRequest(req) {
 }
 
 function getSessionSigningSecret() {
-  return ADMIN_API_SECRET || getKvToken() || 'risk-calculator-poc-session-secret';
+  return process.env.SESSION_SIGNING_SECRET || ADMIN_API_SECRET || getKvToken() || '';
 }
 
 function encodeTokenSegment(value) {
@@ -72,6 +76,8 @@ function encodeTokenSegment(value) {
 }
 
 function createSessionToken(account) {
+  const signingSecret = getSessionSigningSecret();
+  if (!signingSecret) throw new Error('Session signing secret is not configured.');
   const payload = JSON.stringify({
     username: account.username,
     role: account.role,
@@ -80,15 +86,17 @@ function createSessionToken(account) {
     exp: Date.now() + SESSION_TTL_MS
   });
   const payloadPart = encodeTokenSegment(payload);
-  const signature = crypto.createHmac('sha256', getSessionSigningSecret()).update(payloadPart).digest('base64url');
+  const signature = crypto.createHmac('sha256', signingSecret).update(payloadPart).digest('base64url');
   return `${payloadPart}.${signature}`;
 }
 
 function verifySessionToken(token) {
+  const signingSecret = getSessionSigningSecret();
+  if (!signingSecret) return null;
   const value = String(token || '').trim();
   if (!value || !value.includes('.')) return null;
   const [payloadPart, signature] = value.split('.', 2);
-  const expected = crypto.createHmac('sha256', getSessionSigningSecret()).update(payloadPart).digest('base64url');
+  const expected = crypto.createHmac('sha256', signingSecret).update(payloadPart).digest('base64url');
   if (signature !== expected) return null;
   try {
     const payload = JSON.parse(Buffer.from(payloadPart, 'base64url').toString('utf8'));
@@ -156,12 +164,12 @@ function hasWritableKv() {
 async function readAccounts() {
   const response = await runKvCommand(['GET', USERS_KEY]);
   const raw = response?.result;
-  if (!raw) return DEFAULT_ACCOUNTS.map(normaliseAccount);
+  if (!raw) return getBootstrapAccounts();
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length ? parsed.map(normaliseAccount) : DEFAULT_ACCOUNTS.map(normaliseAccount);
+    return Array.isArray(parsed) && parsed.length ? parsed.map(normaliseAccount) : getBootstrapAccounts();
   } catch {
-    return DEFAULT_ACCOUNTS.map(normaliseAccount);
+    return getBootstrapAccounts();
   }
 }
 

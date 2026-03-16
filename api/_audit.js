@@ -91,14 +91,16 @@ function summariseAuditLog(entries = []) {
 }
 
 function getSessionSigningSecret() {
-  return process.env.ADMIN_API_SECRET || getKvToken() || 'risk-calculator-poc-session-secret';
+  return process.env.SESSION_SIGNING_SECRET || process.env.ADMIN_API_SECRET || getKvToken() || '';
 }
 
 function verifySessionToken(token) {
+  const signingSecret = getSessionSigningSecret();
+  if (!signingSecret) return null;
   const value = String(token || '').trim();
   if (!value || !value.includes('.')) return null;
   const [payloadPart, signature] = value.split('.', 2);
-  const expected = crypto.createHmac('sha256', getSessionSigningSecret()).update(payloadPart).digest('base64url');
+  const expected = crypto.createHmac('sha256', signingSecret).update(payloadPart).digest('base64url');
   if (signature !== expected) return null;
   try {
     const payload = JSON.parse(Buffer.from(payloadPart, 'base64url').toString('utf8'));
