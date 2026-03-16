@@ -59,6 +59,27 @@ function renderExecutiveSignalCard(results) {
   </div>`;
 }
 
+function renderExecutiveBrief(statusTitle, executiveDecision, executiveAction, executiveAnnualView) {
+  const nextStep = executiveAction || executiveDecision?.priority || 'Confirm the next management step for this scenario.';
+  return `<div class="results-executive-brief">
+    <div class="results-brief-card">
+      <div class="results-brief-label">Current position</div>
+      <div class="results-brief-value">${statusTitle}</div>
+      <div class="results-brief-copy">${executiveAnnualView}</div>
+    </div>
+    <div class="results-brief-card">
+      <div class="results-brief-label">Management posture</div>
+      <div class="results-brief-value">${executiveDecision?.decision || 'Review'}</div>
+      <div class="results-brief-copy">${executiveDecision?.rationale || ''}</div>
+    </div>
+    <div class="results-brief-card">
+      <div class="results-brief-label">Immediate next step</div>
+      <div class="results-brief-value">Act now</div>
+      <div class="results-brief-copy">${nextStep}</div>
+    </div>
+  </div>`;
+}
+
 function buildAssessmentComparison(currentAssessment, baselineAssessment) {
   if (!currentAssessment?.results || !baselineAssessment?.results) return null;
 
@@ -463,21 +484,23 @@ function renderResults(id, isShared) {
         </div>
       </div>
 
+      ${renderExecutiveBrief(statusTitle, executiveDecision, executiveAction, executiveAnnualView)}
+
       <div class="results-exec-metrics">
         <div class="results-impact-card">
           <div class="results-impact-label">Potential impact from one serious event</div>
           <div class="results-impact-value ${r.toleranceBreached ? 'danger' : ''}">${fmtCurrency(r.lm.p90)}</div>
-          <div class="results-impact-copy">Single-event view</div>
+          <div class="results-impact-copy">Severe single-event view</div>
         </div>
         <div class="results-impact-card">
           <div class="results-impact-label">Most likely impact over a year</div>
           <div class="results-impact-value">${fmtCurrency(r.ale.mean)}</div>
-          <div class="results-impact-copy">Expected yearly view</div>
+          <div class="results-impact-copy">Expected annual exposure</div>
         </div>
         <div class="results-impact-card">
           <div class="results-impact-label">High-stress impact over a year</div>
           <div class="results-impact-value warning">${fmtCurrency(r.ale.p90)}</div>
-          <div class="results-impact-copy">Severe yearly view</div>
+          <div class="results-impact-copy">Severe annual planning view</div>
         </div>
       </div>
 
@@ -494,17 +517,19 @@ function renderResults(id, isShared) {
             <strong style="font-family:var(--font-display);font-size:var(--text-xl);color:var(--text-primary)">${executiveDecision.decision}</strong>
             <span class="badge ${r.toleranceBreached ? 'badge--danger' : r.nearTolerance ? 'badge--warning' : 'badge--success'}">${statusTitle}</span>
           </div>
-          <div class="results-decision-row">
-            <span class="results-decision-label">Why now</span>
-            <div class="results-decision-copy">${executiveDecision.rationale}</div>
-          </div>
-          <div class="results-decision-row">
-            <span class="results-decision-label">What should happen now</span>
-            <div class="results-decision-copy">${executiveAction}</div>
-          </div>
-          <div class="results-decision-row">
-            <span class="results-decision-label">Main priority</span>
-            <div class="results-decision-copy">${executiveDecision.priority}</div>
+          <div class="results-decision-points">
+            <div class="results-decision-point">
+              <span class="results-decision-label">Why now</span>
+              <div class="results-decision-copy">${executiveDecision.rationale}</div>
+            </div>
+            <div class="results-decision-point">
+              <span class="results-decision-label">What should happen now</span>
+              <div class="results-decision-copy">${executiveAction}</div>
+            </div>
+            <div class="results-decision-point">
+              <span class="results-decision-label">Main priority</span>
+              <div class="results-decision-copy">${executiveDecision.priority}</div>
+            </div>
           </div>
         </div>
         <div class="results-decision-card">
