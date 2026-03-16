@@ -257,13 +257,14 @@ module.exports = async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const settings = await readSettings();
-      res.status(200).json({
-        settings,
-        storage: {
+      const response = { settings };
+      if (isAdminSecretValid(req) || verifySessionToken(req.headers['x-session-token'])?.role === 'admin') {
+        response.storage = {
           writable: hasWritableKv(),
           mode: hasWritableKv() ? 'shared-kv' : 'fallback-defaults'
-        }
-      });
+        };
+      }
+      res.status(200).json(response);
       return;
     }
 
@@ -289,9 +290,10 @@ module.exports = async function handler(req, res) {
 
     res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
-    res.status(500).json({
-      error: 'Settings store request failed.',
-      detail: error instanceof Error ? error.message : String(error)
-    });
+    const response = { error: 'Settings store request failed.' };
+    if (isAdminSecretValid(req) || verifySessionToken(req.headers['x-session-token'])?.role === 'admin') {
+      response.detail = error instanceof Error ? error.message : String(error);
+    }
+    res.status(500).json(response);
   }
 };

@@ -67,6 +67,11 @@ function isAdminRequest(req) {
   return isAdminSecretValid(req) || isAdminSessionValid(req);
 }
 
+function canSelfUpdateAccount(session, username) {
+  const safeUsername = String(username || '').trim().toLowerCase();
+  return !!session && (session.role === 'admin' || String(session.username || '').trim().toLowerCase() === safeUsername);
+}
+
 function getSessionSigningSecret() {
   return process.env.SESSION_SIGNING_SECRET || ADMIN_API_SECRET || getKvToken() || '';
 }
@@ -282,6 +287,7 @@ module.exports = async function handler(req, res) {
     if (req.method === 'PATCH') {
       const username = String(body.username || '').trim().toLowerCase();
       const updates = body.updates || {};
+      const session = verifySessionToken(req.headers['x-session-token']);
       const accounts = await readAccounts();
       const index = accounts.findIndex(account => account.username === username);
       if (index < 0) {
@@ -289,6 +295,10 @@ module.exports = async function handler(req, res) {
         return;
       }
       if (body.action === 'self-update') {
+        if (!canSelfUpdateAccount(session, username)) {
+          res.status(403).json({ error: 'You are not allowed to modify this account.' });
+          return;
+        }
         accounts[index] = normaliseAccount({
           ...accounts[index],
           businessUnitEntityId: typeof updates.businessUnitEntityId === 'string' ? updates.businessUnitEntityId : accounts[index].businessUnitEntityId,

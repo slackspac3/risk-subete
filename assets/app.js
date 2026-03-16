@@ -8,7 +8,7 @@
 const TOLERANCE_THRESHOLD = 5_000_000;
 const DEFAULT_FX_RATE = 3.6725;
 const DEFAULT_COMPASS_PROXY_URL = resolveCompassProxyUrl();
-const APP_ASSET_VERSION = '20260312az';
+const APP_ASSET_VERSION = '20260312bb';
 const GLOBAL_ADMIN_STORAGE_KEY = 'rq_admin_settings';
 const USER_SETTINGS_STORAGE_PREFIX = 'rq_user_settings';
 const ASSESSMENTS_STORAGE_PREFIX = 'rq_assessments';
@@ -561,6 +561,18 @@ const USER_SETTINGS_KEYS = [
   'adminContextSummary',
   'userProfile',
   'onboardedAt'
+];
+
+const USER_SETTINGS_OVERRIDE_FIELDS = [
+  'companyWebsiteUrl',
+  'companyContextProfile',
+  'companyContextSections',
+  'riskAppetiteStatement',
+  'applicableRegulations',
+  'aiInstructions',
+  'benchmarkStrategy',
+  'defaultLinkMode',
+  'adminContextSummary'
 ];
 
 const USER_FOCUS_OPTIONS = [
@@ -1366,46 +1378,73 @@ function saveAdminSettings(settings, options = {}) {
   }
 }
 
-function getUserSettings() {
-  const globalSettings = getAdminSettings();
-  const defaults = getUserSettingsDefaults(globalSettings);
-  const cache = ensureUserStateCache();
-  if (cache.userSettings) {
-    return {
-      ...defaults,
-      ...cache.userSettings,
-      applicableRegulations: Array.isArray(cache.userSettings.applicableRegulations) ? cache.userSettings.applicableRegulations : [...defaults.applicableRegulations],
-      userProfile: normaliseUserProfile(cache.userSettings.userProfile || defaults.userProfile),
-      companyContextSections: cache.userSettings.companyContextSections && typeof cache.userSettings.companyContextSections === 'object'
-        ? cache.userSettings.companyContextSections
-        : defaults.companyContextSections
-    };
+function normaliseComparableUserSettingValue(key, value) {
+  if (Array.isArray(value)) {
+    return value.map(item => String(item || '').trim()).filter(Boolean);
   }
-  try {
-    const saved = JSON.parse(localStorage.getItem(buildUserStorageKey(USER_SETTINGS_STORAGE_PREFIX)) || 'null') || {};
-    cache.userSettings = saved;
-    return {
-      ...defaults,
-      ...saved,
-      ...normaliseUserGeographies(saved, globalSettings),
-      applicableRegulations: Array.isArray(saved.applicableRegulations) ? saved.applicableRegulations : [...defaults.applicableRegulations],
-      userProfile: normaliseUserProfile(saved.userProfile || defaults.userProfile),
-      companyContextSections: saved.companyContextSections && typeof saved.companyContextSections === 'object'
-        ? saved.companyContextSections
-        : defaults.companyContextSections
-    };
-  } catch {
-    return {
-      ...defaults,
-      applicableRegulations: [...defaults.applicableRegulations],
-      userProfile: normaliseUserProfile(defaults.userProfile)
-    };
+  if (value && typeof value === 'object') {
+    return JSON.stringify(value);
   }
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  return value ?? '';
 }
 
-function saveUserSettings(settings) {
+function hasUserSettingOverride(key, settings = {}, defaults = {}) {
+  return JSON.stringify(normaliseComparableUserSettingValue(key, settings[key])) !== JSON.stringify(normaliseComparableUserSettingValue(key, defaults[key]));
+}
+
+function getInheritedSettingsForUserSelection(user = AuthService.getCurrentUser(), candidateSettings = {}) {
   const globalSettings = getAdminSettings();
-  const defaults = getUserSettingsDefaults(globalSettings);
+  if (!user || user.role === 'admin') {
+    return globalSettings;
+  }
+  const selection = resolveUserOrganisationSelection(user, candidateSettings, globalSettings);
+  const scopedBusinessUnitEntityId = String(selection.businessUnitEntityId || '').trim();
+  const scopedDepartmentEntityId = String(selection.departmentEntityId || '').trim();
+  const companyNode = getEntityById(globalSettings.companyStructure || [], scopedBusinessUnitEntityId);
+  const departmentNode = getEntityById(globalSettings.companyStructure || [], scopedDepartmentEntityId);
+  const companyLayer = getEntityLayerById(globalSettings, scopedBusinessUnitEntityId);
+  const departmentLayer = getEntityLayerById(globalSettings, scopedDepartmentEntityId);
+  const buOverride = getBUList().find(item => item.orgEntityId === scopedBusinessUnitEntityId) || null;
+  return applyBUOverrideToSettings(
+    applyEntityLayerToSettings(
+      applyEntityLayerToSettings(globalSettings, companyLayer, companyNode),
+      departmentLayer,
+      departmentNode
+    ),
+    buOverride
+  );
+}
+
+function buildResolvedUserSettings(saved = {}, defaults = getUserSettingsDefaults(), globalSettings = getAdminSettings()) {
+  const resolved = {
+    ...defaults,
+    ...saved,
+    ...normaliseUserGeographies(saved, globalSettings),
+    applicableRegulations: Array.isArray(saved.applicableRegulations) ? saved.applicableRegulations : [...defaults.applicableRegulations],
+    userProfile: normaliseUserProfile(saved.userProfile || defaults.userProfile),
+    companyContextSections: saved.companyContextSections && typeof saved.companyContextSections === 'object'
+      ? saved.companyContextSections
+      : defaults.companyContextSections
+  };
+  const overrideKeys = Array.isArray(saved._overrideKeys)
+    ? saved._overrideKeys.map(key => String(key || '').trim()).filter(key => USER_SETTINGS_OVERRIDE_FIELDS.includes(key))
+    : [];
+  USER_SETTINGS_OVERRIDE_FIELDS.forEach(key => {
+    if (!overrideKeys.includes(key)) {
+      resolved[key] = defaults[key];
+    }
+  });
+  resolved._overrideKeys = overrideKeys;
+  return resolved;
+}
+
+function buildStoredUserSettings(settings = {}, defaults = getUserSettingsDefaults(), globalSettings = getAdminSettings()) {
   const merged = {
     ...defaults,
     ...settings,
@@ -1416,9 +1455,45 @@ function saveUserSettings(settings) {
       ? settings.companyContextSections
       : defaults.companyContextSections
   };
+  const stored = {
+    geography: merged.geography,
+    geographyPrimary: merged.geographyPrimary || merged.geography,
+    geographySecondary: merged.geographySecondary || '',
+    geographyTertiary: merged.geographyTertiary || '',
+    userProfile: merged.userProfile,
+    onboardedAt: merged.onboardedAt || '',
+    _overrideKeys: []
+  };
+  USER_SETTINGS_OVERRIDE_FIELDS.forEach(key => {
+    if (!hasUserSettingOverride(key, merged, defaults)) return;
+    stored[key] = merged[key];
+    stored._overrideKeys.push(key);
+  });
+  return stored;
+}
+
+function getUserSettings() {
+  const globalSettings = getAdminSettings();
+  const defaults = getUserSettingsDefaults(globalSettings);
   const cache = ensureUserStateCache();
-  cache.userSettings = merged;
-  localStorage.setItem(buildUserStorageKey(USER_SETTINGS_STORAGE_PREFIX), JSON.stringify(merged));
+  if (cache.userSettings) {
+    return buildResolvedUserSettings(cache.userSettings, defaults, globalSettings);
+  }
+  try {
+    const saved = JSON.parse(localStorage.getItem(buildUserStorageKey(USER_SETTINGS_STORAGE_PREFIX)) || 'null') || {};
+    cache.userSettings = saved;
+    return buildResolvedUserSettings(saved, defaults, globalSettings);
+  } catch {
+    return buildResolvedUserSettings({}, defaults, globalSettings);
+  }
+}
+
+function saveUserSettings(settings) {
+  const inheritedDefaults = getInheritedSettingsForUserSelection(AuthService.getCurrentUser(), settings);
+  const stored = buildStoredUserSettings(settings, getUserSettingsDefaults(inheritedDefaults), getAdminSettings());
+  const cache = ensureUserStateCache();
+  cache.userSettings = stored;
+  localStorage.setItem(buildUserStorageKey(USER_SETTINGS_STORAGE_PREFIX), JSON.stringify(stored));
   queueSharedUserStateSync();
 }
 
@@ -1447,25 +1522,19 @@ function getEffectiveSettings() {
   );
   const merged = {
     ...organisationScopedDefaults,
-    ...userSettings,
     geography: userSettings.geography || organisationScopedDefaults.geography,
     geographyPrimary: userSettings.geographyPrimary || organisationScopedDefaults.geography,
     geographySecondary: userSettings.geographySecondary || '',
     geographyTertiary: userSettings.geographyTertiary || '',
-    companyWebsiteUrl: userSettings.companyWebsiteUrl || organisationScopedDefaults.companyWebsiteUrl,
-    companyContextProfile: userSettings.companyContextProfile || organisationScopedDefaults.companyContextProfile,
-    companyContextSections: userSettings.companyContextSections && typeof userSettings.companyContextSections === 'object'
-      ? userSettings.companyContextSections
-      : organisationScopedDefaults.companyContextSections,
     userProfile: normaliseUserProfile(userSettings.userProfile),
     userProfileSummary: buildUserProfileSummary(normaliseUserProfile(userSettings.userProfile)),
     selectedBusinessEntity: companyNode,
-    selectedDepartmentEntity: departmentNode
+    selectedDepartmentEntity: departmentNode,
+    onboardedAt: userSettings.onboardedAt || ''
   };
-  const userEditableFields = ['riskAppetiteStatement', 'applicableRegulations', 'aiInstructions', 'benchmarkStrategy', 'defaultLinkMode', 'adminContextSummary'];
-  userEditableFields.forEach(key => {
-    const hasOwnValue = Object.prototype.hasOwnProperty.call(userSettings, key);
-    if (!hasOwnValue) return;
+  const overrideKeys = Array.isArray(userSettings._overrideKeys) ? userSettings._overrideKeys : [];
+  USER_SETTINGS_OVERRIDE_FIELDS.forEach(key => {
+    if (!overrideKeys.includes(key)) return;
     const value = userSettings[key];
     if (Array.isArray(value)) {
       merged[key] = value.length ? value : organisationScopedDefaults[key];
@@ -1483,7 +1552,6 @@ function getEffectiveSettings() {
   });
   return merged;
 }
-
 
 function joinDistinctText(parts = []) {
   const seen = new Set();
