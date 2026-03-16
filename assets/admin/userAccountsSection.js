@@ -164,7 +164,7 @@ const AdminUserAccountsSection = (() => {
       });
       saveAdminSettings(nextSettings);
     } catch (error) {
-      AppState.adminNewUserStatus = `User update failed: ${error instanceof Error ? error.message : String(error)}`;
+      AppState.adminNewUserStatus = 'User access could not be updated. Check the assigned role and scope, then try again.';
       const resultEl = document.getElementById('admin-new-user-result');
       if (resultEl) resultEl.textContent = AppState.adminNewUserStatus;
       UI.toast('User update failed.', 'danger');
@@ -237,7 +237,7 @@ const AdminUserAccountsSection = (() => {
           UI.toast(`Password reset for ${username}.`, 'success');
           rerenderCurrentAdminSection();
         } catch (error) {
-          AppState.adminNewUserStatus = `Password reset failed: ${error instanceof Error ? error.message : String(error)}`;
+          AppState.adminNewUserStatus = 'Password could not be reset right now. Try again in a moment.';
           const resultEl = document.getElementById('admin-new-user-result');
           if (resultEl) resultEl.textContent = AppState.adminNewUserStatus;
           UI.toast('Password reset failed.', 'danger');
@@ -271,7 +271,7 @@ const AdminUserAccountsSection = (() => {
           UI.toast(`${displayName} deleted.`, 'success');
           rerenderCurrentAdminSection();
         } catch (error) {
-          UI.toast(`Delete failed: ${error instanceof Error ? error.message : String(error)}`, 'danger');
+          UI.toast('User could not be deleted right now.', 'danger');
         }
       });
     });
@@ -287,7 +287,7 @@ const AdminUserAccountsSection = (() => {
         await syncSharedAdminSettings(getAdminSettings());
         UI.toast('Admin API secret saved and current admin settings synced.', 'success');
       } catch (error) {
-        UI.toast(`Admin API secret saved, but settings sync failed: ${error instanceof Error ? error.message : String(error)}`, 'warning');
+        UI.toast('Admin API secret was saved for this browser, but the latest platform settings could not be refreshed right now.', 'warning');
       }
     });
 
@@ -304,18 +304,18 @@ const AdminUserAccountsSection = (() => {
       if (!btn || !statusEl) return;
       btn.disabled = true;
       btn.textContent = 'Checking…';
-      statusEl.textContent = 'Checking account sync…';
+      statusEl.textContent = 'Checking whether account updates are available for this admin session…';
       const result = await AuthService.testUsersStoreHealth();
       if (result.ok) {
         if (result.writable) {
-          statusEl.textContent = 'Account changes are available and can be saved.';
+          statusEl.textContent = 'Account changes are available and should appear across the platform.';
           UI.toast('Account sync is available.', 'success');
         } else {
-          statusEl.textContent = 'Account lookup is available, but changes cannot be saved right now.';
+          statusEl.textContent = 'Account information is reachable, but changes cannot be saved right now.';
           UI.toast('Account sync is reachable but not writable.', 'warning');
         }
       } else {
-        statusEl.textContent = 'Account sync check failed. Try again in a moment.';
+        statusEl.textContent = 'The platform could not confirm account sync right now. Try again in a moment.';
         UI.toast('Account sync check failed.', 'warning');
       }
       btn.disabled = false;
@@ -359,7 +359,7 @@ const AdminUserAccountsSection = (() => {
         UI.toast(`Created ${account.username}.`, 'success');
         rerenderCurrentAdminSection();
       } catch (error) {
-        AppState.adminNewUserStatus = `User creation failed: ${error instanceof Error ? error.message : String(error)}`;
+        AppState.adminNewUserStatus = 'User could not be created right now. Check the assigned role and scope, then try again.';
         resultEl.textContent = AppState.adminNewUserStatus;
         UI.toast('User creation failed.', 'danger');
         button.disabled = false;
