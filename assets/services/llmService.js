@@ -355,6 +355,29 @@ const LLMService = (() => {
     };
   }
 
+
+  function _buildCitationPromptBlock(citations = [], limit = 8) {
+    const items = (Array.isArray(citations) ? citations : [])
+      .map((item) => {
+        const kind = _classifyEvidenceSource(item);
+        const labelMap = {
+          official: 'Official/company source',
+          regulatory: 'Regulatory/policy source',
+          regional: 'Regional news source',
+          global: 'Global news source',
+          internal: 'Internal source',
+          external: 'External source'
+        };
+        const title = String(item?.title || item?.note || 'Untitled source').trim();
+        const excerpt = _truncateText(item?.excerpt || item?.description || item?.note || '', 220);
+        const url = String(item?.url || item?.link || '').trim();
+        return `- ${labelMap[kind] || 'Source'}: ${title}${excerpt ? ` | ${excerpt}` : ''}${url ? ` | ${url}` : ''}`;
+      })
+      .filter(Boolean)
+      .slice(0, limit);
+    return items.length ? items.join('\n') : '(no external citations available)';
+  }
+
   function _withEvidenceMeta(result = {}, evidenceMeta = null) {
     const meta = evidenceMeta || {};
     const normalised = {
@@ -673,6 +696,18 @@ const LLMService = (() => {
     return cleaned || raw;
   }
 
+
+  function _buildEnhancedNarrative(input = {}, modelNarrative = '') {
+    const modelText = _cleanUserFacingText(_stripScenarioLeadIns(modelNarrative || ''), { maxSentences: 6 });
+    const expanded = _buildScenarioExpansion({
+      ...input,
+      riskStatement: modelText || input.riskStatement || ''
+    }).scenarioExpansion;
+    if (!modelText) return expanded;
+    const merged = _dedupeSentences([expanded, modelText].filter(Boolean).join(' '));
+    return _cleanUserFacingText(merged, { maxSentences: 6 });
+  }
+
   function _buildScenarioExpansion(input = {}) {
     const statement = _stripScenarioLeadIns(_cleanScenarioSeed(input.riskStatement));
     const businessUnit = String(input.businessUnit?.name || 'the business unit').trim();
@@ -785,8 +820,9 @@ const LLMService = (() => {
    */
   async function generateScenarioAndInputs(narrative, buContext, retrievedDocs) {
     const classification = _classifyScenario(narrative);
-    // Simulate LLM latency
-    await new Promise(r => setTimeout(r, 2200 + Math.random() * 800));
+    if (_isDirectCompassUrl(_compassApiUrl) && !_compassApiKey) {
+      await new Promise(r => setTimeout(r, 2200 + Math.random() * 800));
+    }
 
     // Try real API first
     if (_compassApiKey || !_isDirectCompassUrl(_compassApiUrl)) {
@@ -834,12 +870,13 @@ User profile context:
 ${buContext?.userProfileSummary || '(none)'}
 Organisation structure context:
 ${buContext?.companyStructureContext || '(none)'}
+Scenario taxonomy hint:
+${classification.scenarioType} | ${classification.attackType} | ${classification.effect}
 
 Risk narrative: ${narrative}
 
 Relevant citations:
-${retrievedDocs.map(d => `- ${d.title}: ${d.excerpt}`).join('\
-')}
+${_buildCitationPromptBlock(retrievedDocs)}
 
 Evidence quality context:
 ${evidenceMeta.promptBlock}`;
@@ -912,7 +949,9 @@ ${evidenceMeta.promptBlock}`;
   }
 
   async function enhanceRiskContext(input) {
-    await new Promise(r => setTimeout(r, 1400 + Math.random() * 600));
+    if (_isDirectCompassUrl(_compassApiUrl) && !_compassApiKey) {
+      await new Promise(r => setTimeout(r, 1400 + Math.random() * 600));
+    }
     if (_compassApiKey || !_isDirectCompassUrl(_compassApiUrl)) {
       try {
         const systemPrompt = `You are a senior enterprise risk analyst. Given a risk statement, optional risk register text, business context, and regulations, expand the scenario realistically using likely attack paths, common knock-on effects, business consequences, and known industry patterns. Do not merely paraphrase the input. If the scenario concerns identity compromise, explain likely downstream effects such as email compromise, privileged misuse, tenant or admin abuse, fraud, service disruption, and data exposure where relevant. Return JSON only with this schema:
@@ -951,7 +990,7 @@ Risk register text:
 ${input.registerText || '(none)'}
 
 Retrieved citations:
-${(input.citations || []).map(c => `- ${c.title}: ${c.excerpt}`).join('\n')}
+${_buildCitationPromptBlock(input.citations || [])}
 
 Instructions:
 - make the enhancedStatement read like a realistic scenario narrative, not a polished restatement
@@ -969,7 +1008,7 @@ ${evidenceMeta.promptBlock}`;
           const parsed = JSON.parse(raw.replace(/```json\n?|```/g, '').trim());
           return _withEvidenceMeta({
             ...parsed,
-            enhancedStatement: _buildScenarioExpansion({ ...input, riskStatement: input.riskStatement || parsed.enhancedStatement }).scenarioExpansion,
+            enhancedStatement: _buildEnhancedNarrative(input, parsed.enhancedStatement),
             summary: _cleanUserFacingText(parsed.summary || '', { maxSentences: 3 }),
             linkAnalysis: _cleanUserFacingText(parsed.linkAnalysis || '', { maxSentences: 3 }),
             workflowGuidance: _normaliseGuidance(parsed.workflowGuidance),
@@ -993,6 +1032,17 @@ ${evidenceMeta.promptBlock}`;
       .map(line => line.trim())
       .filter(line => line.length > 10)
       .slice(0, 20);
+    const evidenceMeta = _buildEvidenceMeta({
+      citations: input.citations || [],
+      businessUnit: input.businessUnit,
+      geography: input.geography,
+      applicableRegulations: input.applicableRegulations,
+      uploadedText: input.registerText,
+      registerText: input.registerText,
+      userProfile: input.adminSettings?.userProfileSummary,
+      organisationContext: input.adminSettings?.companyStructureContext,
+      adminSettings: input.adminSettings
+    });
     if (_compassApiKey || !_isDirectCompassUrl(_compassApiUrl)) {
       try {
         const systemPrompt = `You are a senior enterprise risk analyst. You will receive a risk register that may contain multiple sheets, multiple columns, and contextual metadata. Return JSON only with this schema:
@@ -1071,7 +1121,7 @@ ${evidenceMeta.promptBlock}`;
         'Ask AI assist to translate the selected scope into FAIR inputs with GCC-first benchmark logic.'
       ];
     }
-    return _withEvidenceMeta(stub, _buildEvidenceMeta({ citations: input.citations || [], businessUnit: input.businessUnit, geography: input.geography, applicableRegulations: input.applicableRegulations, uploadedText: input.registerText, registerText: input.registerText, organisationContext: input.adminSettings?.companyStructureContext, adminSettings: input.adminSettings }));
+    return _withEvidenceMeta(stub, evidenceMeta);
   }
 
   async function buildCompanyContext(websiteUrl) {
