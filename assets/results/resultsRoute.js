@@ -259,6 +259,8 @@ function validateFairParams() {
 function renderWizard4() {
   const draft = AppState.draft;
   const p = draft.fairParams;
+  const safeIterations = Math.min(100000, Math.max(1000, Number.parseInt(p.iterations, 10) || 10000));
+  p.iterations = safeIterations;
   const selectedRisks = getSelectedRisks();
   const multipliers = getScenarioMultipliers();
   setPage(`
@@ -299,13 +301,13 @@ function renderWizard4() {
           </div>
           <div class="banner banner--poc anim-fade-in anim-delay-2"><span class="banner-icon">⚠</span><span class="banner-text">PoC tool. FAIR input ranges should be validated through expert elicitation for production risk decisions.</span></div>
           <div id="run-area">
-            <button class="btn btn--primary btn--lg" id="btn-run-sim" style="width:100%;justify-content:center">🚀 Run Monte Carlo Simulation (${p.iterations||10000} iterations)</button>
+            <button class="btn btn--primary btn--lg" id="btn-run-sim" style="width:100%;justify-content:center">🚀 Run Monte Carlo Simulation (${safeIterations} iterations)</button>
           </div>
           <div id="sim-progress" class="hidden">
             <div class="card" style="text-align:center;padding:var(--sp-10)">
               <div style="font-size:48px;margin-bottom:var(--sp-4);animation:spin 1s linear infinite">⚙️</div>
               <div style="font-family:var(--font-display);font-size:var(--text-xl);margin-bottom:var(--sp-2)">Running Simulation…</div>
-              <div style="font-size:var(--text-sm);color:var(--text-muted)">Computing ${p.iterations||10000} Monte Carlo iterations…</div>
+              <div style="font-size:var(--text-sm);color:var(--text-muted)">Computing ${safeIterations} Monte Carlo iterations…</div>
             </div>
           </div>
         </div>
@@ -324,8 +326,10 @@ async function runSimulation() {
   document.getElementById('run-area').classList.add('hidden');
   document.getElementById('sim-progress').classList.remove('hidden');
   await new Promise(r => setTimeout(r, 80));
+  await new Promise(requestAnimationFrame);
   try {
     const p = AppState.draft.fairParams;
+    p.iterations = Math.min(100000, Math.max(1000, Number.parseInt(p.iterations, 10) || 10000));
     const scenario = getScenarioMultipliers();
     const toleranceThreshold = getToleranceThreshold();
     const warningThreshold = getWarningThreshold();

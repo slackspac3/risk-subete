@@ -481,7 +481,12 @@ function collectFairParams() {
   const cbir = document.getElementById('corr-bi-ir');
   const crlr = document.getElementById('corr-rl-rc');
   if (dist) p.distType = dist.value;
-  if (iter) p.iterations = parseInt(iter.value) || 10000;
+  if (iter) {
+    const parsedIterations = Number.parseInt(iter.value, 10) || 10000;
+    const safeIterations = Math.min(100000, Math.max(1000, parsedIterations));
+    p.iterations = safeIterations;
+    if (String(safeIterations) !== String(iter.value)) iter.value = String(safeIterations);
+  }
   if (seed) p.seed = seed.value ? parseInt(seed.value) : null;
   if (cbir) p.corrBiIr = parseFloat(cbir.value) || 0.3;
   if (crlr) p.corrRlRc = parseFloat(crlr.value) || 0.2;
