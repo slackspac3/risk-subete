@@ -1703,24 +1703,24 @@ function openOrgEntityEditor({ structure = [], existingNode = null, seed = {}, o
       <button class="btn btn--secondary" id="btn-org-build-context" type="button">Build Context from Website</button>
       <span class="form-help" id="org-context-actions-help">Use AI to gather website and public-source context before saving.</span>
     </div>
-    <div class="card mt-4" style="padding:var(--sp-4);background:var(--bg-elevated)" id="org-context-refinement-wrap">
-      <div class="context-panel-title">Refine This Context With AI</div>
-      <p class="form-help" id="org-context-refinement-help" style="margin-top:6px">Use follow-up prompts to keep shaping the context until it is ready to save.</p>
-      <div id="org-context-refinement-history" style="display:flex;flex-direction:column;gap:10px;margin-top:12px"></div>
-      <div class="form-group mt-4">
-        <label class="form-label" for="org-context-source-file">Upload supporting documents</label>
-        <input class="form-input" id="org-context-source-file" type="file" accept=".txt,.csv,.json,.md,.tsv,.xlsx,.xls,.doc,.docx,.pdf">
-        <div class="form-help" id="org-context-source-help">Recommended: upload strategy, policy, procedure, or operating-model documents to ground the AI context.</div>
-      </div>
-      <div class="form-group mt-4">
-        <label class="form-label" for="org-context-followup">Follow-up prompt</label>
-        <textarea class="form-textarea" id="org-context-followup" rows="3" placeholder="Tell the AI what to change, emphasise, shorten, or make more specific."></textarea>
-      </div>
-      <div class="flex items-center gap-3 mt-3" style="flex-wrap:wrap">
-        <button class="btn btn--secondary" id="btn-org-refine-context" type="button">Apply Follow-Up Now</button>
-        <span class="form-help" id="org-context-refine-status">The context fields above will update in place each time you refine them.</span>
-      </div>
-    </div>`;
+    ${UI.aiRefinementCard({
+      intro: 'Use follow-up prompts to keep shaping the context until it is ready to save.',
+      historyId: 'org-context-refinement-history',
+      fileId: 'org-context-source-file',
+      fileLabel: 'Upload supporting documents',
+      fileAccept: '.txt,.csv,.json,.md,.tsv,.xlsx,.xls,.doc,.docx,.pdf',
+      fileHelpId: 'org-context-source-help',
+      fileHelp: 'Recommended: upload strategy, policy, procedure, or operating-model documents to ground the AI context.',
+      promptId: 'org-context-followup',
+      promptPlaceholder: 'Tell the AI what to change, emphasise, shorten, or make more specific.',
+      buttonId: 'btn-org-refine-context',
+      buttonLabel: 'Apply Follow-Up Now',
+      statusId: 'org-context-refine-status',
+      statusText: 'The context fields above will update in place each time you refine them.',
+      className: 'card mt-4',
+      style: 'padding:var(--sp-4);background:var(--bg-elevated)',
+      title: 'Refine This Context With AI'
+    })}`;
   const modal = UI.modal({
     title: isSeedDepartment
       ? (existingNode ? 'Edit Function / Department' : 'Add Function / Department')
@@ -2205,24 +2205,24 @@ function openEntityContextLayerEditor({ entity, settings = getAdminSettings(), o
         <button class="btn btn--secondary" id="btn-entity-layer-ai" type="button">Build with AI</button>
         <span class="form-help">Derive context from the entity, the parent BU, and the current admin baseline.</span>
       </div>
-      <div class="card mt-4" style="padding:var(--sp-4);background:var(--bg-elevated)">
-        <div class="context-panel-title">Refine With Follow-Up Prompts</div>
-        <p class="form-help" style="margin-top:6px">Ask follow-up questions or give directions like “make this more specific to data residency”, “tighten the summary for a COO”, or “focus more on vendor dependencies”.</p>
-        <div id="entity-layer-refinement-history" style="display:flex;flex-direction:column;gap:10px;margin-top:12px"></div>
-        <div class="form-group mt-4">
-          <label class="form-label" for="entity-layer-source-file">Upload supporting documents</label>
-          <input class="form-input" id="entity-layer-source-file" type="file" accept=".txt,.csv,.json,.md,.tsv,.xlsx,.xls,.doc,.docx,.pdf">
-          <div class="form-help" id="entity-layer-source-help">Recommended: upload strategy, policy, procedure, or operating-model documents to ground the AI context.</div>
-        </div>
-        <div class="form-group mt-4">
-          <label class="form-label" for="entity-layer-followup">Follow-up prompt</label>
-          <textarea class="form-textarea" id="entity-layer-followup" rows="3" placeholder="Tell the AI how you want to improve or reshape this context."></textarea>
-        </div>
-        <div class="flex items-center gap-3 mt-3" style="flex-wrap:wrap">
-          <button class="btn btn--secondary" id="btn-entity-layer-refine" type="button">Apply Follow-Up Now</button>
-          <span class="form-help" id="entity-layer-refine-status">The current context fields above will be updated in place each time you refine.</span>
-        </div>
-      </div>`,
+      ${UI.aiRefinementCard({
+        title: 'Refine With Follow-Up Prompts',
+        intro: 'Ask follow-up questions or give directions like “make this more specific to data residency”, “tighten the summary for a COO”, or “focus more on vendor dependencies”.',
+        historyId: 'entity-layer-refinement-history',
+        fileId: 'entity-layer-source-file',
+        fileLabel: 'Upload supporting documents',
+        fileAccept: '.txt,.csv,.json,.md,.tsv,.xlsx,.xls,.doc,.docx,.pdf',
+        fileHelpId: 'entity-layer-source-help',
+        fileHelp: 'Recommended: upload strategy, policy, procedure, or operating-model documents to ground the AI context.',
+        promptId: 'entity-layer-followup',
+        promptPlaceholder: 'Tell the AI how you want to improve or reshape this context.',
+        buttonId: 'btn-entity-layer-refine',
+        buttonLabel: 'Apply Follow-Up Now',
+        statusId: 'entity-layer-refine-status',
+        statusText: 'The current context fields above will be updated in place each time you refine.',
+        className: 'card mt-4',
+        style: 'padding:var(--sp-4);background:var(--bg-elevated)'
+      })}`,
     footer: `<button class="btn btn--ghost" id="entity-layer-cancel">Cancel</button><button class="btn btn--primary" id="entity-layer-save">Save Context</button>`
   });
 
@@ -3944,24 +3944,24 @@ function renderAdminSettings(activeSection = 'org') {
       <button class="btn btn--secondary" id="btn-build-company-context">Build from Website</button>
       <span class="form-help">This opens a review step so you can decide where the entity sits in the group.</span>
     </div>
-    <div class="card mt-4" style="padding:var(--sp-4);background:var(--bg-elevated)">
-      <div class="context-panel-title">Refine This Context With AI</div>
-      <p class="form-help" style="margin-top:6px">Use follow-up prompts to reshape the company context until it is ready for the admin baseline or organisation tree.</p>
-      <div id="admin-company-refinement-history" style="display:flex;flex-direction:column;gap:10px;margin-top:12px"></div>
-      <div class="form-group mt-4">
-        <label class="form-label" for="admin-company-source-file">Upload supporting documents</label>
-        <input class="form-input" id="admin-company-source-file" type="file" accept=".txt,.csv,.json,.md,.tsv,.xlsx,.xls,.doc,.docx,.pdf">
-        <div class="form-help" id="admin-company-source-help">Recommended: upload strategy, policy, procedure, or operating-model documents to ground the AI context.</div>
-      </div>
-      <div class="form-group mt-4">
-        <label class="form-label" for="admin-company-followup">Follow-up prompt</label>
-        <textarea class="form-textarea" id="admin-company-followup" rows="3" placeholder="Tell the AI what to change, emphasise, shorten, or make more specific."></textarea>
-      </div>
-      <div class="flex items-center gap-3 mt-3" style="flex-wrap:wrap">
-        <button class="btn btn--secondary" id="btn-refine-admin-company-context" type="button">Apply Follow-Up Now</button>
-        <span class="form-help" id="admin-company-refine-status">The fields above will be updated in place each time you refine the context.</span>
-      </div>
-    </div>`
+    ${UI.aiRefinementCard({
+      intro: 'Use follow-up prompts to reshape the company context until it is ready for the admin baseline or organisation tree.',
+      historyId: 'admin-company-refinement-history',
+      fileId: 'admin-company-source-file',
+      fileLabel: 'Upload supporting documents',
+      fileAccept: '.txt,.csv,.json,.md,.tsv,.xlsx,.xls,.doc,.docx,.pdf',
+      fileHelpId: 'admin-company-source-help',
+      fileHelp: 'Recommended: upload strategy, policy, procedure, or operating-model documents to ground the AI context.',
+      promptId: 'admin-company-followup',
+      promptPlaceholder: 'Tell the AI what to change, emphasise, shorten, or make more specific.',
+      buttonId: 'btn-refine-admin-company-context',
+      buttonLabel: 'Apply Follow-Up Now',
+      statusId: 'admin-company-refine-status',
+      statusText: 'The fields above will be updated in place each time you refine the context.',
+      className: 'card mt-4',
+      style: 'padding:var(--sp-4);background:var(--bg-elevated)',
+      title: 'Refine This Context With AI'
+    })}`
   });
   const platformDefaultsSection = AdminPlatformDefaultsSection.renderSection({ settings });
   const systemAccessSection = AdminSystemAccessSection.renderSection({
