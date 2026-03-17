@@ -263,17 +263,18 @@ function renderWizard3() {
           ${renderRangeCalibrationCard(sym)}
           ${renderEstimatePresetCard(draft)}
 
-          <div class="card anim-fade-in">
-            <h3 style="margin-bottom:var(--sp-2);font-size:var(--text-base)">How often could this happen? <span data-tooltip="How many times per year this type of event could realistically occur." style="cursor:help;color:var(--color-accent-300);font-size:.8rem">ⓘ</span></h3>
-            <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:12px">Enter the number of events you think could happen in a year. Use a cautious low case, your expected case, and a severe but plausible high case.</p>
-            ${inlineExamples.frequency}
-            ${tripleInput('tef','How often this could happen in a year', v('tefMin',da.TEF?.min||0.5), v('tefLikely',da.TEF?.likely||2), v('tefMax',da.TEF?.max||8), { minLabel: 'Low case', likelyLabel: 'Expected case', maxLabel: 'High case' })}
-          </div>
+          ${UI.wizardInputSection({
+            title: 'How often could this happen? <span data-tooltip="How many times per year this type of event could realistically occur." style="cursor:help;color:var(--color-accent-300);font-size:.8rem">ⓘ</span>',
+            description: 'Enter the number of events you think could happen in a year. Use a cautious low case, your expected case, and a severe but plausible high case.',
+            className: 'card anim-fade-in',
+            body: `${inlineExamples.frequency}${tripleInput('tef','How often this could happen in a year', v('tefMin',da.TEF?.min||0.5), v('tefLikely',da.TEF?.likely||2), v('tefMax',da.TEF?.max||8), { minLabel: 'Low case', likelyLabel: 'Expected case', maxLabel: 'High case' })}`
+          })}
 
-          <div class="card anim-fade-in anim-delay-1">
-            <h3 style="margin-bottom:var(--sp-2);font-size:var(--text-base)">How exposed are you if it happens? <span data-tooltip="This estimates how likely the event is to succeed given attacker capability and current controls." style="cursor:help;color:var(--color-accent-300);font-size:.8rem">ⓘ</span></h3>
-            <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:12px">In Basic mode, answer this through attacker strength and control strength. In Advanced mode, you can enter vulnerability directly.</p>
-            ${isAdv?`<div class="flex items-center gap-3 mb-4"><label class="toggle"><input type="checkbox" id="vuln-direct-toggle" ${p.vulnDirect?'checked':''}><div class="toggle-track"></div></label><span class="toggle-label">Enter exposure directly</span></div>
+          ${UI.wizardInputSection({
+            title: 'How exposed are you if it happens? <span data-tooltip="This estimates how likely the event is to succeed given attacker capability and current controls." style="cursor:help;color:var(--color-accent-300);font-size:.8rem">ⓘ</span>',
+            description: 'In Basic mode, answer this through attacker strength and control strength. In Advanced mode, you can enter vulnerability directly.',
+            className: 'card anim-fade-in anim-delay-1',
+            body: `${isAdv?`<div class="flex items-center gap-3 mb-4"><label class="toggle"><input type="checkbox" id="vuln-direct-toggle" ${p.vulnDirect?'checked':''}><div class="toggle-track"></div></label><span class="toggle-label">Enter exposure directly</span></div>
             <div id="vuln-direct-section" ${!p.vulnDirect?'class="hidden"':''}>
               <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:12px">Use a value between 0 and 1, where 0 means very unlikely to succeed and 1 means almost certain to succeed.</p>
               ${tripleInput('vuln','Vulnerability', v('vulnMin',0.1), v('vulnLikely',0.35), v('vulnMax',0.7), { minLabel: 'Low success chance', likelyLabel: 'Expected success chance', maxLabel: 'High success chance' })}
@@ -289,22 +290,22 @@ function renderWizard3() {
                   ${tripleInput('controlStr','Control strength', v('controlStrMin',da.controlStrength?.min||0.5), v('controlStrLikely',da.controlStrength?.likely||0.68), v('controlStrMax',da.controlStrength?.max||0.85), { minLabel: 'Weak controls', likelyLabel: 'Expected control strength', maxLabel: 'Strong controls' })}
                 </div>
               </div>
-            </div>
-          </div>
+            </div>`
+          })}
 
-          <div class="card anim-fade-in anim-delay-2">
-            <h3 style="margin-bottom:var(--sp-2);font-size:var(--text-base)">What could this cost if it happens?</h3>
-            <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:var(--sp-2)">For each cost area, enter a low, expected, and severe per-event estimate in ${sym}. These values are added together in the simulation.</p>
-            ${inlineExamples.cost}
-            <div style="display:flex;flex-direction:column;gap:var(--sp-5)">
+          ${UI.wizardInputSection({
+            title: 'What could this cost if it happens?',
+            description: `For each cost area, enter a low, expected, and severe per-event estimate in ${sym}. These values are added together in the simulation.`,
+            className: 'card anim-fade-in anim-delay-2',
+            body: `${inlineExamples.cost}<div style="display:flex;flex-direction:column;gap:var(--sp-5)">
               ${lossRow('ir','Response and recovery cost', v('irMin',da.incidentResponse?.min||50000), v('irLikely',da.incidentResponse?.likely||180000), v('irMax',da.incidentResponse?.max||600000), 'Containment, forensics, internal recovery effort, and external incident response support.')}
               ${lossRow('bi','Business disruption cost', v('biMin',da.businessInterruption?.min||100000), v('biLikely',da.businessInterruption?.likely||450000), v('biMax',da.businessInterruption?.max||2500000), 'Lost revenue, delayed operations, and productivity impact while the issue is active.')}
               ${lossRow('db','Data remediation cost', v('dbMin',da.dataBreachRemediation?.min||30000), v('dbLikely',da.dataBreachRemediation?.likely||120000), v('dbMax',da.dataBreachRemediation?.max||500000), 'Notification, monitoring, remediation, and cleanup when data is affected.')}
               ${lossRow('rl','Regulatory and legal cost', v('rlMin',da.regulatoryLegal?.min||0), v('rlLikely',da.regulatoryLegal?.likely||80000), v('rlMax',da.regulatoryLegal?.max||800000), 'Fines, legal support, regulatory response, and formal notices.')}
               ${lossRow('tp','Third-party impact cost', v('tpMin',da.thirdPartyLiability?.min||0), v('tpLikely',da.thirdPartyLiability?.likely||50000), v('tpMax',da.thirdPartyLiability?.max||400000), 'Claims, service credits, or compensation for partners and customers.')}
               ${lossRow('rc','Reputation and contract cost', v('rcMin',da.reputationContract?.min||50000), v('rcLikely',da.reputationContract?.likely||200000), v('rcMax',da.reputationContract?.max||1200000), 'Customer churn, commercial loss, and contract penalties after the event.')}
-            </div>
-          </div>
+            </div>`
+          })}
 
           <div class="card anim-fade-in anim-delay-3">
             <div class="flex items-center justify-between mb-4">
@@ -322,10 +323,10 @@ function renderWizard3() {
             </div>
           </div>
 
-          ${isAdv?`
-          <div class="card anim-fade-in">
-            <h3 style="margin-bottom:var(--sp-4);font-size:var(--text-base)">Advanced Simulation Settings</h3>
-            <div class="grid-2">
+          ${isAdv ? UI.wizardInputSection({
+            title: 'Advanced Simulation Settings',
+            className: 'card anim-fade-in',
+            body: `<div class="grid-2">
               <div class="form-group">
                 <label class="form-label">Distribution Type <span data-tooltip="Triangular: intuitive. Lognormal: heavier right tail (better for cyber)." style="cursor:help;color:var(--color-accent-300)">ⓘ</span></label>
                 <select class="form-select" id="adv-dist">
@@ -350,8 +351,8 @@ function renderWizard3() {
                   <input class="form-input" id="corr-rl-rc" type="number" min="-1" max="1" step="0.05" value="${p.corrRlRc||0.2}" style="width:72px">
                 </div>
               </div>
-            </div>
-          </div>`:''}
+            </div>`
+          }) : ''}
 
         </div>
         <div class="wizard-footer">

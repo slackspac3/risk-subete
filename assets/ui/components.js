@@ -175,6 +175,20 @@ const UI = (() => {
     </div>`;
   }
 
+
+  function wizardInputSection({ title, description = '', body, className = 'card anim-fade-in', headerExtras = '' }) {
+    return `<div class="${className}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--sp-3);flex-wrap:wrap;margin-bottom:var(--sp-2)">
+        <div style="flex:1 1 320px">
+          <h3 style="margin-bottom:${description ? 'var(--sp-2)' : '0'};font-size:var(--text-base)">${title}</h3>
+          ${description ? `<p style="font-size:.78rem;color:var(--text-muted)">${description}</p>` : ''}
+        </div>
+        ${headerExtras}
+      </div>
+      ${body}
+    </div>`;
+  }
+
   // ─── Tag Input ────────────────────────────────────────────
   function tagInput(containerId, initialTags = [], onChange = null) {
     const wrap = document.getElementById(containerId);
@@ -443,5 +457,5 @@ const UI = (() => {
     return `${_getCurrencyPrefix(currency)}${displayValue.toLocaleString(currency === 'AED' ? 'en-AE' : 'en-US')}`;
   }
 
-  return { toast, modal, citationModal, renderStepper, skeletonBlock, skeletonCard, adminSectionHeader, adminTableCard, dashboardOverviewCard, dashboardSectionCard, dashboardAssessmentRow, resultsVisualCard, resultsBriefCard, tagInput, confirm, drawHistogram, drawLEC };
+  return { toast, modal, citationModal, renderStepper, skeletonBlock, skeletonCard, adminSectionHeader, adminTableCard, dashboardOverviewCard, dashboardSectionCard, dashboardAssessmentRow, resultsVisualCard, resultsBriefCard, wizardInputSection, tagInput, confirm, drawHistogram, drawLEC };
 })();
