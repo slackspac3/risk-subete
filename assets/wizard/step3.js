@@ -83,6 +83,13 @@ function renderRangeCalibrationCard(currency) {
   </div>`;
 }
 
+function renderInlineEstimateExamples(currency) {
+  return {
+    frequency: `<div class="context-panel-foot" style="margin-top:12px">Examples: 0.5 = once every two years, 1 = once a year, 4 = quarterly, 12 = monthly.</div>`,
+    cost: `<div class="context-panel-foot" style="margin-bottom:var(--sp-4)">Low = limited disruption. Expected = the planning case you would defend. Severe = major but still plausible disruption in ${currency}.</div>`
+  };
+}
+
 function attachCitationHandlers() {
   document.querySelectorAll('.citation-chip').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -110,6 +117,7 @@ function renderWizard3() {
   const cur = AppState.currency;
   const sym = cur;
   const baselineAssessment = draft.comparisonBaselineId ? getAssessmentById(draft.comparisonBaselineId) : null;
+  const inlineExamples = renderInlineEstimateExamples(sym);
 
   const v = (key, def) => p[key] != null ? p[key] : def;
 
@@ -162,6 +170,7 @@ function renderWizard3() {
           <div class="card anim-fade-in">
             <h3 style="margin-bottom:var(--sp-2);font-size:var(--text-base)">How often could this happen? <span data-tooltip="How many times per year this type of event could realistically occur." style="cursor:help;color:var(--color-accent-300);font-size:.8rem">ⓘ</span></h3>
             <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:12px">Enter the number of events you think could happen in a year. Use a cautious low case, your expected case, and a severe but plausible high case.</p>
+            ${inlineExamples.frequency}
             ${tripleInput('tef','How often this could happen in a year', v('tefMin',da.TEF?.min||0.5), v('tefLikely',da.TEF?.likely||2), v('tefMax',da.TEF?.max||8), { minLabel: 'Low case', likelyLabel: 'Expected case', maxLabel: 'High case' })}
           </div>
 
@@ -189,7 +198,8 @@ function renderWizard3() {
 
           <div class="card anim-fade-in anim-delay-2">
             <h3 style="margin-bottom:var(--sp-2);font-size:var(--text-base)">What could this cost if it happens?</h3>
-            <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:var(--sp-5)">For each cost area, enter a low, expected, and severe per-event estimate in ${sym}. These values are added together in the simulation.</p>
+            <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:var(--sp-2)">For each cost area, enter a low, expected, and severe per-event estimate in ${sym}. These values are added together in the simulation.</p>
+            ${inlineExamples.cost}
             <div style="display:flex;flex-direction:column;gap:var(--sp-5)">
               ${lossRow('ir','Response and recovery cost', v('irMin',da.incidentResponse?.min||50000), v('irLikely',da.incidentResponse?.likely||180000), v('irMax',da.incidentResponse?.max||600000), 'Containment, forensics, internal recovery effort, and external incident response support.')}
               ${lossRow('bi','Business disruption cost', v('biMin',da.businessInterruption?.min||100000), v('biLikely',da.businessInterruption?.likely||450000), v('biMax',da.businessInterruption?.max||2500000), 'Lost revenue, delayed operations, and productivity impact while the issue is active.')}
