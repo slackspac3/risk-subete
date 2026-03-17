@@ -329,6 +329,7 @@ async function runSimulation() {
   await new Promise(requestAnimationFrame);
   try {
     const p = AppState.draft.fairParams;
+    const progressText = document.querySelector('#sim-progress .card div:last-child');
     p.iterations = Math.min(100000, Math.max(1000, Number.parseInt(p.iterations, 10) || 10000));
     const scenario = getScenarioMultipliers();
     const toleranceThreshold = getToleranceThreshold();
@@ -355,7 +356,12 @@ async function runSimulation() {
       secMagMin: toUSD(p.secMagMin) * scenario.lossMultiplier, secMagLikely: toUSD(p.secMagLikely) * scenario.lossMultiplier, secMagMax: toUSD(p.secMagMax) * scenario.lossMultiplier,
       threshold: toleranceThreshold
     };
-    const results = RiskEngine.run(ep);
+    const results = await RiskEngine.runAsync(ep, {
+      yieldEvery: 500,
+      onProgress: (ratio, completed, total) => {
+        if (progressText) progressText.textContent = `Computing ${completed.toLocaleString()} of ${total.toLocaleString()} Monte Carlo iterations…`;
+      }
+    });
     results.inputs = { ...ep };
     results.portfolioMeta = scenario;
     results.selectedRiskCount = scenario.riskCount;

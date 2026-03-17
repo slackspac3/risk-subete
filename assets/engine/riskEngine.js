@@ -228,53 +228,52 @@ const RiskEngine = (() => {
    *   threshold: number (default 5000000)
    * }
    */
-  function run(params) {
-    const iterations = params.iterations || 10000;
-    const threshold  = params.threshold  || 5_000_000;
-
-    // Set PRNG
-    if (params.seed != null) {
-      _rand = mulberry32(Number(params.seed));
-    } else {
-      _rand = Math.random;
-    }
-
+  function _computeSamples(params, iterations, { onProgress = null, yieldEvery = 0 } = {}) {
     const lmSamples  = [];
     const aleSamples = [];
 
-    for (let i = 0; i < iterations; i++) {
-      // Sample TEF
+    const computeOne = () => {
       const tef = Math.max(0, sampleDist(params.distType,
         params.tefMin, params.tefLikely, params.tefMax));
-
-      // Sample vulnerability
       const vuln = sampleVulnerability(params);
-
-      // LEF
       const lef = tef * vuln;
-
-      // Per-event loss magnitude (LM)
-      const primaryLoss   = samplePrimaryLoss(params);
+      const primaryLoss = samplePrimaryLoss(params);
       const secondaryLoss = sampleSecondaryLoss(params);
       const lm = primaryLoss + secondaryLoss;
       lmSamples.push(lm);
 
-      // Annual loss: compound Poisson
       const numEvents = samplePoisson(lef);
       let ale = 0;
       for (let j = 0; j < numEvents; j++) {
-        const evPrimary   = samplePrimaryLoss(params);
+        const evPrimary = samplePrimaryLoss(params);
         const evSecondary = sampleSecondaryLoss(params);
         ale += evPrimary + evSecondary;
       }
       aleSamples.push(ale);
+    };
+
+    if (!yieldEvery) {
+      for (let i = 0; i < iterations; i++) computeOne();
+      return { lmSamples, aleSamples };
     }
 
+    return (async () => {
+      for (let i = 0; i < iterations; i++) {
+        computeOne();
+        if ((i + 1) % yieldEvery === 0 || i === iterations - 1) {
+          if (typeof onProgress === 'function') onProgress((i + 1) / iterations, i + 1, iterations);
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+      }
+      return { lmSamples, aleSamples };
+    })();
+  }
+
+  function _buildResults(iterations, threshold, lmSamples, aleSamples) {
     const lmStats  = stats(lmSamples);
     const aleStats = stats(aleSamples);
     const lec = buildLEC(aleSamples);
     const histogram = buildHistogram(aleSamples);
-
     const toleranceBreached = lmStats.p90 > threshold;
 
     return {
@@ -294,7 +293,30 @@ const RiskEngine = (() => {
     };
   }
 
-  return { run, buildLEC, buildHistogram, stats };
+  function _prepareRun(params) {
+    const iterations = params.iterations || 10000;
+    const threshold = params.threshold || 5_000_000;
+    if (params.seed != null) {
+      _rand = mulberry32(Number(params.seed));
+    } else {
+      _rand = Math.random;
+    }
+    return { iterations, threshold };
+  }
+
+  function run(params) {
+    const { iterations, threshold } = _prepareRun(params);
+    const { lmSamples, aleSamples } = _computeSamples(params, iterations);
+    return _buildResults(iterations, threshold, lmSamples, aleSamples);
+  }
+
+  async function runAsync(params, { onProgress = null, yieldEvery = 500 } = {}) {
+    const { iterations, threshold } = _prepareRun(params);
+    const { lmSamples, aleSamples } = await _computeSamples(params, iterations, { onProgress, yieldEvery });
+    return _buildResults(iterations, threshold, lmSamples, aleSamples);
+  }
+
+  return { run, runAsync, buildLEC, buildHistogram, stats };
 })();
 
 if (typeof module !== 'undefined') module.exports = RiskEngine;
