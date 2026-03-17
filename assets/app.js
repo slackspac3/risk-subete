@@ -3226,7 +3226,7 @@ function renderLanding() {
           <div class="card card--elevated anim-fade-in">
             <div class="flex items-center justify-between mb-4" style="flex-wrap:wrap;gap:var(--sp-3)">
               <h3 style="font-size:var(--text-xl)">Quick Start Guide</h3>
-              <span class="badge badge--neutral">For novice users</span>
+              <span class="badge badge--neutral">For guided use</span>
             </div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--sp-4)">
               ${[
