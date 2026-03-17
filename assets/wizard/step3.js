@@ -63,6 +63,26 @@ function renderEstimateExplainerCard(draft, bu, isAdv, currency) {
   </div>`;
 }
 
+function renderRangeCalibrationCard(currency) {
+  return `<div class="card card--elevated anim-fade-in">
+    <div class="context-panel-title">Quick calibration guide</div>
+    <div class="context-grid" style="margin-top:var(--sp-3)">
+      <div class="context-chip-panel">
+        <div class="context-panel-title">Event frequency examples</div>
+        <p class="context-panel-copy">0.5 = about once every two years. 1 = about once a year. 4 = about quarterly. 12 = about monthly.</p>
+      </div>
+      <div class="context-chip-panel">
+        <div class="context-panel-title">How to think about low, expected, severe</div>
+        <p class="context-panel-copy">Low case = contained and quieter than normal. Expected case = the planning assumption you would defend in a meeting. Severe case = bad but still plausible, not an apocalypse number.</p>
+      </div>
+      <div class="context-chip-panel">
+        <div class="context-panel-title">Cost range examples</div>
+        <p class="context-panel-copy">Low cost = handled with limited disruption. Expected cost = management attention and some external support likely. Severe cost = prolonged disruption, customer impact, and legal or regulatory escalation in ${currency}.</p>
+      </div>
+    </div>
+  </div>`;
+}
+
 function attachCitationHandlers() {
   document.querySelectorAll('.citation-chip').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -136,6 +156,8 @@ function renderWizard3() {
               </div>
             </div>
           </div>
+
+          ${renderRangeCalibrationCard(sym)}
 
           <div class="card anim-fade-in">
             <h3 style="margin-bottom:var(--sp-2);font-size:var(--text-base)">How often could this happen? <span data-tooltip="How many times per year this type of event could realistically occur." style="cursor:help;color:var(--color-accent-300);font-size:.8rem">ⓘ</span></h3>
