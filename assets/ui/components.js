@@ -123,6 +123,42 @@ const UI = (() => {
     </div>`;
   }
 
+
+  function dashboardOverviewCard({ label, value, foot }) {
+    return `<div class="admin-overview-card">
+      <div class="admin-overview-label">${label}</div>
+      <div class="admin-overview-value" style="font-size:1.2rem">${value}</div>
+      <div class="admin-overview-foot">${foot}</div>
+    </div>`;
+  }
+
+  function dashboardSectionCard({ title, description = '', badge = '', body }) {
+    return `<div class="card card--elevated dashboard-section-card">
+      <div class="flex items-center justify-between" style="gap:var(--sp-3);flex-wrap:wrap">
+        <div>
+          <div class="context-panel-title">${title}</div>
+          ${description ? `<div class="form-help">${description}</div>` : ''}
+        </div>
+        ${badge ? `<span class="badge badge--neutral">${badge}</span>` : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:var(--sp-5)">${body}</div>
+    </div>`;
+  }
+
+  function dashboardAssessmentRow({ assessmentId = '', title, detail, badgeClass = 'badge--neutral', badgeLabel, actions }) {
+    const dataAttribute = assessmentId ? ` data-assessment-id="${assessmentId}"` : '';
+    return `<div class="card dashboard-assessment-row"${dataAttribute}>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:600;color:var(--text-primary)">${title}</div>
+          <div class="form-help" style="margin-top:6px">${detail}</div>
+        </div>
+        <span class="badge ${badgeClass}">${badgeLabel}</span>
+      </div>
+      <div class="flex items-center gap-3" style="margin-top:10px;flex-wrap:wrap">${actions}</div>
+    </div>`;
+  }
+
   // ─── Tag Input ────────────────────────────────────────────
   function tagInput(containerId, initialTags = [], onChange = null) {
     const wrap = document.getElementById(containerId);
@@ -391,5 +427,5 @@ const UI = (() => {
     return `${_getCurrencyPrefix(currency)}${displayValue.toLocaleString(currency === 'AED' ? 'en-AE' : 'en-US')}`;
   }
 
-  return { toast, modal, citationModal, renderStepper, skeletonBlock, skeletonCard, adminSectionHeader, adminTableCard, tagInput, confirm, drawHistogram, drawLEC };
+  return { toast, modal, citationModal, renderStepper, skeletonBlock, skeletonCard, adminSectionHeader, adminTableCard, dashboardOverviewCard, dashboardSectionCard, dashboardAssessmentRow, tagInput, confirm, drawHistogram, drawLEC };
 })();

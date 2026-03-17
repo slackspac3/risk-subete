@@ -94,79 +94,61 @@ function renderUserDashboard() {
         </section>
 
         <section class="admin-overview-grid" style="margin-top:var(--sp-8)">
-          <div class="admin-overview-card">
-            <div class="admin-overview-label">Open work</div>
-            <div class="admin-overview-value" style="font-size:1.2rem">${openAssessmentRows.length}</div>
-            <div class="admin-overview-foot">Drafts and results that are most likely to need attention now.</div>
-          </div>
-          <div class="admin-overview-card">
-            <div class="admin-overview-label">Completed assessments</div>
-            <div class="admin-overview-value" style="font-size:1.2rem">${assessments.length}</div>
-            <div class="admin-overview-foot">${latestAssessment ? `Latest: ${new Date(latestAssessment.completedAt || latestAssessment.createdAt || Date.now()).toLocaleDateString('en-AE', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'No completed assessments yet'}</div>
-          </div>
-          <div class="admin-overview-card">
-            <div class="admin-overview-label">Needs review</div>
-            <div class="admin-overview-value" style="font-size:1.2rem">${assessmentsNeedingReview.length}</div>
-            <div class="admin-overview-foot">${assessmentsNeedingReview.length ? 'Scenarios near or above tolerance are ready for review.' : 'Nothing currently stands out for urgent review.'}</div>
-          </div>
+          ${UI.dashboardOverviewCard({
+            label: 'Open work',
+            value: openAssessmentRows.length,
+            foot: 'Drafts and results that are most likely to need attention now.'
+          })}
+          ${UI.dashboardOverviewCard({
+            label: 'Completed assessments',
+            value: assessments.length,
+            foot: latestAssessment ? `Latest: ${new Date(latestAssessment.completedAt || latestAssessment.createdAt || Date.now()).toLocaleDateString('en-AE', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'No completed assessments yet'
+          })}
+          ${UI.dashboardOverviewCard({
+            label: 'Needs review',
+            value: assessmentsNeedingReview.length,
+            foot: assessmentsNeedingReview.length ? 'Scenarios near or above tolerance are ready for review.' : 'Nothing currently stands out for urgent review.'
+          })}
         </section>
 
         <section class="grid-2 dashboard-main-grid">
           <div class="dashboard-column">
-            <div class="card card--elevated dashboard-section-card">
-              <div class="flex items-center justify-between" style="gap:var(--sp-3);flex-wrap:wrap">
-                <div>
-                  <div class="context-panel-title">Next up</div>
-                  <div class="form-help">Resume unfinished work or open the results that most likely need attention.</div>
-                </div>
-                <span class="badge badge--neutral">${openAssessmentRows.length}</span>
-              </div>
-              <div style="display:flex;flex-direction:column;gap:12px;margin-top:var(--sp-5)">
-                ${openAssessmentRows.length ? openAssessmentRows.map(item => `
-                  <div class="card dashboard-assessment-row" data-assessment-id="${item.action}">
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-                      <div>
-                        <div style="font-weight:600;color:var(--text-primary)">${item.title}</div>
-                        <div class="form-help" style="margin-top:6px">${item.detail}</div>
-                      </div>
-                      <span class="badge ${/above tolerance/i.test(item.status) ? 'badge--danger' : /review/i.test(item.status) ? 'badge--warning' : 'badge--gold'}">${item.status}</span>
-                    </div>
-                    <div class="flex items-center gap-3" style="margin-top:10px;flex-wrap:wrap">
-                      <button type="button" class="btn btn--ghost btn--sm dashboard-open-action" data-assessment-id="${item.action}">${item.actionLabel}</button>
-                      ${item.action === 'draft' ? '<button type="button" class="btn btn--ghost btn--sm dashboard-archive-draft">Archive</button><button type="button" class="btn btn--ghost btn--sm dashboard-delete-draft">Delete</button>' : `<button type="button" class="btn btn--ghost btn--sm dashboard-archive-assessment" data-assessment-id="${item.action}">Archive</button><button type="button" class="btn btn--ghost btn--sm dashboard-delete-assessment" data-assessment-id="${item.action}">Delete</button>`}
-                    </div>
-                  </div>
-                `).join('') : `<div class="form-help">You have nothing waiting for review right now. Start a new assessment when you are ready.</div>`}
-              </div>
-            </div>
+            ${UI.dashboardSectionCard({
+              title: 'Next up',
+              description: 'Resume unfinished work or open the results that most likely need attention.',
+              badge: openAssessmentRows.length,
+              body: openAssessmentRows.length ? openAssessmentRows.map(item => UI.dashboardAssessmentRow({
+                assessmentId: item.action,
+                title: item.title,
+                detail: item.detail,
+                badgeClass: /above tolerance/i.test(item.status) ? 'badge--danger' : /review/i.test(item.status) ? 'badge--warning' : 'badge--gold',
+                badgeLabel: item.status,
+                actions: `
+                  <button type="button" class="btn btn--ghost btn--sm dashboard-open-action" data-assessment-id="${item.action}">${item.actionLabel}</button>
+                  ${item.action === 'draft'
+                    ? '<button type="button" class="btn btn--ghost btn--sm dashboard-archive-draft">Archive</button><button type="button" class="btn btn--ghost btn--sm dashboard-delete-draft">Delete</button>'
+                    : `<button type="button" class="btn btn--ghost btn--sm dashboard-archive-assessment" data-assessment-id="${item.action}">Archive</button><button type="button" class="btn btn--ghost btn--sm dashboard-delete-assessment" data-assessment-id="${item.action}">Delete</button>`}
+                `
+              })).join('') : `<div class="form-help">You have nothing waiting for review right now. Start a new assessment when you are ready.</div>`
+            })}
 
-            <div class="card card--elevated dashboard-section-card">
-              <div class="flex items-center justify-between" style="gap:var(--sp-3);flex-wrap:wrap">
-                <div>
-                  <div class="context-panel-title">Recent assessments</div>
-                  <div class="form-help">Your latest saved analysis outputs.</div>
-                </div>
-                <span class="badge badge--neutral">${recentAssessments.length}</span>
-              </div>
-              <div style="display:flex;flex-direction:column;gap:12px;margin-top:var(--sp-5)">
-                ${recentAssessments.length ? recentAssessments.map(assessment => `
-                  <div class="card dashboard-assessment-row" data-assessment-id="${assessment.id}">
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-                      <div>
-                        <div style="font-weight:600;color:var(--text-primary)">${assessment.scenarioTitle || 'Untitled assessment'}</div>
-                        <div class="form-help" style="margin-top:6px">${assessment.buName || profile.businessUnit || user?.businessUnit || 'Business unit not set'} · ${new Date(assessment.completedAt || assessment.createdAt || Date.now()).toLocaleDateString('en-AE', { year: 'numeric', month: 'short', day: 'numeric' })}</div>
-                      </div>
-                      <span class="badge ${assessment.results?.toleranceBreached ? 'badge--danger' : assessment.results?.nearTolerance ? 'badge--warning' : 'badge--gold'}">${assessment.results?.toleranceBreached ? 'Above tolerance' : assessment.results?.nearTolerance ? 'Close to tolerance' : 'Open result'}</span>
-                    </div>
-                    <div class="flex items-center gap-3" style="margin-top:10px;flex-wrap:wrap">
-                      <button type="button" class="btn btn--ghost btn--sm dashboard-open-action" data-assessment-id="${assessment.id}">Open Result</button>
-                      <button type="button" class="btn btn--ghost btn--sm dashboard-archive-assessment" data-assessment-id="${assessment.id}">Archive</button>
-                      <button type="button" class="btn btn--ghost btn--sm dashboard-delete-assessment" data-assessment-id="${assessment.id}">Delete</button>
-                    </div>
-                  </div>
-                `).join('') : `<div class="form-help">No completed assessments yet. Finished assessments will appear here for quick review.</div>`}
-              </div>
-            </div>
+            ${UI.dashboardSectionCard({
+              title: 'Recent assessments',
+              description: 'Your latest saved analysis outputs.',
+              badge: recentAssessments.length,
+              body: recentAssessments.length ? recentAssessments.map(assessment => UI.dashboardAssessmentRow({
+                assessmentId: assessment.id,
+                title: assessment.scenarioTitle || 'Untitled assessment',
+                detail: `${assessment.buName || profile.businessUnit || user?.businessUnit || 'Business unit not set'} · ${new Date(assessment.completedAt || assessment.createdAt || Date.now()).toLocaleDateString('en-AE', { year: 'numeric', month: 'short', day: 'numeric' })}`,
+                badgeClass: assessment.results?.toleranceBreached ? 'badge--danger' : assessment.results?.nearTolerance ? 'badge--warning' : 'badge--gold',
+                badgeLabel: assessment.results?.toleranceBreached ? 'Above tolerance' : assessment.results?.nearTolerance ? 'Close to tolerance' : 'Open result',
+                actions: `
+                  <button type="button" class="btn btn--ghost btn--sm dashboard-open-action" data-assessment-id="${assessment.id}">Open Result</button>
+                  <button type="button" class="btn btn--ghost btn--sm dashboard-archive-assessment" data-assessment-id="${assessment.id}">Archive</button>
+                  <button type="button" class="btn btn--ghost btn--sm dashboard-delete-assessment" data-assessment-id="${assessment.id}">Delete</button>
+                `
+              })).join('') : `<div class="form-help">No completed assessments yet. Finished assessments will appear here for quick review.</div>`
+            })}
           </div>
 
           <div class="dashboard-column">
@@ -182,33 +164,22 @@ function renderUserDashboard() {
               </div>
             </div>
 
-            <div class="card card--elevated dashboard-section-card">
-              <div class="flex items-center justify-between" style="gap:var(--sp-3);flex-wrap:wrap">
-                <div>
-                  <div class="context-panel-title">Archived items</div>
-                  <div class="form-help">Stored out of the way, but still available if you need them again.</div>
-                </div>
-                <span class="badge badge--neutral">${archivedAssessments.length}</span>
-              </div>
-              <div style="display:flex;flex-direction:column;gap:12px;margin-top:var(--sp-5)">
-                ${archivedAssessments.length ? archivedAssessments.map(assessment => `
-                  <div class="card dashboard-assessment-row">
-                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-                      <div>
-                        <div style="font-weight:600;color:var(--text-primary)">${assessment.scenarioTitle || 'Untitled scenario'}</div>
-                        <div class="form-help" style="margin-top:6px">Archived ${new Date(assessment.archivedAt || assessment.completedAt || assessment.createdAt || Date.now()).toLocaleDateString('en-AE', { year: 'numeric', month: 'short', day: 'numeric' })}${assessment.results ? ' · Completed assessment' : ' · Draft snapshot'}</div>
-                      </div>
-                      <span class="badge badge--neutral">Archived</span>
-                    </div>
-                    <div class="flex items-center gap-3" style="margin-top:10px;flex-wrap:wrap">
-                      <button type="button" class="btn btn--ghost btn--sm dashboard-restore-assessment" data-assessment-id="${assessment.id}">${assessment.results ? 'Restore to Dashboard' : 'Resume as Draft'}</button>
-                      ${assessment.results ? '<button type="button" class="btn btn--ghost btn--sm dashboard-open-action" data-assessment-id="'+assessment.id+'">Open Result</button>' : ''}
-                      <button type="button" class="btn btn--ghost btn--sm dashboard-delete-assessment" data-assessment-id="${assessment.id}">Delete</button>
-                    </div>
-                  </div>
-                `).join('') : `<div class="form-help">Nothing is archived right now.</div>`}
-              </div>
-            </div>
+            ${UI.dashboardSectionCard({
+              title: 'Archived items',
+              description: 'Stored out of the way, but still available if you need them again.',
+              badge: archivedAssessments.length,
+              body: archivedAssessments.length ? archivedAssessments.map(assessment => UI.dashboardAssessmentRow({
+                title: assessment.scenarioTitle || 'Untitled scenario',
+                detail: `Archived ${new Date(assessment.archivedAt || assessment.completedAt || assessment.createdAt || Date.now()).toLocaleDateString('en-AE', { year: 'numeric', month: 'short', day: 'numeric' })}${assessment.results ? ' · Completed assessment' : ' · Draft snapshot'}`,
+                badgeClass: 'badge--neutral',
+                badgeLabel: 'Archived',
+                actions: `
+                  <button type="button" class="btn btn--ghost btn--sm dashboard-restore-assessment" data-assessment-id="${assessment.id}">${assessment.results ? 'Restore to Dashboard' : 'Resume as Draft'}</button>
+                  ${assessment.results ? `<button type="button" class="btn btn--ghost btn--sm dashboard-open-action" data-assessment-id="${assessment.id}">Open Result</button>` : ''}
+                  <button type="button" class="btn btn--ghost btn--sm dashboard-delete-assessment" data-assessment-id="${assessment.id}">Delete</button>
+                `
+              })).join('') : `<div class="form-help">Nothing is archived right now.</div>`
+            })}
           </div>
         </section>
       </div>
