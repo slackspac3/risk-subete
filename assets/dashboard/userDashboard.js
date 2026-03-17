@@ -129,7 +129,7 @@ function renderUserDashboard() {
                     ? '<button type="button" class="btn btn--ghost btn--sm dashboard-archive-draft">Archive</button><button type="button" class="btn btn--ghost btn--sm dashboard-delete-draft">Delete</button>'
                     : `<button type="button" class="btn btn--ghost btn--sm dashboard-archive-assessment" data-assessment-id="${item.action}">Archive</button><button type="button" class="btn btn--ghost btn--sm dashboard-delete-assessment" data-assessment-id="${item.action}">Delete</button>`}
                 `
-              })).join('') : `<div class="form-help">You have nothing waiting for review right now. Start a new assessment when you are ready.</div>`
+              })).join('') : `<div class="empty-state">You have nothing waiting for review right now. Start a new assessment when you are ready.</div>`
             })}
 
             ${UI.dashboardSectionCard({
@@ -147,7 +147,7 @@ function renderUserDashboard() {
                   <button type="button" class="btn btn--ghost btn--sm dashboard-archive-assessment" data-assessment-id="${assessment.id}">Archive</button>
                   <button type="button" class="btn btn--ghost btn--sm dashboard-delete-assessment" data-assessment-id="${assessment.id}">Delete</button>
                 `
-              })).join('') : `<div class="form-help">No completed assessments yet. Finished assessments will appear here for quick review.</div>`
+              })).join('') : `<div class="empty-state">No completed assessments yet. Finished assessments will appear here with quick access to results and follow-up actions.</div>`
             })}
           </div>
 
@@ -178,7 +178,7 @@ function renderUserDashboard() {
                   ${assessment.results ? `<button type="button" class="btn btn--ghost btn--sm dashboard-open-action" data-assessment-id="${assessment.id}">Open Result</button>` : ''}
                   <button type="button" class="btn btn--ghost btn--sm dashboard-delete-assessment" data-assessment-id="${assessment.id}">Delete</button>
                 `
-              })).join('') : `<div class="form-help">Nothing is archived right now.</div>`
+              })).join('') : `<div class="empty-state">Nothing is archived right now. Items you archive will stay available here for restore or deletion.</div>`
             })}
           </div>
         </section>

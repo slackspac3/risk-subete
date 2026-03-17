@@ -32,6 +32,8 @@ const resultsRouteJs = read('assets/results/resultsRoute.js');
 const userPreferencesJs = read('assets/settings/userPreferences.js');
 const userOnboardingJs = read('assets/settings/userOnboarding.js');
 const assessmentStateJs = read('assets/state/assessmentState.js');
+const auditLogSectionJs = read('assets/admin/auditLogSection.js');
+const e2eSmokeSpecJs = read('tests/e2e/smoke.spec.js');
 
 const versions = extractAssetVersions(indexHtml);
 expect(versions.length === 1, `Expected one frontend asset version, found: ${versions.join(', ') || 'none'}`);
@@ -56,6 +58,8 @@ expect(llmJs.includes('Structured numeric benchmarks:'), 'LLM prompts are missin
 expect(llmJs.includes('benchmarkReferences'), 'LLM output is not carrying benchmarkReferences');
 expect(benchmarkServiceJs.includes('retrieveRelevantBenchmarks'), 'benchmark service is missing retrieveRelevantBenchmarks');
 expect(benchmarkServiceJs.includes('deriveSuggestedInputs'), 'benchmark service is missing deriveSuggestedInputs');
+expect(benchmarkServiceJs.includes('sourceTypeLabel'), 'benchmark service is missing sourceTypeLabel trust metadata');
+expect(benchmarkServiceJs.includes('Recent source'), 'benchmark service is missing freshness trust labels');
 expect(benchmarkData.includes('bm-databreach-global-ibm-2025'), 'benchmark dataset is missing global IBM 2025 breach profile');
 expect(benchmarkData.includes('bm-ransomware-sophos-2024'), 'benchmark dataset is missing Sophos ransomware benchmark profile');
 expect(benchmarkData.includes('bm-thirdparty-verizon-2025'), 'benchmark dataset is missing Verizon third-party benchmark profile');
@@ -87,6 +91,12 @@ expect(!appJs.includes("'${DEFAULT_COMPASS_PROXY_URL}'"), 'Literal DEFAULT_COMPA
 expect(!appJs.includes("Cannot access 'settings' before initialization"), 'Static error text leaked into app.js');
 expect(appJs.includes('renderEvidenceDetails(supportingReferences'), 'supporting references evidence renderer missing');
 expect(appJs.includes('renderEvidenceDetails(inferredAssumptions'), 'inferred assumptions evidence renderer missing');
+expect(appJs.includes("route: typeof window !== 'undefined'"), 'runtime instrumentation is not capturing current route');
+expect(appJs.includes('sourceTypeLabel || ref.sourceType'), 'benchmark reference UI is missing source type labels');
+expect(appJs.includes('item.sourceTypeLabel'), 'input provenance UI is missing source type labels');
+expect(auditLogSectionJs.includes('<th>Route</th>'), 'audit log runtime health table is missing route column');
+expect(e2eSmokeSpecJs.includes('Unexpected page errors on'), 'Playwright smoke suite is not checking for client-side crashes');
+expect(e2eSmokeSpecJs.includes('/#/results/example-assessment'), 'Playwright smoke suite is missing results-route coverage');
 
 if (!failures.length) {
   notes.push('Smoke check passed.');

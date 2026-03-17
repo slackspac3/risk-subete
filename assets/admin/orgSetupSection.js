@@ -59,7 +59,7 @@ const AdminOrgSetupSection = (() => {
     const { layerSummaryEl, entityContextLayers, companyStructure } = latestContext;
     if (!layerSummaryEl) return;
     if (!entityContextLayers.length) {
-      layerSummaryEl.innerHTML = `<div class="form-help">No business or function context layers have been saved yet.</div>`;
+      layerSummaryEl.innerHTML = `<div class="empty-state">No business or function context layers have been saved yet.</div>`;
       return;
     }
     const idToNode = new Map(companyStructure.map(node => [node.id, node]));

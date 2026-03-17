@@ -58,6 +58,25 @@ const BenchmarkService = (() => {
     return score;
   }
 
+  function _parseYear(lastUpdated = '') {
+    const yearMatch = String(lastUpdated || '').match(/(20\d{2})/);
+    return yearMatch ? Number(yearMatch[1]) : 0;
+  }
+
+  function _getCurrentYear() {
+    return new Date().getFullYear();
+  }
+
+  function _humaniseSourceType(sourceType = '') {
+    const value = _normalise(sourceType);
+    if (value === 'official') return 'Official report';
+    if (value === 'regulatory') return 'Regulatory source';
+    if (value === 'industry') return 'Industry research';
+    if (value === 'internal') return 'Internal source';
+    if (value === 'regional') return 'Regional research';
+    return value ? `${sourceType}` : 'Published source';
+  }
+
   function retrieveRelevantBenchmarks({ query = '', geography = '', businessUnit = null, topK = 3 } = {}) {
     const scenarioType = _detectScenarioType(query);
     const industry = _detectIndustry(businessUnit || {}, query);
@@ -111,6 +130,25 @@ const BenchmarkService = (() => {
     }).join('\n\n');
   }
 
+
+  function _deriveFreshnessLabel(lastUpdated = '') {
+    const year = _parseYear(lastUpdated);
+    if (!year) return 'Date unknown';
+    const currentYear = _getCurrentYear();
+    const age = currentYear - year;
+    if (age <= 1) return 'Recent source';
+    if (age <= 3) return 'Established source';
+    return 'Older source';
+  }
+
+  function _deriveConfidenceLabel(entry = {}) {
+    if (entry.sourceType === 'regulatory') return 'High confidence';
+    if (entry.sourceType === 'official' && (entry.scope === 'regional' || entry.scope === 'industry')) return 'High confidence';
+    if (entry.sourceType === 'official') return 'Strong reference';
+    if (entry.scope === 'regional' || entry.scope === 'industry') return 'Good fit';
+    return 'Fallback reference';
+  }
+
   function buildReferenceList(entries = []) {
     return (Array.isArray(entries) ? entries : []).map(entry => ({
       id: entry.id,
@@ -121,7 +159,10 @@ const BenchmarkService = (() => {
       geography: entry.geographyMatch || 'Global',
       url: entry.sourceUrl,
       summary: entry.summary || '',
-      lastUpdated: entry.lastUpdated || ''
+      lastUpdated: entry.lastUpdated || '',
+      sourceTypeLabel: _humaniseSourceType(entry.sourceType),
+      freshnessLabel: _deriveFreshnessLabel(entry.lastUpdated),
+      confidenceLabel: _deriveConfidenceLabel(entry)
     }));
   }
 
@@ -132,11 +173,14 @@ const BenchmarkService = (() => {
     const reason = primary.summary || 'Starting values aligned to the closest structured benchmark profile for this scenario.';
     const sourceTitle = primary.sourceTitle || '';
     const lastUpdated = primary.lastUpdated || '';
+    const sourceTypeLabel = _humaniseSourceType(primary.sourceType);
+    const freshnessLabel = _deriveFreshnessLabel(lastUpdated);
+    const confidenceLabel = _deriveConfidenceLabel(primary);
     return [
-      { label: 'Event frequency', origin, scope: primary.scope, reason, sourceTitle, lastUpdated },
-      { label: 'Threat capability and control strength', origin, scope: primary.scope, reason: 'Exposure starting points were aligned to the same benchmark profile before BU and user context were applied.', sourceTitle, lastUpdated },
-      { label: 'Business disruption cost', origin, scope: primary.scope, reason: 'The business interruption range was seeded from the closest published benchmark profile for this scenario type.', sourceTitle, lastUpdated },
-      { label: 'Regulatory and legal cost', origin, scope: primary.scope, reason: 'The regulatory and legal range was seeded from the same benchmark profile and is intended as a challengeable starting point.', sourceTitle, lastUpdated }
+      { label: 'Event frequency', origin, scope: primary.scope, reason, sourceTitle, sourceTypeLabel, lastUpdated, freshnessLabel, confidenceLabel },
+      { label: 'Threat capability and control strength', origin, scope: primary.scope, reason: 'Exposure starting points were aligned to the same benchmark profile before BU and user context were applied.', sourceTitle, sourceTypeLabel, lastUpdated, freshnessLabel, confidenceLabel },
+      { label: 'Business disruption cost', origin, scope: primary.scope, reason: 'The business interruption range was seeded from the closest published benchmark profile for this scenario type.', sourceTitle, sourceTypeLabel, lastUpdated, freshnessLabel, confidenceLabel },
+      { label: 'Regulatory and legal cost', origin, scope: primary.scope, reason: 'The regulatory and legal range was seeded from the same benchmark profile and is intended as a challengeable starting point.', sourceTitle, sourceTypeLabel, lastUpdated, freshnessLabel, confidenceLabel }
     ];
   }
 

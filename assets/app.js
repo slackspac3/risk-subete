@@ -8,7 +8,7 @@
 const TOLERANCE_THRESHOLD = 5_000_000;
 const DEFAULT_FX_RATE = 3.6725;
 const DEFAULT_COMPASS_PROXY_URL = resolveCompassProxyUrl();
-const APP_ASSET_VERSION = '20260312bn';
+const APP_ASSET_VERSION = '20260312ch';
 const GLOBAL_ADMIN_STORAGE_KEY = 'rq_admin_settings';
 const USER_SETTINGS_STORAGE_PREFIX = 'rq_user_settings';
 const ASSESSMENTS_STORAGE_PREFIX = 'rq_assessments';
@@ -103,7 +103,8 @@ const AppState = {
   userStateCache: { username: '', userSettings: null, assessments: null, learningStore: null, draft: null, _meta: { revision: 0, updatedAt: 0 } },
   userStateSyncTimer: null,
   userStateSyncRevision: 0,
-  auditLogCache: { loaded: false, loading: false, entries: [], summary: null, error: '' }
+  auditLogCache: { loaded: false, loading: false, entries: [], summary: null, error: '' },
+  clientRuntimeErrors: []
 };
 
 
@@ -178,6 +179,32 @@ async function loadSharedAdminSettings() {
 
 function syncSharedAdminSettings(settings, audit = null) {
   return requestSharedSettings('PUT', { settings: normaliseAdminSettings(settings), audit }, { includeAdminSecret: true });
+}
+
+
+function recordClientRuntimeError(kind, error, extra = {}) {
+  const message = String(error?.message || error || 'Unknown runtime error').trim();
+  const entry = {
+    kind: String(kind || 'runtime'),
+    message,
+    source: String(extra.source || '').trim(),
+    route: typeof window !== 'undefined' ? String(window.location.hash || '#/').trim() : '#/',
+    ts: new Date().toISOString()
+  };
+  const last = AppState.clientRuntimeErrors[0];
+  if (last && last.kind === entry.kind && last.message === entry.message && last.source === entry.source) return;
+  AppState.clientRuntimeErrors = [entry, ...(AppState.clientRuntimeErrors || [])].slice(0, 20);
+}
+
+if (typeof window !== 'undefined' && !window.__rqRuntimeInstrumentationInstalled) {
+  window.__rqRuntimeInstrumentationInstalled = true;
+  window.addEventListener('error', event => {
+    recordClientRuntimeError('error', event.error || event.message, { source: event.filename || '' });
+  });
+  window.addEventListener('unhandledrejection', event => {
+    const reason = event.reason instanceof Error ? event.reason : new Error(String(event.reason || 'Unhandled promise rejection'));
+    recordClientRuntimeError('promise', reason);
+  });
 }
 
 function getAuditApiUrl() {
@@ -3422,7 +3449,7 @@ function renderBenchmarkRationaleBlock(benchmarkBasis, inputRationale, benchmark
     <div class="context-panel-title">Benchmark Logic and Number Rationale</div>
     <div style="display:flex;flex-direction:column;gap:var(--sp-4);margin-top:var(--sp-4)">
       ${rows.map(([label, value]) => `<div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">${label}</div><div style="font-size:.85rem;color:var(--text-secondary);margin-top:6px;line-height:1.7">${value}</div></div>`).join('')}
-      ${refs.length ? `<div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Benchmark sources used</div><div style="display:flex;flex-direction:column;gap:var(--sp-3);margin-top:var(--sp-3)">${refs.map(ref => `<div><div style="display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap"><strong style="font-size:.85rem;color:var(--text-primary)">${escapeHtml(String(ref.title || ref.sourceTitle || 'Benchmark source'))}</strong><span class="badge badge--neutral">${escapeHtml(String(ref.scope || 'benchmark'))}</span><span class="badge badge--gold">${escapeHtml(String(ref.sourceType || 'Reference'))}</span>${ref.lastUpdated ? `<span class="badge badge--neutral">${escapeHtml(String(ref.lastUpdated))}</span>` : ''}</div><div class="context-panel-copy" style="margin-top:6px">${escapeHtml(String(ref.sourceTitle || ''))}${ref.summary ? ` — ${escapeHtml(String(ref.summary))}` : ''}</div></div>`).join('')}</div></div>` : ''}
+      ${refs.length ? `<div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Benchmark sources used</div><div style="display:flex;flex-direction:column;gap:var(--sp-3);margin-top:var(--sp-3)">${refs.map(ref => `<div><div style="display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap"><strong style="font-size:.85rem;color:var(--text-primary)">${escapeHtml(String(ref.title || ref.sourceTitle || 'Benchmark source'))}</strong><span class="badge badge--neutral">${escapeHtml(String(ref.scope || 'benchmark'))}</span><span class="badge badge--gold">${escapeHtml(String(ref.sourceTypeLabel || ref.sourceType || 'Reference'))}</span>${ref.confidenceLabel ? `<span class="badge badge--success">${escapeHtml(String(ref.confidenceLabel))}</span>` : ''}${ref.freshnessLabel ? `<span class="badge badge--neutral">${escapeHtml(String(ref.freshnessLabel))}</span>` : ''}${ref.lastUpdated ? `<span class="badge badge--neutral">${escapeHtml(String(ref.lastUpdated))}</span>` : ''}</div><div class="context-panel-copy" style="margin-top:6px">${escapeHtml(String(ref.sourceTitle || ''))}${ref.summary ? ` — ${escapeHtml(String(ref.summary))}` : ''}</div></div>`).join('')}</div></div>` : ''}
     </div>
   </div>`;
 }
@@ -3433,7 +3460,7 @@ function renderInputProvenanceBlock(inputProvenance = []) {
   return `<div class="card card--elevated anim-fade-in">
     <div class="context-panel-title">Where the key numbers came from</div>
     <div style="display:flex;flex-direction:column;gap:var(--sp-3);margin-top:var(--sp-3)">
-      ${items.map(item => `<div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap"><strong style="font-size:.85rem;color:var(--text-primary)">${escapeHtml(String(item.label || 'Input'))}</strong><span class="badge badge--neutral">${escapeHtml(String(item.origin || 'Inference'))}</span>${item.scope ? `<span class="badge badge--gold">${escapeHtml(String(item.scope))}</span>` : ''}</div><div class="context-panel-copy" style="margin-top:6px">${escapeHtml(String(item.reason || 'Starting point generated from current scenario context.'))}</div>${item.sourceTitle ? `<div class="form-help" style="margin-top:6px">${escapeHtml(String(item.sourceTitle))}${item.lastUpdated ? ` · ${escapeHtml(String(item.lastUpdated))}` : ''}</div>` : ''}</div>`).join('')}
+      ${items.map(item => `<div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap"><strong style="font-size:.85rem;color:var(--text-primary)">${escapeHtml(String(item.label || 'Input'))}</strong><span class="badge badge--neutral">${escapeHtml(String(item.origin || 'Inference'))}</span>${item.scope ? `<span class="badge badge--gold">${escapeHtml(String(item.scope))}</span>` : ''}${item.sourceTypeLabel ? `<span class="badge badge--neutral">${escapeHtml(String(item.sourceTypeLabel))}</span>` : ''}${item.confidenceLabel ? `<span class="badge badge--success">${escapeHtml(String(item.confidenceLabel))}</span>` : ''}${item.freshnessLabel ? `<span class="badge badge--neutral">${escapeHtml(String(item.freshnessLabel))}</span>` : ''}</div><div class="context-panel-copy" style="margin-top:6px">${escapeHtml(String(item.reason || 'Starting point generated from current scenario context.'))}</div>${item.sourceTitle ? `<div class="form-help" style="margin-top:6px">${escapeHtml(String(item.sourceTitle))}${item.lastUpdated ? ` · ${escapeHtml(String(item.lastUpdated))}` : ''}</div>` : ''}</div>`).join('')}
     </div>
   </div>`;
 }
