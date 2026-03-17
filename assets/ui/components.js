@@ -189,6 +189,23 @@ const UI = (() => {
     </div>`;
   }
 
+
+  function contextInfoPanel({ title, copy, foot = '' }) {
+    return `<div class="context-chip-panel">
+      <div class="context-panel-title">${title}</div>
+      <p class="context-panel-copy">${copy}</p>
+      ${foot ? `<div class="context-panel-foot">${foot}</div>` : ''}
+    </div>`;
+  }
+
+  function contextInfoGrid({ title = '', intro = '', panels = [], className = 'card card--elevated anim-fade-in', gridStyle = '' }) {
+    return `<div class="${className}">
+      ${title ? `<div class="context-panel-title">${title}</div>` : ''}
+      ${intro ? `<p class="context-panel-copy" style="margin-top:${title ? 'var(--sp-2)' : '0'}">${intro}</p>` : ''}
+      <div class="context-grid"${gridStyle ? ` style="${gridStyle}"` : ''}>${panels.join('')}</div>
+    </div>`;
+  }
+
   // ─── Tag Input ────────────────────────────────────────────
   function tagInput(containerId, initialTags = [], onChange = null) {
     const wrap = document.getElementById(containerId);
@@ -457,5 +474,5 @@ const UI = (() => {
     return `${_getCurrencyPrefix(currency)}${displayValue.toLocaleString(currency === 'AED' ? 'en-AE' : 'en-US')}`;
   }
 
-  return { toast, modal, citationModal, renderStepper, skeletonBlock, skeletonCard, adminSectionHeader, adminTableCard, dashboardOverviewCard, dashboardSectionCard, dashboardAssessmentRow, resultsVisualCard, resultsBriefCard, wizardInputSection, tagInput, confirm, drawHistogram, drawLEC };
+  return { toast, modal, citationModal, renderStepper, skeletonBlock, skeletonCard, adminSectionHeader, adminTableCard, dashboardOverviewCard, dashboardSectionCard, dashboardAssessmentRow, resultsVisualCard, resultsBriefCard, wizardInputSection, contextInfoPanel, contextInfoGrid, tagInput, confirm, drawHistogram, drawLEC };
 })();

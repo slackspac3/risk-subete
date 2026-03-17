@@ -11,23 +11,23 @@ function renderWizard2() {
           <p class="wizard-step-desc">Review the AI-built context, refine the narrative, and confirm how the selected risks should be quantified together.</p>
         </div>
         <div class="wizard-body">
-          <div class="card card--elevated anim-fade-in">
-            <div class="context-panel-title">What to do on this step</div>
-            <div class="context-grid">
-              <div class="context-chip-panel">
-                <div class="context-panel-title">1. Read the draft</div>
-                <p class="context-panel-copy">Check that the scenario describes the event, the affected asset, the likely cause, and the impact you care about.</p>
-              </div>
-              <div class="context-chip-panel">
-                <div class="context-panel-title">2. Improve if needed</div>
-                <p class="context-panel-copy">Edit the wording in plain English. You do not need formal risk language.</p>
-              </div>
-              <div class="context-chip-panel">
-                <div class="context-panel-title">3. Use AI assist if useful</div>
-                <p class="context-panel-copy">AI assist will structure the scenario and prepare FAIR inputs for the next step.</p>
-              </div>
-            </div>
-          </div>
+          ${UI.contextInfoGrid({
+            title: 'What to do on this step',
+            panels: [
+              UI.contextInfoPanel({
+                title: '1. Read the draft',
+                copy: 'Check that the scenario describes the event, the affected asset, the likely cause, and the impact you care about.'
+              }),
+              UI.contextInfoPanel({
+                title: '2. Improve if needed',
+                copy: 'Edit the wording in plain English. You do not need formal risk language.'
+              }),
+              UI.contextInfoPanel({
+                title: '3. Use AI assist if useful',
+                copy: 'AI assist will structure the scenario and prepare FAIR inputs for the next step.'
+              })
+            ]
+          })}
           ${draft.workflowGuidance?.length ? renderWorkflowGuidanceBlock(draft.workflowGuidance, 'What AI recommends you do next') : ''}
           ${renderEvidenceQualityBlock(draft.confidenceLabel, draft.evidenceQuality, draft.evidenceSummary, draft.missingInformation, 'How strong the AI evidence is', { primaryGrounding: draft.primaryGrounding, supportingReferences: draft.supportingReferences, inferredAssumptions: draft.inferredAssumptions })}
           ${selectedRisks.length ? `<div class="card card--elevated anim-fade-in"><div class="context-panel-title">Selected Risks</div><div class="citation-chips">${selectedRisks.map(r => `<span class="badge badge--neutral">${r.title}</span>`).join('')}</div><div class="context-panel-foot">${draft.linkedRisks && selectedRisks.length > 1 ? 'Linked scenario uplift will be applied in the simulation.' : 'Risks will be assessed as a combined scenario without linked uplift.'}</div></div>` : ''}

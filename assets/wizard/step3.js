@@ -40,47 +40,33 @@ function renderEstimateExplainerCard(draft, bu, isAdv, currency) {
   return `<div class="card card--elevated anim-fade-in">
     <div class="context-panel-title">What These AI Values Mean</div>
     <div style="display:flex;flex-direction:column;gap:var(--sp-4);margin-top:var(--sp-3)">
-      <div class="context-chip-panel">
-        <div class="context-panel-title">Where the starting values came from</div>
-        <p class="context-panel-copy">${explainer.source}</p>
-      </div>
-      <div class="context-grid">
-        <div class="context-chip-panel">
-          <div class="context-panel-title">Frequency</div>
-          <p class="context-panel-copy">${explainer.tef}</p>
-        </div>
-        <div class="context-chip-panel">
-          <div class="context-panel-title">Exposure</div>
-          <p class="context-panel-copy">${explainer.exposure}</p>
-        </div>
-        <div class="context-chip-panel">
-          <div class="context-panel-title">Cost</div>
-          <p class="context-panel-copy">${explainer.loss}</p>
-        </div>
-      </div>
+      ${UI.contextInfoPanel({
+        title: 'Where the starting values came from',
+        copy: explainer.source
+      })}
+      ${UI.contextInfoGrid({
+        panels: [
+          UI.contextInfoPanel({ title: 'Frequency', copy: explainer.tef }),
+          UI.contextInfoPanel({ title: 'Exposure', copy: explainer.exposure }),
+          UI.contextInfoPanel({ title: 'Cost', copy: explainer.loss })
+        ]
+      })}
       <div class="context-panel-foot">Read the three columns as: low case = quieter outcome, expected case = planning assumption, severe case = bad but still plausible outcome. You are not trying to predict one perfect number.</div>
     </div>
   </div>`;
 }
 
 function renderRangeCalibrationCard(currency) {
-  return `<div class="card card--elevated anim-fade-in">
-    <div class="context-panel-title">Quick calibration guide</div>
-    <div class="context-grid" style="margin-top:var(--sp-3)">
-      <div class="context-chip-panel">
-        <div class="context-panel-title">Event frequency examples</div>
-        <p class="context-panel-copy">0.5 = about once every two years. 1 = about once a year. 4 = about quarterly. 12 = about monthly.</p>
-      </div>
-      <div class="context-chip-panel">
-        <div class="context-panel-title">How to think about low, expected, severe</div>
-        <p class="context-panel-copy">Low case = contained and quieter than normal. Expected case = the planning assumption you would defend in a meeting. Severe case = bad but still plausible, not an apocalypse number.</p>
-      </div>
-      <div class="context-chip-panel">
-        <div class="context-panel-title">Cost range examples</div>
-        <p class="context-panel-copy">Low cost = handled with limited disruption. Expected cost = management attention and some external support likely. Severe cost = prolonged disruption, customer impact, and legal or regulatory escalation in ${currency}.</p>
-      </div>
-    </div>
-  </div>`;
+  return UI.contextInfoGrid({
+    title: 'Quick calibration guide',
+    className: 'card card--elevated anim-fade-in',
+    gridStyle: 'margin-top:var(--sp-3)',
+    panels: [
+      UI.contextInfoPanel({ title: 'Event frequency examples', copy: '0.5 = about once every two years. 1 = about once a year. 4 = about quarterly. 12 = about monthly.' }),
+      UI.contextInfoPanel({ title: 'How to think about low, expected, severe', copy: 'Low case = contained and quieter than normal. Expected case = the planning assumption you would defend in a meeting. Severe case = bad but still plausible, not an apocalypse number.' }),
+      UI.contextInfoPanel({ title: 'Cost range examples', copy: `Low cost = handled with limited disruption. Expected cost = management attention and some external support likely. Severe cost = prolonged disruption, customer impact, and legal or regulatory escalation in ${currency}.` })
+    ]
+  });
 }
 
 function renderInlineEstimateExamples(currency) {
@@ -242,23 +228,15 @@ function renderWizard3() {
           ${renderInputProvenanceBlock(draft.inputProvenance)}
           ${renderEstimateExplainerCard(draft, bu, isAdv, cur)}
 
-          <div class="card card--elevated anim-fade-in">
-            <div class="context-panel-title">How to complete this step</div>
-            <div class="context-grid">
-              <div class="context-chip-panel">
-                <div class="context-panel-title">1. Start with the AI values</div>
-                <p class="context-panel-copy">If the AI suggestions look broadly right, adjust only the values you have evidence for.</p>
-              </div>
-              <div class="context-chip-panel">
-                <div class="context-panel-title">2. Think in ranges, not exact numbers</div>
-                <p class="context-panel-copy">Use a low, expected, and severe case. You do not need one perfect number.</p>
-              </div>
-              <div class="context-chip-panel">
-                <div class="context-panel-title">3. Stay in Basic unless needed</div>
-                <p class="context-panel-copy">Advanced mode is for direct probability inputs, correlations, and simulation tuning.</p>
-              </div>
-            </div>
-          </div>
+          ${UI.contextInfoGrid({
+            title: 'How to complete this step',
+            className: 'card card--elevated anim-fade-in',
+            panels: [
+              UI.contextInfoPanel({ title: '1. Start with the AI values', copy: 'If the AI suggestions look broadly right, adjust only the values you have evidence for.' }),
+              UI.contextInfoPanel({ title: '2. Think in ranges, not exact numbers', copy: 'Use a low, expected, and severe case. You do not need one perfect number.' }),
+              UI.contextInfoPanel({ title: '3. Stay in Basic unless needed', copy: 'Advanced mode is for direct probability inputs, correlations, and simulation tuning.' })
+            ]
+          })}
 
           ${renderRangeCalibrationCard(sym)}
           ${renderEstimatePresetCard(draft)}
