@@ -226,8 +226,8 @@ function renderWizard1() {
           <div class="card anim-fade-in anim-delay-2">
             <div class="flex items-center justify-between mb-4" style="flex-wrap:wrap;gap:var(--sp-3)">
               <div>
-                <div class="context-panel-title">Select Risks To Carry Forward</div>
-                <p class="context-panel-copy">Keep only the risks that belong in this assessment. Remove anything that is out of scope before continuing.</p>
+                <div class="context-panel-title">Choose the risks for this assessment</div>
+                <p class="context-panel-copy">Keep only risks that share the same event, scope, or business impact. Remove anything that is out of scope before continuing.</p>
               </div>
               <label class="toggle-row">
                 <span class="toggle-label">Treat as linked scenario</span>
@@ -241,7 +241,7 @@ function renderWizard1() {
         </div>
         <div class="wizard-footer">
           <a class="btn btn--ghost" href="#/dashboard">← Dashboard</a>
-          <button class="btn btn--primary" id="btn-next-1">Continue to Scenario Review →</button>
+          <button class="btn btn--primary" id="btn-next-1">Continue with ${selectedRisks.length || 0} selected risk${selectedRisks.length === 1 ? '' : 's'} →</button>
         </div>
       </div>
     </main>`);
@@ -359,42 +359,61 @@ function renderWizard1() {
   bindRiskCardActions();
 }
 
+function scoreRiskForCurrentAssessment(risk, narrative, selectedIds) {
+  let score = 0;
+  if (selectedIds.has(risk.id)) score += 5;
+  if (risk.source === 'manual') score += 3;
+  if (risk.source === 'ai+register' || risk.source === 'register') score += 2;
+  const haystack = `${risk.title || ''} ${risk.description || ''} ${risk.category || ''}`.toLowerCase();
+  const tokens = String(narrative || '').toLowerCase().split(/[^a-z0-9]+/).filter(token => token.length > 3);
+  const uniqueTokens = Array.from(new Set(tokens)).slice(0, 12);
+  uniqueTokens.forEach(token => {
+    if (haystack.includes(token)) score += 1;
+  });
+  return score;
+}
+
+function explainRiskFit(score, selected) {
+  if (selected) return 'Already included in this assessment.';
+  if (score >= 5) return 'Good fit because it closely matches the current scenario wording or source material.';
+  if (score >= 3) return 'Possibly in scope, but review whether it shares the same event and business impact.';
+  return 'Likely separate or lower-confidence. Include it only if it clearly belongs in the same assessment.';
+}
+
+function renderRiskSelectionSection(title, subtitle, risks, selectedIds, regulations, sectionClass = '') {
+  if (!risks.length) return '';
+  const sourceLabel = risk => risk.source === 'manual' ? 'Manual' : risk.source === 'register' || risk.source === 'ai+register' ? 'Upload' : 'AI generated';
+  return `<div class="${sectionClass}" style="display:flex;flex-direction:column;gap:var(--sp-4)"><div><div class="context-panel-title">${title}</div><div class="context-panel-copy" style="margin-top:6px">${subtitle}</div></div><div class="risk-selection-grid">${risks.map(({ risk, score }) => `<div class="risk-pick-card"><div class="risk-pick-head" style="align-items:flex-start"><label style="display:flex;gap:12px;align-items:flex-start;flex:1;cursor:pointer"><input type="checkbox" class="risk-select-checkbox" data-risk-id="${risk.id}" ${selectedIds.has(risk.id) ? 'checked' : ''} style="margin-top:4px"><div><div class="risk-pick-title">${risk.title}</div><div class="risk-pick-badges"><span class="risk-pick-badge">${risk.category}</span><span class="risk-pick-badge risk-pick-badge--source">${sourceLabel(risk)}</span></div></div></label><button class="btn btn--ghost btn--sm btn-remove-risk" data-risk-id="${risk.id}" type="button">Remove</button></div>${risk.description ? `<p class="risk-pick-desc">${risk.description}</p>` : ''}<div class="form-help" style="margin-bottom:10px">${explainRiskFit(score, selectedIds.has(risk.id))}</div><div class="citation-chips">${(risk.regulations || []).length ? risk.regulations.slice(0, 4).map(tag => `<span class="badge badge--neutral">${tag}</span>`).join('') : regulations.slice(0, 2).map(tag => `<span class="badge badge--neutral">${tag}</span>`).join('')}</div></div>`).join('')}</div></div>`;
+}
+
 function renderSelectedRiskCards(riskCandidates, selectedRisks, regulations) {
   const cleanedRisks = (riskCandidates || []).filter(risk => !isNoiseRiskText(risk.title) && risk.title !== '-');
   const selectedIds = new Set((selectedRisks || []).map(risk => risk.id));
-  const sourceLabel = risk => risk.source === 'manual' ? 'Manual' : risk.source === 'register' || risk.source === 'ai+register' ? 'Upload' : 'AI generated';
   if (!cleanedRisks.length) {
-    return `<div class="empty-state">No risks have been selected yet. Start with AI enhancement, upload a register, or add risks manually to build your shortlist.</div>`;
+    return `<div class="empty-state">No candidate risks yet. Start with the guided builder, refine a scenario draft with AI, or import a register to build your shortlist.</div>`;
   }
   const linkedRecommendations = getLinkedRiskRecommendations(selectedRisks || []);
+  const narrative = AppState.draft.enhancedNarrative || AppState.draft.narrative || AppState.draft.sourceNarrative || composeGuidedNarrative(AppState.draft.guidedInput) || '';
+  const ranked = cleanedRisks
+    .map(risk => ({ risk, score: scoreRiskForCurrentAssessment(risk, narrative, selectedIds) }))
+    .sort((a, b) => b.score - a.score || String(a.risk.title || '').localeCompare(String(b.risk.title || '')));
+  const recommended = ranked.filter(item => selectedIds.has(item.risk.id) || item.score >= 3);
+  const extras = ranked.filter(item => !recommended.includes(item));
+  const selectedCount = selectedRisks.length;
+  const scopeHint = selectedCount > 4
+    ? 'This looks broad. Remove risks that do not share the same event, scope, or business impact.'
+    : selectedCount >= 1
+      ? 'Good scope so far. Keep only the risks that clearly belong in one coherent assessment.'
+      : 'Choose the risks that share the same event, scope, or business impact.';
   return `${linkedRecommendations.length ? `<div class="card mb-4" style="background:var(--bg-elevated)"><div class="context-panel-title">Suggested linked-risk groupings</div><div style="display:flex;flex-direction:column;gap:var(--sp-3);margin-top:var(--sp-3)">${linkedRecommendations.map(group => `<div><div style="font-size:.78rem;font-weight:600;color:var(--text-primary)">${group.label}</div><div class="context-panel-copy" style="margin-top:4px">${group.risks.join(', ')}</div></div>`).join('')}</div><div class="context-panel-foot">${AppState.draft.linkAnalysis || 'Treat these as linked where one control or event could trigger the others in the same scenario.'}</div></div>` : ''}
   <div class="flex items-center gap-3 mb-4" style="flex-wrap:wrap">
     <button class="btn btn--ghost btn--sm" id="btn-select-all-risks" type="button">Select All</button>
     <button class="btn btn--ghost btn--sm" id="btn-clear-all-risks" type="button">Clear All</button>
-    <span class="form-help">${selectedRisks.length} of ${cleanedRisks.length} selected for analysis.</span>
+    <span class="badge badge--neutral">${selectedCount} selected</span>
+    <span class="form-help">${scopeHint}</span>
   </div>
-  <div class="risk-selection-grid">
-    ${cleanedRisks.map(risk => `
-      <div class="risk-pick-card">
-        <div class="risk-pick-head" style="align-items:flex-start">
-          <label style="display:flex;gap:12px;align-items:flex-start;flex:1;cursor:pointer">
-            <input type="checkbox" class="risk-select-checkbox" data-risk-id="${risk.id}" ${selectedIds.has(risk.id) ? 'checked' : ''} style="margin-top:4px">
-            <div>
-              <div class="risk-pick-title">${risk.title}</div>
-              <div class="risk-pick-badges">
-                <span class="risk-pick-badge">${risk.category}</span>
-                <span class="risk-pick-badge risk-pick-badge--source">${sourceLabel(risk)}</span>
-              </div>
-            </div>
-          </label>
-          <button class="btn btn--ghost btn--sm btn-remove-risk" data-risk-id="${risk.id}" type="button">Remove</button>
-        </div>
-        ${risk.description ? `<p class="risk-pick-desc">${risk.description}</p>` : ''}
-        <div class="citation-chips">
-          ${(risk.regulations || []).length ? risk.regulations.slice(0, 4).map(tag => `<span class="badge badge--neutral">${tag}</span>`).join('') : regulations.slice(0, 2).map(tag => `<span class="badge badge--neutral">${tag}</span>`).join('')}
-        </div>
-      </div>`).join('')}
-  </div>`;
+  ${renderRiskSelectionSection('Recommended for this assessment', 'These are the strongest candidates based on your current scenario wording and selected scope.', recommended, selectedIds, regulations)}
+  ${extras.length ? `<details class="wizard-disclosure"><summary>Show additional possible risks <span class="badge badge--neutral">${extras.length}</span></summary><div class="wizard-disclosure-body">${renderRiskSelectionSection('Available but likely out of scope', 'Keep these only if they clearly belong in the same event path or business outcome.', extras, selectedIds, regulations)}</div></details>` : ''}`;
 }
 
 function bindRiskCardActions() {
