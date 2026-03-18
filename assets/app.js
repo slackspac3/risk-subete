@@ -3400,6 +3400,10 @@ function renderLanding() {
               <button class="btn btn--primary w-full" id="btn-login" type="submit" style="justify-content:center">Sign In</button>
             </form>
             <div class="form-help" style="margin-top:var(--sp-4)">Ask the global admin for your username and password if you do not have one yet.</div>
+            <div class="flex items-center gap-3 mt-5" style="flex-wrap:wrap">
+              <a class="btn btn--ghost" href="#/admin/settings/org" id="btn-landing-admin-access">Global Admin Access</a>
+              <span class="form-help">Use this if you are signing in to manage organisation setup, users, defaults, or audit data.</span>
+            </div>
           </div>
         </section>
 

@@ -78,6 +78,7 @@ function renderUserDashboard() {
                 <button class="btn btn--primary btn--lg" id="btn-dashboard-new-assessment" aria-label="Start a New Risk Assessment">Start Guided Assessment</button>
                 <button class="btn btn--secondary" id="btn-dashboard-continue-draft" ${hasDraft ? '' : 'disabled'}>Resume Draft</button>
                 <button class="btn btn--ghost" id="btn-dashboard-open-settings">${capability.experience.primaryActionLabel}</button>
+                <a class="btn btn--ghost" href="#/admin/settings/org" id="btn-dashboard-admin-entry">Admin</a>
               </div>
             </div>
             <div class="card dashboard-hero-side">
