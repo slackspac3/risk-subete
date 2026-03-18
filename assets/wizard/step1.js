@@ -59,6 +59,8 @@ const STEP1_DRY_RUN_SCENARIOS = [
     id: 'supplier-platform-outage',
     title: 'Supplier outage on a regulated platform',
     summary: 'Good first example for third-party and resilience risk.',
+    bestFor: 'Third-party, resilience, and escalation walkthroughs',
+    nextStep: 'Review the two starter risks, then continue to see how the platform refines and estimates a linked supplier scenario.',
     event: 'A critical supplier with privileged access is compromised and disrupts a regulated digital platform.',
     asset: 'Customer-facing regulated platform and supporting supplier connection',
     cause: 'Supplier compromise leading to operational disruption and delayed response',
@@ -74,6 +76,8 @@ const STEP1_DRY_RUN_SCENARIOS = [
     id: 'cloud-data-exposure',
     title: 'Cloud misconfiguration exposing sensitive data',
     summary: 'Useful for privacy, security, and legal-impact walkthroughs.',
+    bestFor: 'Privacy, legal, and notification-impact walkthroughs',
+    nextStep: 'Use this to see how data exposure turns into regulatory and loss-estimation inputs in the next steps.',
     event: 'A cloud storage configuration error exposes sensitive data to unauthorised parties.',
     asset: 'Cloud data store containing customer and operational records',
     cause: 'Misconfiguration and weak change control',
@@ -89,6 +93,8 @@ const STEP1_DRY_RUN_SCENARIOS = [
     id: 'ransomware-core-services',
     title: 'Ransomware disrupting core business services',
     summary: 'Helpful for business interruption and recovery modelling.',
+    bestFor: 'Outage, recovery, and business interruption walkthroughs',
+    nextStep: 'Continue after loading to see how the platform frames recovery cost and service-impact assumptions.',
     event: 'A ransomware event disrupts core business services and slows operational recovery.',
     asset: 'Core business systems, shared files, and service operations',
     cause: 'Phishing-led compromise and weak endpoint containment',
@@ -110,6 +116,52 @@ function buildDryRunNarrative(example) {
     impact: example.impact,
     urgency: example.urgency
   });
+}
+
+function getLoadedDryRunScenario(draft = AppState.draft) {
+  const loadedId = draft?.loadedDryRunId;
+  return STEP1_DRY_RUN_SCENARIOS.find(example => example.id === loadedId) || null;
+}
+
+function clearLoadedDryRunFlag({ save = false } = {}) {
+  if (!AppState.draft?.loadedDryRunId) return;
+  delete AppState.draft.loadedDryRunId;
+  if (save) saveDraft();
+}
+
+function resetStep1DryRunContent() {
+  AppState.draft.guidedInput = { event: '', asset: '', cause: '', impact: '', urgency: 'medium' };
+  AppState.draft.narrative = '';
+  AppState.draft.sourceNarrative = '';
+  AppState.draft.enhancedNarrative = '';
+  AppState.draft.intakeSummary = '';
+  AppState.draft.linkAnalysis = '';
+  AppState.draft.scenarioTitle = '';
+  AppState.draft.riskCandidates = [];
+  AppState.draft.selectedRiskIds = [];
+  AppState.draft.selectedRisks = [];
+  clearLoadedDryRunFlag();
+  saveDraft();
+  renderWizard1();
+  UI.toast('Dry-run example cleared. You can start a fresh assessment now.', 'success');
+}
+
+function renderLoadedDryRunBanner(example) {
+  if (!example) return '';
+  return `<div class="card card--elevated anim-fade-in" style="border-color:var(--accent-gold);background:linear-gradient(180deg, rgba(187,149,74,0.12), rgba(255,255,255,0.02))">
+    <div class="flex items-center justify-between" style="flex-wrap:wrap;gap:var(--sp-3)">
+      <div>
+        <div class="context-panel-title">Dry-run example loaded</div>
+        <p class="context-panel-copy" style="margin-top:6px"><strong>${example.title}</strong> is active. ${example.nextStep}</p>
+      </div>
+      <button class="btn btn--ghost btn--sm" id="btn-clear-dry-run" type="button">Clear Example</button>
+    </div>
+    <div class="citation-chips" style="margin-top:var(--sp-4)">
+      <span class="badge badge--gold">Dry run</span>
+      <span class="badge badge--neutral">Best for: ${example.bestFor}</span>
+      <span class="badge badge--neutral">${example.risks.length} starter risks</span>
+    </div>
+  </div>`;
 }
 
 function hasStep1Content() {
@@ -143,6 +195,7 @@ function applyDryRunScenario(example) {
   AppState.draft.selectedRiskIds = seededRisks.map(risk => risk.id);
   AppState.draft.selectedRisks = seededRisks.slice();
   AppState.draft.scenarioTitle = example.title;
+  AppState.draft.loadedDryRunId = example.id;
   AppState.draft.applicableRegulations = deriveApplicableRegulations(
     getBUList().find(b => b.id === AppState.draft.buId),
     getSelectedRisks(),
@@ -193,6 +246,7 @@ function renderWizard1() {
   const scenarioGeographies = getScenarioGeographies();
   const regs = deriveApplicableRegulations(buList.find(b => b.id === draft.buId), selectedRisks, scenarioGeographies);
   const recommendation = getStep1RecommendedAction(draft, selectedRisks);
+  const activeDryRun = getLoadedDryRunScenario(draft);
   const hasScenarioDraft = !!String(draft.narrative || draft.sourceNarrative || '').trim();
   const hasImportedSource = !!String(draft.uploadedRegisterName || '').trim() || (riskCandidates || []).some(risk => risk.source === 'register' || risk.source === 'ai+register');
 
@@ -208,6 +262,7 @@ function renderWizard1() {
         </div>
         <div class="wizard-body">
           ${renderStep1StartCard(recommendation)}
+          ${renderLoadedDryRunBanner(activeDryRun)}
           ${draft.learningNote ? `<div class="card card--elevated anim-fade-in"><div class="context-panel-title">Learnt from prior use</div><p class="context-panel-copy">${draft.learningNote}</p></div>` : ''}
           <div class="card card--elevated anim-fade-in">
             <div class="grid-2">
@@ -258,6 +313,7 @@ function renderWizard1() {
                     <div style="flex:1">
                       <div class="risk-pick-title">${example.title}</div>
                       <div class="form-help" style="margin-top:6px">${example.summary}</div>
+                      <div class="form-help" style="margin-top:6px"><strong>Best for:</strong> ${example.bestFor}</div>
                     </div>
                     <button class="btn btn--ghost btn--sm btn-load-dry-run" data-dry-run-id="${example.id}" type="button">Load Example</button>
                   </div>
@@ -411,6 +467,7 @@ function renderWizard1() {
   ['event', 'asset', 'cause', 'impact'].forEach(key => {
     document.getElementById(`guided-${key}`).addEventListener('input', function() {
       AppState.draft.guidedInput[key] = this.value;
+      clearLoadedDryRunFlag();
       document.getElementById('guided-preview').textContent = composeGuidedNarrative(AppState.draft.guidedInput) || 'Complete the guided questions and click “Build Scenario Draft”.';
       markDraftDirty();
       scheduleDraftAutosave();
@@ -418,6 +475,7 @@ function renderWizard1() {
   });
   document.getElementById('guided-urgency').addEventListener('change', function() {
     AppState.draft.guidedInput.urgency = this.value;
+    clearLoadedDryRunFlag();
     document.getElementById('guided-preview').textContent = composeGuidedNarrative(AppState.draft.guidedInput) || 'Complete the guided questions and click “Build Scenario Draft”.';
     markDraftDirty();
     scheduleDraftAutosave();
@@ -425,6 +483,7 @@ function renderWizard1() {
   document.getElementById('intake-risk-statement').addEventListener('input', function() {
     AppState.draft.narrative = this.value;
     AppState.draft.sourceNarrative = this.value;
+    clearLoadedDryRunFlag();
     markDraftDirty();
     scheduleDraftAutosave();
   });
@@ -461,6 +520,9 @@ function renderWizard1() {
       applyDryRunScenario(example);
     });
   });
+  document.getElementById('btn-clear-dry-run')?.addEventListener('click', () => {
+    resetStep1DryRunContent();
+  });
   document.getElementById('linked-risks-toggle').addEventListener('change', function() {
     AppState.draft.linkedRisks = this.checked;
     saveDraft();
@@ -469,6 +531,7 @@ function renderWizard1() {
     const input = document.getElementById('manual-risk-add');
     const value = input.value.trim();
     if (!value) return;
+    clearLoadedDryRunFlag();
     appendRiskCandidates([{ title: value, category: 'Manual', source: 'manual' }], { selectNew: true });
     AppState.draft.applicableRegulations = deriveApplicableRegulations(buList.find(b => b.id === AppState.draft.buId), getSelectedRisks(), getScenarioGeographies());
     input.value = '';
@@ -627,7 +690,7 @@ function explainRiskFit(match, selected) {
 
 function renderRiskSelectionSection(title, subtitle, risks, selectedIds, regulations, sectionClass = '') {
   if (!risks.length) return '';
-  const sourceLabel = risk => risk.source === 'manual' ? 'Manual' : risk.source === 'register' || risk.source === 'ai+register' ? 'Upload' : 'AI generated';
+  const sourceLabel = risk => risk.source === 'manual' ? 'Manual' : risk.source === 'dry-run' ? 'Example' : risk.source === 'register' || risk.source === 'ai+register' ? 'Upload' : 'AI generated';
   return `<div class="${sectionClass}" style="display:flex;flex-direction:column;gap:var(--sp-4)"><div><div class="context-panel-title">${title}</div><div class="context-panel-copy" style="margin-top:6px">${subtitle}</div></div><div class="risk-selection-grid">${risks.map(({ risk, match }) => `<div class="risk-pick-card"><div class="risk-pick-head" style="align-items:flex-start"><label style="display:flex;gap:12px;align-items:flex-start;flex:1;cursor:pointer"><input type="checkbox" class="risk-select-checkbox" data-risk-id="${risk.id}" ${selectedIds.has(risk.id) ? 'checked' : ''} style="margin-top:4px"><div><div class="risk-pick-title">${risk.title}</div><div class="risk-pick-badges"><span class="risk-pick-badge">${risk.category}</span><span class="risk-pick-badge risk-pick-badge--source">${sourceLabel(risk)}</span></div></div></label><button class="btn btn--ghost btn--sm btn-remove-risk" data-risk-id="${risk.id}" type="button">Remove</button></div>${risk.description ? `<p class="risk-pick-desc">${risk.description}</p>` : ''}<div class="form-help" style="margin-bottom:10px">${explainRiskFit(match, selectedIds.has(risk.id))}</div><div class="citation-chips">${(risk.regulations || []).length ? risk.regulations.slice(0, 4).map(tag => `<span class="badge badge--neutral">${tag}</span>`).join('') : regulations.slice(0, 2).map(tag => `<span class="badge badge--neutral">${tag}</span>`).join('')}</div></div>`).join('')}</div></div>`;
 }
 

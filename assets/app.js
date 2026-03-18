@@ -1064,6 +1064,7 @@ function ensureDraftShape() {
     narrative: AppState.draft.narrative || '',
     structuredScenario: AppState.draft.structuredScenario || null,
     scenarioTitle: AppState.draft.scenarioTitle || '',
+    loadedDryRunId: AppState.draft.loadedDryRunId || '',
     llmAssisted: !!AppState.draft.llmAssisted,
     citations: Array.isArray(AppState.draft.citations) ? AppState.draft.citations : [],
     recommendations: Array.isArray(AppState.draft.recommendations) ? AppState.draft.recommendations : [],

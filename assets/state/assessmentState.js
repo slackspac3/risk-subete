@@ -189,7 +189,7 @@ function resetDraft() {
     templateId: null,
     buId: null, buName: null, contextNotes: '',
     narrative: '', structuredScenario: null,
-    scenarioTitle: '', llmAssisted: false,
+    scenarioTitle: '', loadedDryRunId: '', llmAssisted: false,
     citations: [], recommendations: [],
     fairParams: {}, results: null,
     geography: DEFAULT_ADMIN_SETTINGS.geography,

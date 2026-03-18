@@ -188,6 +188,8 @@ test('wizard step 1 dry-run examples prefill the scenario and shortlist', async 
 
   await expectNoClientCrashOnRoute(page, '/#/wizard/1', async () => {
     await page.getByRole('button', { name: 'Load Example' }).first().click();
+    await expect(page.locator('#btn-clear-dry-run')).toBeVisible();
+    await expect(page.locator('.card').filter({ has: page.locator('#btn-clear-dry-run') }).getByText('Supplier outage on a regulated platform')).toBeVisible();
     await expect(page.locator('#guided-event')).toContainText('critical supplier');
     await expect(page.locator('#intake-risk-statement')).toContainText('critical supplier');
     await expect(page.locator('.risk-select-checkbox:checked')).toHaveCount(2);
