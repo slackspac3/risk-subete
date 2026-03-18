@@ -3613,7 +3613,7 @@ function renderInputProvenanceBlock(inputProvenance = []) {
   return `<div class="card card--elevated anim-fade-in">
     <div class="context-panel-title">Where the key numbers came from</div>
     <div style="display:flex;flex-direction:column;gap:var(--sp-3);margin-top:var(--sp-3)">
-      ${items.map(item => `<div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap"><strong style="font-size:.85rem;color:var(--text-primary)">${escapeHtml(String(item.label || 'Input'))}</strong><span class="badge badge--neutral">${escapeHtml(String(item.origin || 'Inference'))}</span>${item.scope ? `<span class="badge badge--gold">${escapeHtml(String(item.scope))}</span>` : ''}${item.sourceTypeLabel ? `<span class="badge badge--neutral">${escapeHtml(String(item.sourceTypeLabel))}</span>` : ''}${item.confidenceLabel ? `<span class="badge badge--success">${escapeHtml(String(item.confidenceLabel))}</span>` : ''}${item.freshnessLabel ? `<span class="badge badge--neutral">${escapeHtml(String(item.freshnessLabel))}</span>` : ''}</div><div class="context-panel-copy" style="margin-top:6px">${escapeHtml(String(item.reason || 'Starting point generated from current scenario context.'))}</div>${item.sourceTitle ? `<div class="form-help" style="margin-top:6px">${escapeHtml(String(item.sourceTitle))}${item.lastUpdated ? ` · ${escapeHtml(String(item.lastUpdated))}` : ''}</div>` : ''}</div>`).join('')}
+      ${items.map(item => `<div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap"><strong style="font-size:.85rem;color:var(--text-primary)">${escapeHtml(String(item.label || 'Input'))}</strong><span class="badge badge--neutral">${escapeHtml(String(item.origin || 'Inference'))}</span>${item.scope ? `<span class="badge badge--gold">${escapeHtml(String(item.scope))}</span>` : ''}${item.sourceTypeLabel ? `<span class="badge badge--neutral">${escapeHtml(String(item.sourceTypeLabel))}</span>` : ''}${item.confidenceLabel ? `<span class="badge badge--success">${escapeHtml(String(item.confidenceLabel))}</span>` : ''}${item.freshnessLabel ? `<span class="badge badge--neutral">${escapeHtml(String(item.freshnessLabel))}</span>` : ''}</div><div class="context-panel-copy" style="margin-top:6px">${escapeHtml(String(item.reason || 'Starting point generated from current scenario context.'))}</div>${item.supportingKinds?.length ? `<div class="form-help" style="margin-top:6px">Support used: ${escapeHtml(String(item.supportingKinds.join(', ')))}</div>` : ''}${item.sourceTitle ? `<div class="form-help" style="margin-top:6px">${escapeHtml(String(item.sourceTitle))}${item.lastUpdated ? ` · ${escapeHtml(String(item.lastUpdated))}` : ''}</div>` : ''}</div>`).join('')}
     </div>
   </div>`;
 }
@@ -3752,6 +3752,7 @@ function buildAssessmentAssumptions(draft, results, modelInputs, scenarioMeta) {
 function buildAssessmentDrivers(draft, results, modelInputs) {
   const upward = [];
   const stabilisers = [];
+  const sensitivity = [];
   const lossDrivers = [
     ['Business interruption', averageRange(modelInputs.biMin, modelInputs.biLikely, modelInputs.biMax)],
     ['Response and recovery', averageRange(modelInputs.irMin, modelInputs.irLikely, modelInputs.irMax)],
@@ -3773,9 +3774,15 @@ function buildAssessmentDrivers(draft, results, modelInputs) {
   if (!modelInputs.secondaryEnabled) stabilisers.push('Secondary loss is disabled, so the model is not adding a follow-on loss tail beyond the primary event.');
   if ((modelInputs.rlLikely || 0) < (modelInputs.biLikely || 0)) stabilisers.push('Regulatory and legal costs are not the dominant driver in the current estimate.');
 
+  sensitivity.push({ label: 'Event frequency', why: `The working case assumes about ${modelInputs.tefLikely || 0} events per year, so frequency is a direct multiplier on annual loss.` });
+  sensitivity.push({ label: 'Event success likelihood', why: modelInputs.vulnDirect ? 'Direct exposure values determine how often attempts become successful loss events.' : 'Threat capability versus control strength determines how often attempted events convert into loss.' });
+  if (lossDrivers[0]?.[1] > 0) sensitivity.push({ label: lossDrivers[0][0], why: `${lossDrivers[0][0]} is one of the largest per-event cost components in the current estimate.` });
+  if (lossDrivers[1]?.[1] > 0) sensitivity.push({ label: lossDrivers[1][0], why: `${lossDrivers[1][0]} is also materially influencing the event-loss range.` });
+
   return {
     upward: upward.slice(0, 4),
-    stabilisers: stabilisers.slice(0, 3)
+    stabilisers: stabilisers.slice(0, 3),
+    sensitivity: sensitivity.slice(0, 3)
   };
 }
 

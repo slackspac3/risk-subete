@@ -303,6 +303,60 @@ function renderAssessmentAssumptionsBlock(assumptions) {
   </section>`;
 }
 
+
+
+function buildLiveInputSourceAssignments(draft) {
+  const base = Array.isArray(draft.inputAssignments) ? draft.inputAssignments : [];
+  const origins = draft.fairParamOrigins || {};
+  const groupToKeys = {
+    'event-frequency': ['tefMin', 'tefLikely', 'tefMax'],
+    'threat-capability': ['threatCapMin', 'threatCapLikely', 'threatCapMax'],
+    'control-strength': ['controlStrMin', 'controlStrLikely', 'controlStrMax'],
+    'incident-response': ['irMin', 'irLikely', 'irMax'],
+    'business-interruption': ['biMin', 'biLikely', 'biMax'],
+    'regulatory-legal': ['rlMin', 'rlLikely', 'rlMax']
+  };
+  return base.map(item => {
+    const keys = groupToKeys[item.id] || [];
+    const hasUserEdit = keys.some(key => origins[key] === 'user');
+    if (!hasUserEdit) return item;
+    return {
+      ...item,
+      origin: 'User edit',
+      sourceTypeLabel: 'User-entered value',
+      reason: 'This input group was changed after the AI starting point was loaded, so the current values reflect direct user judgement.',
+      freshnessLabel: '',
+      confidenceLabel: item.confidenceLabel || ''
+    };
+  });
+}
+
+function renderInputSourceAuditBlock(assignments = []) {
+  const items = Array.isArray(assignments) ? assignments.filter(Boolean) : [];
+  if (!items.length) return '';
+  return `<div class="card card--elevated anim-fade-in"><div class="context-panel-title">Current source of each key input</div><div style="display:flex;flex-direction:column;gap:var(--sp-3);margin-top:var(--sp-3)">${items.map(item => `<div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap"><strong style="font-size:.85rem;color:var(--text-primary)">${escapeHtml(String(item.label || 'Input'))}</strong><span class="badge badge--neutral">${escapeHtml(String(item.origin || 'Unknown'))}</span>${item.sourceTypeLabel ? `<span class="badge badge--gold">${escapeHtml(String(item.sourceTypeLabel))}</span>` : ''}</div><div class="context-panel-copy" style="margin-top:6px">${escapeHtml(String(item.reason || ''))}</div></div>`).join('')}</div></div>`;
+}
+
+function renderSimulationEquationFlow() {
+  return `<div class="card card--elevated anim-fade-in"><div class="context-panel-title">How the result is built</div><div class="context-panel-copy" style="margin-top:var(--sp-2)">AI, context, and source documents prepare FAIR inputs. Monte Carlo simulation then turns those inputs into conditional event loss and annualized loss ranges.</div><div class="citation-chips" style="margin-top:12px"><span class="badge badge--neutral">AI/context/docs</span><span class="badge badge--neutral">FAIR inputs</span><span class="badge badge--neutral">Monte Carlo</span><span class="badge badge--neutral">Results</span></div></div>`;
+}
+
+function renderPreRunChallengeBlock(draft) {
+  const items = [];
+  const missing = Array.isArray(draft.missingInformation) ? draft.missingInformation : [];
+  if (missing[0]) items.push(missing[0]);
+  if ((draft.fairParams?.controlStrLikely ?? 1) <= 0.55) items.push('Challenge whether current control strength is too optimistic before you run the simulation.');
+  if ((draft.fairParams?.tefLikely || 0) >= 3) items.push('Challenge whether the event-frequency working case is supported by internal incident evidence.');
+  if (!items.length) items.push('Challenge the event frequency, control strength, and largest cost range before you rely on the output.');
+  return `<div class="card card--elevated anim-fade-in"><div class="context-panel-title">Challenge these 3 assumptions first</div><div style="display:flex;flex-direction:column;gap:var(--sp-3);margin-top:var(--sp-3)">${items.slice(0, 3).map((item, idx) => `<div style="display:flex;gap:var(--sp-3);align-items:flex-start"><span class="badge badge--gold" style="min-width:24px;justify-content:center">${idx + 1}</span><div class="context-panel-copy" style="margin:0">${escapeHtml(String(item))}</div></div>`).join('')}</div></div>`;
+}
+
+function renderSensitivitySummary(drivers) {
+  const items = Array.isArray(drivers?.sensitivity) ? drivers.sensitivity : [];
+  if (!items.length) return '';
+  return `<div class="results-summary-card"><div class="results-section-heading">The 2-3 inputs driving this result most</div><div style="display:flex;flex-direction:column;gap:var(--sp-3);margin-top:var(--sp-3)">${items.map(item => `<div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-weight:700;color:var(--text-primary)">${escapeHtml(String(item.label || 'Driver'))}</div><div class="results-summary-copy" style="margin-top:6px">${escapeHtml(String(item.why || ''))}</div></div>`).join('')}</div></div>`;
+}
+
 function validateFairParams() {
   const p = AppState.draft.fairParams;
   const checks = [['tef','Event frequency'],['ir','IR'],['bi','BI'],['db','DB'],['rl','RL'],['tp','TP'],['rc','RC']];
@@ -318,6 +372,7 @@ function validateFairParams() {
 function renderWizard4() {
   const draft = AppState.draft;
   const p = draft.fairParams;
+  const liveInputAssignments = buildLiveInputSourceAssignments(draft);
   const safeIterations = Math.min(100000, Math.max(1000, Number.parseInt(p.iterations, 10) || 10000));
   p.iterations = safeIterations;
   const selectedRisks = getSelectedRisks();
@@ -345,12 +400,15 @@ function renderWizard4() {
             ${draft.llmAssisted?'<span class="badge badge--success" style="margin-top:12px">✓ AI-Assisted</span>':''}
             ${selectedRisks.length ? `<div class="mt-4"><div class="context-panel-title">Scenario Scope</div><div class="citation-chips">${selectedRisks.map(r => `<span class="badge badge--neutral">${r.title}</span>`).join('')}</div><div class="context-panel-foot">${multipliers.linked ? `${selectedRisks.length} linked risks selected. Uplift is being applied to event frequency and loss components.` : `${selectedRisks.length} risks selected. Combined scenario, no linked uplift.`}</div></div>` : ''}
           </div>
+          ${renderSimulationEquationFlow()}
+          ${renderPreRunChallengeBlock(draft)}
+          ${renderInputSourceAuditBlock(liveInputAssignments)}
           <div class="card anim-fade-in anim-delay-1">
             <h3 style="font-size:var(--text-base);margin-bottom:var(--sp-4)">Key Parameters</h3>
             <div class="grid-3">
               <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Event frequency</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${p.tefMin}–${p.tefLikely}–${p.tefMax}</div><div style="font-size:.7rem;color:var(--text-muted)">events/year</div></div>
-              <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Threat Cap</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${p.threatCapMin}–${p.threatCapLikely}–${p.threatCapMax}</div><div style="font-size:.7rem;color:var(--text-muted)">0–1 scale</div></div>
-              <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Control Str</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${p.controlStrMin}–${p.controlStrLikely}–${p.controlStrMax}</div><div style="font-size:.7rem;color:var(--text-muted)">0–1 scale</div></div>
+              <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Threat capability</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${p.threatCapMin}–${p.threatCapLikely}–${p.threatCapMax}</div><div style="font-size:.7rem;color:var(--text-muted)">0–1 scale</div></div>
+              <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Control strength</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${p.controlStrMin}–${p.controlStrLikely}–${p.controlStrMax}</div><div style="font-size:.7rem;color:var(--text-muted)">0–1 scale</div></div>
               <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">IR & Recovery</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${fmtCurrency(p.irMin)}–${fmtCurrency(p.irMax)}</div></div>
               <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Business Int.</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${fmtCurrency(p.biMin)}–${fmtCurrency(p.biMax)}</div></div>
               <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Reg & Legal</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${fmtCurrency(p.rlMin)}–${fmtCurrency(p.rlMax)}</div></div>
@@ -414,7 +472,8 @@ async function runSimulation() {
       secondaryEnabled: p.secondaryEnabled||false,
       secProbMin: Math.min(1, (p.secProbMin || 0) * scenario.secondaryMultiplier), secProbLikely: Math.min(1, (p.secProbLikely || 0) * scenario.secondaryMultiplier), secProbMax: Math.min(1, (p.secProbMax || 0) * scenario.secondaryMultiplier),
       secMagMin: toUSD(p.secMagMin) * scenario.lossMultiplier, secMagLikely: toUSD(p.secMagLikely) * scenario.lossMultiplier, secMagMax: toUSD(p.secMagMax) * scenario.lossMultiplier,
-      threshold: toleranceThreshold
+      threshold: toleranceThreshold,
+      annualReviewThreshold
     };
     const results = await Promise.race([
       RiskEngine.runAsync(ep, {
@@ -434,12 +493,12 @@ async function runSimulation() {
     results.applicableRegulations = [...(AppState.draft.applicableRegulations || [])];
     results.warningThreshold = warningThreshold;
     results.annualReviewThreshold = annualReviewThreshold;
-    results.nearTolerance = results.lm.p90 >= warningThreshold && results.lm.p90 < toleranceThreshold;
-    results.annualReviewTriggered = results.ale.p90 >= annualReviewThreshold;
+    results.nearTolerance = results.eventLoss.p90 >= warningThreshold && results.eventLoss.p90 < toleranceThreshold;
+    results.annualReviewTriggered = results.annualLoss.p90 >= annualReviewThreshold;
     const assessmentIntelligence = buildAssessmentIntelligence(AppState.draft, results, ep, scenario);
     await yieldToUI();
     if (!AppState.draft.id) AppState.draft.id = 'a_' + Date.now();
-    const assessment = { ...AppState.draft, results, assessmentIntelligence, completedAt: Date.now() };
+    const assessment = { ...AppState.draft, inputAssignments: buildLiveInputSourceAssignments(AppState.draft), results, assessmentIntelligence, completedAt: Date.now() };
     if (progressText) progressText.textContent = 'Saving the assessment and opening results…';
     await yieldToUI();
     await new Promise(requestAnimationFrame);
@@ -569,9 +628,13 @@ function renderResults(id, isShared) {
   const rawResults = assessment.results || {};
   const r = {
     ...rawResults,
-    lm: rawResults.lm || { mean: 0, p50: 0, p90: 0, p95: 0, min: 0, max: 0 },
-    ale: rawResults.ale || { mean: 0, p50: 0, p90: 0, p95: 0, min: 0, max: 0 },
+    lm: rawResults.lm || rawResults.eventLoss || { mean: 0, p50: 0, p90: 0, p95: 0, min: 0, max: 0 },
+    eventLoss: rawResults.eventLoss || rawResults.lm || { mean: 0, p50: 0, p90: 0, p95: 0, min: 0, max: 0 },
+    ale: rawResults.ale || rawResults.annualLoss || { mean: 0, p50: 0, p90: 0, p95: 0, min: 0, max: 0 },
+    annualLoss: rawResults.annualLoss || rawResults.ale || { mean: 0, p50: 0, p90: 0, p95: 0, min: 0, max: 0 },
     toleranceDetail: rawResults.toleranceDetail || { lmExceedProb: 0, aleExceedProb: 0, lmP90: 0, aleP90: 0 },
+    annualReviewDetail: rawResults.annualReviewDetail || { annualExceedProb: 0, annualP90: 0 },
+    metricSemantics: rawResults.metricSemantics || { eventLoss: 'Conditional loss if a materially successful event occurs.', annualLoss: 'Annualized loss across the year after event frequency is applied.' },
     histogram: Array.isArray(rawResults.histogram) ? rawResults.histogram : [],
     lec: Array.isArray(rawResults.lec) ? rawResults.lec : [],
     warningThreshold: Number(rawResults.warningThreshold || getWarningThreshold() || 0),
@@ -584,10 +647,10 @@ function renderResults(id, isShared) {
   const statusIcon = r.toleranceBreached ? '🔴' : r.nearTolerance ? '🟠' : '🟢';
   const statusTitle = r.toleranceBreached ? 'Needs leadership action' : r.nearTolerance ? 'Needs management attention' : 'Within current tolerance';
   const statusDetail = r.toleranceBreached
-    ? `Per-event P90 ${fmtCurrency(r.lm.p90)} is above the tolerance threshold of ${fmtCurrency(r.threshold)}.`
+    ? `Conditional event-loss P90 ${fmtCurrency(r.eventLoss.p90)} is above the tolerance threshold of ${fmtCurrency(r.threshold)}.`
     : r.nearTolerance
-      ? `Per-event P90 ${fmtCurrency(r.lm.p90)} is above the warning trigger of ${fmtCurrency(r.warningThreshold)} but still below tolerance.`
-      : `Per-event P90 ${fmtCurrency(r.lm.p90)} remains below the warning trigger of ${fmtCurrency(r.warningThreshold)}.`;
+      ? `Conditional event-loss P90 ${fmtCurrency(r.eventLoss.p90)} is above the warning trigger of ${fmtCurrency(r.warningThreshold)} but still below tolerance.`
+      : `Conditional event-loss P90 ${fmtCurrency(r.eventLoss.p90)} remains below the warning trigger of ${fmtCurrency(r.warningThreshold)}.`;
   const executiveHeadline = rolePresentation.executiveHeadline(r);
   const executiveAction = rolePresentation.executiveAction(r);
   const executiveAnnualView = rolePresentation.annualView(r);
@@ -651,18 +714,18 @@ function renderResults(id, isShared) {
 
       <div class="results-exec-metrics">
         <div class="results-impact-card">
-          <div class="results-impact-label">Potential impact from one serious event</div>
-          <div class="results-impact-value ${r.toleranceBreached ? 'danger' : ''}">${fmtCurrency(r.lm.p90)}</div>
+          <div class="results-impact-label">Conditional loss from one successful event</div>
+          <div class="results-impact-value ${r.toleranceBreached ? 'danger' : ''}">${fmtCurrency(r.eventLoss.p90)}</div>
           <div class="results-impact-copy">Severe single-event view</div>
         </div>
         <div class="results-impact-card">
-          <div class="results-impact-label">Most likely impact over a year</div>
-          <div class="results-impact-value">${fmtCurrency(r.ale.mean)}</div>
+          <div class="results-impact-label">Expected annualized loss</div>
+          <div class="results-impact-value">${fmtCurrency(r.annualLoss.mean)}</div>
           <div class="results-impact-copy">Expected annual exposure</div>
         </div>
         <div class="results-impact-card">
-          <div class="results-impact-label">High-stress impact over a year</div>
-          <div class="results-impact-value warning">${fmtCurrency(r.ale.p90)}</div>
+          <div class="results-impact-label">High-stress annualized loss</div>
+          <div class="results-impact-value warning">${fmtCurrency(r.annualLoss.p90)}</div>
           <div class="results-impact-copy">Severe annual planning view</div>
         </div>
       </div>
@@ -685,6 +748,7 @@ function renderResults(id, isShared) {
             <div class="results-threshold-row"><span>Warning</span><strong>${fmtCurrency(r.warningThreshold || getWarningThreshold())}</strong></div>
             <div class="results-threshold-row"><span>Tolerance</span><strong>${fmtCurrency(r.threshold)}</strong></div>
             <div class="results-threshold-row"><span>Annual review</span><strong>${fmtCurrency(r.annualReviewThreshold || getAnnualReviewThreshold())}</strong></div>
+            <div class="results-threshold-row"><span>Annual review exceedance</span><strong>${((r.annualReviewDetail?.annualExceedProb || 0) * 100).toFixed(1)}%</strong></div>
           </div>
           <div class="results-decision-row"><span class="results-decision-label">Current position</span><div class="results-decision-copy">${executiveAnnualView}</div></div>
         </div>
@@ -725,11 +789,14 @@ function renderResults(id, isShared) {
       </div>
 
       ${confidenceNeedsBlock}
+      ${renderSimulationEquationFlow()}
+      ${renderInputSourceAuditBlock(buildLiveInputSourceAssignments(assessment))}
 
       <div class="results-decision-grid mb-6 anim-fade-in">
         ${renderAssessmentConfidenceBlock(assessmentIntelligence.confidence)}
         ${renderAssessmentDriversBlock(assessmentIntelligence.drivers)}
       </div>
+      ${renderSensitivitySummary(assessmentIntelligence.drivers)}
 
       ${comparisonHighlight}
 
@@ -751,14 +818,14 @@ function renderResults(id, isShared) {
         <div class="results-detail-disclosure-copy">These are the main event and annual exposure outputs most teams review first.</div>
         <div class="results-disclosure-stack">
           <div class="grid-3 mb-6 anim-fade-in">
-            <div class="metric-card"><div class="metric-label">Typical event cost</div><div class="metric-value">${fmtCurrency(r.lm.p50)}</div><div class="metric-sub">Midpoint single-event view</div></div>
-            <div class="metric-card"><div class="metric-label">Severe event cost</div><div class="metric-value ${r.toleranceBreached ? 'danger' : ''}">${fmtCurrency(r.lm.p90)}</div><div class="metric-sub">Used for tolerance check</div></div>
-            <div class="metric-card"><div class="metric-label">Expected event cost</div><div class="metric-value">${fmtCurrency(r.lm.mean)}</div><div class="metric-sub">Average single-event loss</div></div>
+            <div class="metric-card"><div class="metric-label">Typical conditional event loss</div><div class="metric-value">${fmtCurrency(r.eventLoss.p50)}</div><div class="metric-sub">Midpoint successful-event view</div></div>
+            <div class="metric-card"><div class="metric-label">Severe conditional event loss</div><div class="metric-value ${r.toleranceBreached ? 'danger' : ''}">${fmtCurrency(r.eventLoss.p90)}</div><div class="metric-sub">Used for tolerance check</div></div>
+            <div class="metric-card"><div class="metric-label">Expected conditional event loss</div><div class="metric-value">${fmtCurrency(r.eventLoss.mean)}</div><div class="metric-sub">Average successful-event loss</div></div>
           </div>
           <div class="grid-3 anim-fade-in anim-delay-1">
-            <div class="metric-card"><div class="metric-label">Typical annual exposure</div><div class="metric-value">${fmtCurrency(r.ale.p50)}</div><div class="metric-sub">Midpoint annual view</div></div>
-            <div class="metric-card"><div class="metric-label">Severe annual exposure</div><div class="metric-value warning">${fmtCurrency(r.ale.p90)}</div><div class="metric-sub">Annual severe-but-plausible view</div></div>
-            <div class="metric-card"><div class="metric-label">Expected annual exposure</div><div class="metric-value">${fmtCurrency(r.ale.mean)}</div><div class="metric-sub">Average annual loss</div></div>
+            <div class="metric-card"><div class="metric-label">Typical annualized loss</div><div class="metric-value">${fmtCurrency(r.annualLoss.p50)}</div><div class="metric-sub">Midpoint annual view</div></div>
+            <div class="metric-card"><div class="metric-label">Severe annualized loss</div><div class="metric-value warning">${fmtCurrency(r.annualLoss.p90)}</div><div class="metric-sub">Annual severe-but-plausible view</div></div>
+            <div class="metric-card"><div class="metric-label">Expected annualized loss</div><div class="metric-value">${fmtCurrency(r.annualLoss.mean)}</div><div class="metric-sub">Average annual loss</div></div>
           </div>
         </div>
       </details>
@@ -816,7 +883,8 @@ function renderResults(id, isShared) {
               <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Threat capability</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${technicalInputs.threatCapMin ?? '—'}–${technicalInputs.threatCapLikely ?? '—'}–${technicalInputs.threatCapMax ?? '—'}</div><div style="font-size:.7rem;color:var(--text-muted)">0–1 scale</div></div>
               <div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="font-size:.7rem;text-transform:uppercase;color:var(--text-muted)">Control strength</div><div style="font-size:.9rem;font-weight:600;margin-top:4px">${technicalInputs.controlStrMin ?? '—'}–${technicalInputs.controlStrLikely ?? '—'}–${technicalInputs.controlStrMax ?? '—'}</div><div style="font-size:.7rem;color:var(--text-muted)">0–1 scale</div></div>
             </div>
-            <div class="mt-4" style="font-size:.78rem;color:var(--text-muted)">Iterations: <strong>${r.iterations.toLocaleString()}</strong> · Distribution: <strong>${r.distType || assessment.fairParams?.distType || 'triangular'}</strong> · Threshold: <strong>${fmtCurrency(r.threshold)}</strong></div>
+            <div class="mt-4" style="font-size:.78rem;color:var(--text-muted)">Iterations: <strong>${r.iterations.toLocaleString()}</strong> · Distribution: <strong>${r.distType || assessment.fairParams?.distType || 'triangular'}</strong> · Event tolerance: <strong>${fmtCurrency(r.threshold)}</strong> · Annual review: <strong>${fmtCurrency(r.annualReviewThreshold || getAnnualReviewThreshold())}</strong></div>
+            <div class="form-help" style="margin-top:6px">${escapeHtml(String(r.metricSemantics?.eventLoss || ''))} ${escapeHtml(String(r.metricSemantics?.annualLoss || ''))}</div>
           </div>
         </div>
       </details>

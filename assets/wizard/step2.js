@@ -113,6 +113,90 @@ function renderWizard2() {
 }
 
 
+
+function _normaliseSuggestedRange(value, fallbackRange = {}) {
+  const min = Number(value?.min ?? fallbackRange?.min ?? 0);
+  const likely = Number(value?.likely ?? fallbackRange?.likely ?? min);
+  const max = Number(value?.max ?? fallbackRange?.max ?? likely);
+  const ordered = [min, likely, max].sort((a, b) => a - b);
+  return { min: ordered[0], likely: ordered[1], max: ordered[2] };
+}
+
+function _buildAiInputAssignments(result, benchmarkCandidates = [], citations = []) {
+  const references = Array.isArray(result?.benchmarkReferences) && result.benchmarkReferences.length
+    ? result.benchmarkReferences
+    : BenchmarkService.buildReferenceList(benchmarkCandidates || []);
+  const topReference = references[0] || null;
+  const hasInternalDocs = Array.isArray(citations) && citations.length > 0;
+  const baseOrigin = topReference ? 'Benchmark-seeded AI estimate' : 'AI estimate';
+  const sourceTypeLabel = topReference?.sourceTypeLabel || (hasInternalDocs ? 'Internal document support' : 'Model inference');
+  const confidenceLabel = result?.confidenceLabel || topReference?.confidenceLabel || 'Moderate confidence';
+  const freshnessLabel = topReference?.freshnessLabel || '';
+  const sourceTitle = topReference?.sourceTitle || topReference?.title || (hasInternalDocs ? 'Internal source set' : 'No named benchmark source');
+  const supporting = [];
+  if (topReference) supporting.push('Benchmark');
+  if (hasInternalDocs) supporting.push('Internal documents');
+  supporting.push('AI reasoning');
+  const supportText = supporting.join(' + ');
+  return [
+    { id: 'event-frequency', label: 'Event frequency', origin: baseOrigin, scope: topReference?.scope || 'scenario', sourceTypeLabel, confidenceLabel, freshnessLabel, sourceTitle, reason: `Primary source: ${supportText}. The event-frequency range was normalised before it was written into the FAIR inputs.` },
+    { id: 'threat-capability', label: 'Threat capability', origin: 'AI estimate', scope: topReference?.scope || 'scenario', sourceTypeLabel, confidenceLabel, freshnessLabel, sourceTitle, reason: `Primary source: ${supportText}. Threat capability was inferred from the scenario path and the retrieved evidence.` },
+    { id: 'control-strength', label: 'Control strength', origin: 'AI estimate', scope: topReference?.scope || 'scenario', sourceTypeLabel, confidenceLabel, freshnessLabel, sourceTitle, reason: `Primary source: ${supportText}. Control strength was estimated from current context and should be challenged against real control evidence.` },
+    { id: 'incident-response', label: 'Incident response cost', origin: baseOrigin, scope: topReference?.scope || 'scenario', sourceTypeLabel, confidenceLabel, freshnessLabel, sourceTitle, reason: `Primary source: ${supportText}. This range was seeded before user edits using the closest benchmark and retrieved context.` },
+    { id: 'business-interruption', label: 'Business interruption cost', origin: baseOrigin, scope: topReference?.scope || 'scenario', sourceTypeLabel, confidenceLabel, freshnessLabel, sourceTitle, reason: `Primary source: ${supportText}. This range was seeded before user edits using the closest benchmark and retrieved context.` },
+    { id: 'regulatory-legal', label: 'Regulatory and legal cost', origin: baseOrigin, scope: topReference?.scope || 'scenario', sourceTypeLabel, confidenceLabel, freshnessLabel, sourceTitle, reason: `Primary source: ${supportText}. This range was seeded before user edits using the closest benchmark and retrieved context.` }
+  ];
+}
+
+function _buildAiFairInputPayload(result, benchmarkCandidates = [], citations = []) {
+  const currentFair = AppState.draft.fairParams || {};
+  const suggested = result?.suggestedInputs || {};
+  const lossComponents = suggested.lossComponents || {};
+  const fairParams = {
+    ...currentFair,
+    tefMin: _normaliseSuggestedRange(suggested.TEF, currentFair).min,
+    tefLikely: _normaliseSuggestedRange(suggested.TEF, currentFair).likely,
+    tefMax: _normaliseSuggestedRange(suggested.TEF, currentFair).max,
+    controlStrMin: _normaliseSuggestedRange(suggested.controlStrength, currentFair).min,
+    controlStrLikely: _normaliseSuggestedRange(suggested.controlStrength, currentFair).likely,
+    controlStrMax: _normaliseSuggestedRange(suggested.controlStrength, currentFair).max,
+    threatCapMin: _normaliseSuggestedRange(suggested.threatCapability, currentFair).min,
+    threatCapLikely: _normaliseSuggestedRange(suggested.threatCapability, currentFair).likely,
+    threatCapMax: _normaliseSuggestedRange(suggested.threatCapability, currentFair).max,
+    irMin: _normaliseSuggestedRange(lossComponents.incidentResponse, currentFair).min,
+    irLikely: _normaliseSuggestedRange(lossComponents.incidentResponse, currentFair).likely,
+    irMax: _normaliseSuggestedRange(lossComponents.incidentResponse, currentFair).max,
+    biMin: _normaliseSuggestedRange(lossComponents.businessInterruption, currentFair).min,
+    biLikely: _normaliseSuggestedRange(lossComponents.businessInterruption, currentFair).likely,
+    biMax: _normaliseSuggestedRange(lossComponents.businessInterruption, currentFair).max,
+    dbMin: _normaliseSuggestedRange(lossComponents.dataBreachRemediation, currentFair).min,
+    dbLikely: _normaliseSuggestedRange(lossComponents.dataBreachRemediation, currentFair).likely,
+    dbMax: _normaliseSuggestedRange(lossComponents.dataBreachRemediation, currentFair).max,
+    rlMin: _normaliseSuggestedRange(lossComponents.regulatoryLegal, currentFair).min,
+    rlLikely: _normaliseSuggestedRange(lossComponents.regulatoryLegal, currentFair).likely,
+    rlMax: _normaliseSuggestedRange(lossComponents.regulatoryLegal, currentFair).max,
+    tpMin: _normaliseSuggestedRange(lossComponents.thirdPartyLiability, currentFair).min,
+    tpLikely: _normaliseSuggestedRange(lossComponents.thirdPartyLiability, currentFair).likely,
+    tpMax: _normaliseSuggestedRange(lossComponents.thirdPartyLiability, currentFair).max,
+    rcMin: _normaliseSuggestedRange(lossComponents.reputationContract, currentFair).min,
+    rcLikely: _normaliseSuggestedRange(lossComponents.reputationContract, currentFair).likely,
+    rcMax: _normaliseSuggestedRange(lossComponents.reputationContract, currentFair).max
+  };
+  const inputAssignments = _buildAiInputAssignments(result, benchmarkCandidates, citations);
+  const keyOrigins = {
+    tefMin: 'ai', tefLikely: 'ai', tefMax: 'ai',
+    controlStrMin: 'ai', controlStrLikely: 'ai', controlStrMax: 'ai',
+    threatCapMin: 'ai', threatCapLikely: 'ai', threatCapMax: 'ai',
+    irMin: 'ai', irLikely: 'ai', irMax: 'ai',
+    biMin: 'ai', biLikely: 'ai', biMax: 'ai',
+    dbMin: 'ai', dbLikely: 'ai', dbMax: 'ai',
+    rlMin: 'ai', rlLikely: 'ai', rlMax: 'ai',
+    tpMin: 'ai', tpLikely: 'ai', tpMax: 'ai',
+    rcMin: 'ai', rcLikely: 'ai', rcMax: 'ai'
+  };
+  return { fairParams, inputAssignments, keyOrigins };
+}
+
 function renderWizard2AiChangeSummary(result, previousNarrative) {
   const changed = [];
   if (result?.scenarioTitle) changed.push(`Gave the scenario a clearer working title: <strong>${escapeHtml(result.scenarioTitle)}</strong>.`);
@@ -183,37 +267,12 @@ async function runLLMAssist() {
     AppState.draft.inputProvenance = Array.isArray(result.inputProvenance) ? result.inputProvenance : (AppState.draft.inputProvenance || []);
     const s = result.suggestedInputs;
     if (s) {
-      const currentFair = AppState.draft.fairParams || {};
-      const lc = s.lossComponents || {};
-      AppState.draft.fairParams = {
-        ...currentFair,
-        tefMin: s.TEF?.min ?? currentFair.tefMin,
-        tefLikely: s.TEF?.likely ?? currentFair.tefLikely,
-        tefMax: s.TEF?.max ?? currentFair.tefMax,
-        controlStrMin: s.controlStrength?.min ?? currentFair.controlStrMin,
-        controlStrLikely: s.controlStrength?.likely ?? currentFair.controlStrLikely,
-        controlStrMax: s.controlStrength?.max ?? currentFair.controlStrMax,
-        threatCapMin: s.threatCapability?.min ?? currentFair.threatCapMin,
-        threatCapLikely: s.threatCapability?.likely ?? currentFair.threatCapLikely,
-        threatCapMax: s.threatCapability?.max ?? currentFair.threatCapMax,
-        irMin: lc.incidentResponse?.min ?? currentFair.irMin,
-        irLikely: lc.incidentResponse?.likely ?? currentFair.irLikely,
-        irMax: lc.incidentResponse?.max ?? currentFair.irMax,
-        biMin: lc.businessInterruption?.min ?? currentFair.biMin,
-        biLikely: lc.businessInterruption?.likely ?? currentFair.biLikely,
-        biMax: lc.businessInterruption?.max ?? currentFair.biMax,
-        dbMin: lc.dataBreachRemediation?.min ?? currentFair.dbMin,
-        dbLikely: lc.dataBreachRemediation?.likely ?? currentFair.dbLikely,
-        dbMax: lc.dataBreachRemediation?.max ?? currentFair.dbMax,
-        rlMin: lc.regulatoryLegal?.min ?? currentFair.rlMin,
-        rlLikely: lc.regulatoryLegal?.likely ?? currentFair.rlLikely,
-        rlMax: lc.regulatoryLegal?.max ?? currentFair.rlMax,
-        tpMin: lc.thirdPartyLiability?.min ?? currentFair.tpMin,
-        tpLikely: lc.thirdPartyLiability?.likely ?? currentFair.tpLikely,
-        tpMax: lc.thirdPartyLiability?.max ?? currentFair.tpMax,
-        rcMin: lc.reputationContract?.min ?? currentFair.rcMin,
-        rcLikely: lc.reputationContract?.likely ?? currentFair.rcLikely,
-        rcMax: lc.reputationContract?.max ?? currentFair.rcMax,
+      const aiPayload = _buildAiFairInputPayload(result, benchmarkCandidates, AppState.draft.citations);
+      AppState.draft.fairParams = aiPayload.fairParams;
+      AppState.draft.inputAssignments = aiPayload.inputAssignments;
+      AppState.draft.fairParamOrigins = {
+        ...(AppState.draft.fairParamOrigins || {}),
+        ...aiPayload.keyOrigins
       };
     }
     saveDraft();

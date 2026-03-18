@@ -212,13 +212,26 @@ function renderEstimateQuickStartBlock(draft, recommendedPresetKey) {
   return `${nextAction}${directStart}`;
 }
 
+
+function renderEstimateSourceSummary(draft) {
+  const items = Array.isArray(draft.inputAssignments) ? draft.inputAssignments.slice(0, 6) : [];
+  if (!items.length) return '';
+  return `<div class="card card--elevated anim-fade-in"><div class="context-panel-title">Where these starting numbers came from</div><div style="display:flex;flex-direction:column;gap:var(--sp-3);margin-top:var(--sp-3)">${items.map(item => `<div style="background:var(--bg-elevated);padding:var(--sp-4);border-radius:var(--radius-lg)"><div style="display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap"><strong style="font-size:.85rem;color:var(--text-primary)">${escapeHtml(String(item.label || 'Input'))}</strong><span class="badge badge--neutral">${escapeHtml(String(item.origin || 'AI estimate'))}</span>${item.sourceTypeLabel ? `<span class="badge badge--gold">${escapeHtml(String(item.sourceTypeLabel))}</span>` : ''}${item.confidenceLabel ? `<span class="badge badge--success">${escapeHtml(String(item.confidenceLabel))}</span>` : ''}</div><div class="context-panel-copy" style="margin-top:6px">${escapeHtml(String(item.reason || 'Prepared from current AI context.'))}</div></div>`).join('')}</div></div>`;
+}
+
+function markFairInputSource(inputKey, sourceKind) {
+  const draft = AppState.draft;
+  draft.fairParamOrigins = { ...(draft.fairParamOrigins || {}), [inputKey]: sourceKind };
+}
+
 function renderEstimateBackgroundDetails(draft, bu, isAdv, cur, sym) {
   const guidance = draft.workflowGuidance?.length ? renderWorkflowGuidanceBlock(draft.workflowGuidance) : '';
   const evidence = renderEvidenceQualityBlock(draft.confidenceLabel, draft.evidenceQuality, draft.evidenceSummary, draft.missingInformation, 'AI Evidence Quality', { primaryGrounding: draft.primaryGrounding, supportingReferences: draft.supportingReferences, inferredAssumptions: draft.inferredAssumptions });
   const benchmark = renderBenchmarkRationaleBlock(draft.benchmarkBasis, draft.inputRationale, draft.benchmarkReferences);
   const provenance = renderInputProvenanceBlock(draft.inputProvenance);
   const explainer = renderEstimateExplainerCard(draft, bu, isAdv, cur);
-  return `<details class="wizard-disclosure card card--elevated anim-fade-in"><summary>Why these starting numbers look like this</summary><div class="wizard-disclosure-body">${guidance}${evidence}${benchmark}${provenance}${explainer}</div></details>`;
+  const sources = renderEstimateSourceSummary(draft);
+  return `<details class="wizard-disclosure card card--elevated anim-fade-in"><summary>Why these starting numbers look like this</summary><div class="wizard-disclosure-body">${sources}${guidance}${evidence}${benchmark}${provenance}${explainer}</div></details>`;
 }
 
 function renderEstimateOptionalHelpDetails(draft, sym) {
@@ -543,6 +556,7 @@ function collectFairParams() {
       ? convertDisplayCurrencyToUsd(rawValue)
       : rawValue;
     p[input.dataset.key] = val;
+    markFairInputSource(input.dataset.key, 'user');
   });
   const dist = document.getElementById('adv-dist');
   const iter = document.getElementById('adv-iter');
