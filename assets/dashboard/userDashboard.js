@@ -77,14 +77,14 @@ function renderUserDashboard() {
               <div class="dashboard-hero-actions flex items-center gap-3 mt-6" style="flex-wrap:wrap">
                 <button class="btn btn--primary btn--lg" id="btn-dashboard-new-assessment">Start a New Risk Assessment</button>
                 <button class="btn btn--secondary" id="btn-dashboard-continue-draft" ${hasDraft ? '' : 'disabled'}>Resume Draft</button>
-                <button class="btn btn--ghost" id="btn-dashboard-open-settings">Open Personal Settings</button>
+                <button class="btn btn--ghost" id="btn-dashboard-open-settings">${capability.experience.primaryActionLabel}</button>
               </div>
             </div>
             <div class="card dashboard-hero-side">
               <div class="context-panel-title">What to do next</div>
               <div class="context-panel-copy" style="margin-top:8px">${quickStatus}</div>
-              <div class="form-help" style="margin-top:10px;color:rgba(255,255,255,.65)">Current access: ${capability.roleSummary}</div>
-              <div class="form-help" style="margin-top:10px;color:rgba(255,255,255,.65)">Default geography: ${settings.geographyPrimary || settings.geography || globalSettings.geography}</div>
+              <div class="form-help" style="margin-top:10px;color:rgba(255,255,255,.65)">${capability.experience.dashboardLead}</div>
+              <div class="form-help" style="margin-top:10px;color:rgba(255,255,255,.65)">Current access: ${capability.roleSummary} · Default geography: ${settings.geographyPrimary || settings.geography || globalSettings.geography}</div>
             </div>
           </div>
         </section>

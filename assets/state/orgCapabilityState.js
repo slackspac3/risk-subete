@@ -63,6 +63,67 @@ function resolveUserOrganisationSelection(user = AuthService.getCurrentUser(), u
   return { businessUnitEntityId, departmentEntityId };
 }
 
+function getRoleExperienceProfile({ canManageBusinessUnit, canManageDepartment, managedBusiness, managedDepartment }) {
+  if (canManageBusinessUnit && canManageDepartment) {
+    return {
+      title: 'BU and function leadership view',
+      summary: 'You are shaping both the business-unit context and a function-level context, so this workspace should help you govern, refine context, and review results quickly.',
+      dashboardLead: 'Review flagged assessments first, then keep BU and function context aligned before new work starts.',
+      settingsLead: 'Use settings to maintain both the BU-level context and the function detail your team relies on.',
+      onboardingLead: 'This setup keeps both your BU-level and function-level guidance aligned from the start.',
+      primaryActionLabel: 'Manage Role Context',
+      guideItems: [
+        'Use the dashboard to review assessments that need attention across the business unit and the function you own.',
+        'Keep business-unit and function context up to date before teams start new assessments so AI outputs stay grounded.',
+        'Use the executive result first for decisions, then open technical detail only when you need the drivers, evidence, or FAIR inputs.'
+      ]
+    };
+  }
+  if (canManageBusinessUnit) {
+    return {
+      title: 'Business unit leadership view',
+      summary: 'You are responsible for the quality of context and decision support across one business unit.',
+      dashboardLead: 'Focus on assessments that need review, then keep the business-unit and function context aligned for your teams.',
+      settingsLead: 'Use settings to maintain business-unit context and choose the function context you want to work within.',
+      onboardingLead: 'This setup keeps your business-unit perspective and working function context aligned from the start.',
+      primaryActionLabel: 'Manage BU Context',
+      guideItems: [
+        'Review assessments that are near or above tolerance for the business unit you manage.',
+        'Open settings to refine business-unit context and function summaries before new assessments are started.',
+        'Switch function context only when you need to work within a different team inside your assigned business unit.'
+      ]
+    };
+  }
+  if (canManageDepartment) {
+    return {
+      title: 'Function leadership view',
+      summary: 'You own one function or department context and should keep that context accurate for future analysis.',
+      dashboardLead: 'Review the latest function-level results first, then keep your owned function context current.',
+      settingsLead: 'Use settings to maintain the function context you own and the output style that works best for your team.',
+      onboardingLead: 'This setup keeps your function-level context and reporting style aligned from the start.',
+      primaryActionLabel: 'Manage Function Context',
+      guideItems: [
+        'Use the dashboard to review assessments relevant to the function or department you own.',
+        'Maintain your function context in settings so AI-assisted analysis stays grounded in how your team actually works.',
+        'Use executive results for decisions first, then technical detail only when you need to validate ranges or evidence.'
+      ]
+    };
+  }
+  return {
+    title: 'Personal working view',
+    summary: 'You are using the platform as an individual contributor or standard user, so the experience should stay guided and lightweight.',
+    dashboardLead: 'Start with the next assessment or review the latest result, then adjust only the details you can justify.',
+    settingsLead: 'Use settings to keep your role, working context, and preferred output style up to date.',
+    onboardingLead: 'This setup gives the platform enough context to tailor guidance to your role without overloading you.',
+    primaryActionLabel: 'Open Personal Settings',
+    guideItems: [
+      'Start or review risk assessments from your dashboard for the areas you support.',
+      'Use AI assist as a starting point, then adjust wording and numbers in plain English where you have evidence.',
+      'Review the executive result first, then open technical detail only when you need the FAIR inputs or evidence.'
+    ]
+  };
+}
+
 function getNonAdminCapabilityState(user = AuthService.getCurrentUser(), userSettings = getUserSettings(), settings = getAdminSettings()) {
   const safeUsername = String(user?.username || '').trim().toLowerCase();
   const structure = Array.isArray(settings.companyStructure) ? settings.companyStructure : [];
@@ -85,14 +146,11 @@ function getNonAdminCapabilityState(user = AuthService.getCurrentUser(), userSet
     canManageDepartment ? 'Function admin' : null,
     !canManageBusinessUnit && !canManageDepartment ? 'Standard user' : null
   ].filter(Boolean);
+  const experience = getRoleExperienceProfile({ canManageBusinessUnit, canManageDepartment, managedBusiness, managedDepartment });
   const guideItems = Array.from(new Set([
-    'Start or review risk assessments from your dashboard for the areas you support.',
-    'Review the executive result first, then open technical detail only when you need the FAIR inputs or evidence.',
-    canManageBusinessUnit ? 'Open Settings to add or update functions under your assigned business unit and keep BU context accurate.' : null,
+    ...experience.guideItems,
     canManageBusinessUnit ? 'Use Manage Context to improve business-unit and function summaries before new assessments are started.' : null,
-    canManageDepartment ? 'Use Settings to maintain the department context you own so function-level assessments stay grounded.' : null,
     canManageDepartment ? 'Use AI assist to refine function context and keep role-specific defaults aligned to the work your team actually does.' : null,
-    !canManageBusinessUnit && !canManageDepartment ? 'Use AI assist in each step as a starting point, then adjust the wording and numbers in plain English.' : null,
     !canManageBusinessUnit && !canManageDepartment ? 'Open Personal Settings to keep your role, business context, and output preferences up to date.' : null
   ].filter(Boolean)));
   const roleSummary = roleLabels.join(' + ');
@@ -101,6 +159,7 @@ function getNonAdminCapabilityState(user = AuthService.getCurrentUser(), userSet
     roleLabels,
     roleSummary,
     guideItems,
+    experience,
     selection,
     canManageBusinessUnit,
     canManageDepartment,
@@ -114,21 +173,14 @@ function getNonAdminCapabilityState(user = AuthService.getCurrentUser(), userSet
 }
 
 function renderNonAdminHowToGuide(capability = getNonAdminCapabilityState()) {
-  const heading = capability.canManageBusinessUnit && capability.canManageDepartment
-    ? 'How to use this platform as a BU admin and function admin'
-    : capability.canManageBusinessUnit
-      ? 'How to use this platform as a BU admin'
-      : capability.canManageDepartment
-        ? 'How to use this platform as a function admin'
-        : 'How to use this platform';
   return `
     <div class="card card--elevated" style="padding:var(--sp-6)">
       <div class="flex items-center justify-between" style="gap:var(--sp-3);flex-wrap:wrap">
         <div>
-          <div class="context-panel-title">${heading}</div>
-          <div class="form-help" style="margin-top:6px">Simple guidance for your current access: <strong>${capability.roleSummary}</strong>.</div>
+          <div class="context-panel-title">${capability.experience.title}</div>
+          <div class="form-help" style="margin-top:6px">${capability.experience.summary}</div>
         </div>
-        <span class="badge badge--gold">Role guide</span>
+        <span class="badge badge--gold">${capability.roleSummary}</span>
       </div>
       <div style="display:flex;flex-direction:column;gap:12px;margin-top:var(--sp-5)">
         ${capability.guideItems.map((item, index) => `

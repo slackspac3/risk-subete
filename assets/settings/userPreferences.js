@@ -44,7 +44,7 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
   });
   const userContextSection = renderSettingsSection({
     title: 'Profile And Role Context',
-    description: 'Set who you are, where you sit, and how you want outputs framed.',
+    description: capability.experience.settingsLead,
     open: true,
     meta: `${profile.jobTitle || 'Role not set'} · ${profile.businessUnit || 'No BU selected'}`,
     body: `
@@ -95,7 +95,7 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
   const aiWorkspaceSection = renderSettingsSection({
     title: 'AI Assist Workspace',
     scope: 'user-settings',
-    description: 'Upload notes, role descriptions, team material, or planning documents, then use AI assist across your settings.',
+    description: capability.canManageBusinessUnit || capability.canManageDepartment ? 'Upload role, team, or operating material, then use AI assist to keep your managed context aligned.' : 'Upload role notes or planning material, then use AI assist to tailor this workspace to how you work.',
     meta: 'Shared source',
     open: true,
     body: `
@@ -116,7 +116,7 @@ function renderUserPreferences(existingSettings = getUserSettings()) {
   const companyContextSection = renderSettingsSection({
     title: 'Personal Company Context',
     scope: 'user-settings',
-    description: 'Optional overlay on top of the admin baseline for this account only.',
+    description: capability.canManageBusinessUnit || capability.canManageDepartment ? 'Optional personal overlay on top of the shared baseline for the area you help lead.' : 'Optional personal overlay on top of the shared baseline for this account only.',
     meta: settings.companyWebsiteUrl ? 'Website linked' : 'Optional',
     body: `
       <div class="grid-2">

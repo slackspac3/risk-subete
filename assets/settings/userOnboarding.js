@@ -26,7 +26,7 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
     const stepMeta = [
       {
         title: 'Let the platform know who you are',
-        prompt: 'Start with your name and role so the platform can tailor guidance to your perspective.',
+        prompt: capability.experience.onboardingLead,
         body: `
           <div class="form-group">
             <label class="form-label" for="onboard-name">What should the platform call you?</label>
@@ -39,7 +39,7 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
       },
       {
         title: 'Where do you sit in the organisation?',
-        prompt: 'This confirms the business context the platform should use for your work.',
+        prompt: capability.canManageBusinessUnit || capability.canManageDepartment ? 'This confirms the managed business context the platform should use for your work.' : 'This confirms the business context the platform should use for your work.',
         body: `
           <div class="form-group">
             <label class="form-label" for="onboard-bu">Business unit or entity</label>
@@ -56,7 +56,7 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
       },
       {
         title: 'What do you care about most?',
-        prompt: 'Choose the themes that should influence how the platform frames analysis for you.',
+        prompt: capability.canManageBusinessUnit || capability.canManageDepartment ? 'Choose the themes that should influence guidance for the area you help lead.' : 'Choose the themes that should influence how the platform frames analysis for you.',
         body: `
           <div class="grid-3" style="gap:12px">
             <div class="form-group">
@@ -82,7 +82,7 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
       },
       {
         title: 'What makes a useful answer for you?',
-        prompt: 'Tell the platform how you want outputs to be framed.',
+        prompt: capability.canManageBusinessUnit || capability.canManageDepartment ? 'Tell the platform how outputs should be framed for the work you lead.' : 'Tell the platform how you want outputs to be framed.',
         body: `
           <div class="form-group">
             <label class="form-label" for="onboard-preferred-outputs">Preferred output style</label>
@@ -108,7 +108,7 @@ function renderUserOnboarding(existingSettings = getUserSettings(), startStep = 
       },
       {
         title: 'Seed your personal defaults',
-        prompt: 'You can keep this light. The idea is to give your account a useful starting point, not to fill in a full admin form.',
+        prompt: capability.canManageBusinessUnit || capability.canManageDepartment ? 'Keep this lightweight. The goal is to give your role a useful starting point without turning this into an admin setup.' : 'You can keep this light. The idea is to give your account a useful starting point, not to fill in a full admin form.',
         body: `
           <div class="form-group">
             <label class="form-label" for="onboard-company-url">Company website URL</label>
