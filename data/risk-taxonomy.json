@@ -1,0 +1,338 @@
+[
+  {
+    "id": "cyber-identity-access",
+    "domainId": "cyber-information-security",
+    "familyLabel": "Identity & Access Compromise",
+    "description": "Credential theft, privilege misuse, and authentication failure exposing critical systems or data.",
+    "eventCount": 8,
+    "sampleEvents": ["Privileged account takeover", "MFA fatigue compromise", "Orphaned admin account abuse"]
+  },
+  {
+    "id": "cyber-data-protection",
+    "domainId": "cyber-information-security",
+    "familyLabel": "Data Protection Failure",
+    "description": "Data exposure, exfiltration, weak segregation, or unauthorised data handling across enterprise systems.",
+    "eventCount": 9,
+    "sampleEvents": ["Cloud data exposure", "Sensitive record exfiltration", "Insecure backup leakage"]
+  },
+  {
+    "id": "cyber-resilience",
+    "domainId": "cyber-information-security",
+    "familyLabel": "Service Disruption & Recovery",
+    "description": "Cyber-driven outage, ransomware, destructive actions, and recovery failure against critical services.",
+    "eventCount": 7,
+    "sampleEvents": ["Ransomware outage", "DDoS disruption", "Recovery process failure"]
+  },
+  {
+    "id": "it-major-incident",
+    "domainId": "technology-service-delivery",
+    "familyLabel": "Major Incident & Outage",
+    "description": "Unplanned service interruption affecting internal or customer-facing technology services.",
+    "eventCount": 7,
+    "sampleEvents": ["Payments platform outage", "Core application crash", "Monitoring blind spot during incident"]
+  },
+  {
+    "id": "it-change-release",
+    "domainId": "technology-service-delivery",
+    "familyLabel": "Change & Release Failure",
+    "description": "Deployment, patching, release, or rollback failures causing instability or business disruption.",
+    "eventCount": 6,
+    "sampleEvents": ["Failed production release", "Rollback failure", "Schema change outage"]
+  },
+  {
+    "id": "it-architecture-capacity",
+    "domainId": "technology-service-delivery",
+    "familyLabel": "Architecture & Capacity Weakness",
+    "description": "Single points of failure, scaling gaps, unsupported components, and brittle dependencies.",
+    "eventCount": 6,
+    "sampleEvents": ["Capacity exhaustion", "Legacy platform instability", "Unmanaged dependency failure"]
+  },
+  {
+    "id": "ai-model-governance",
+    "domainId": "data-ai",
+    "familyLabel": "Model Governance & Oversight",
+    "description": "Poor model approval, weak validation, absent monitoring, or uncontrolled model changes.",
+    "eventCount": 7,
+    "sampleEvents": ["Unapproved model deployment", "Model drift undetected", "Weak human oversight"]
+  },
+  {
+    "id": "ai-data-quality",
+    "domainId": "data-ai",
+    "familyLabel": "Data Quality & Integrity",
+    "description": "Biased, incomplete, poisoned, or stale data leading to poor analysis or unsafe outcomes.",
+    "eventCount": 6,
+    "sampleEvents": ["Training data bias", "Data pipeline corruption", "Reference data mismatch"]
+  },
+  {
+    "id": "ai-privacy-use",
+    "domainId": "data-ai",
+    "familyLabel": "AI Privacy & Misuse",
+    "description": "Sensitive data leakage, unsafe prompts, misuse of models, or unauthorised secondary use of data.",
+    "eventCount": 5,
+    "sampleEvents": ["Prompt leakage", "Model output privacy breach", "Shadow AI deployment"]
+  },
+  {
+    "id": "tp-vendor-dependency",
+    "domainId": "third-party-supply-chain",
+    "familyLabel": "Vendor Dependency & Concentration",
+    "description": "Over-reliance on a supplier or platform with limited alternatives or concentration of operational dependence.",
+    "eventCount": 6,
+    "sampleEvents": ["Critical SaaS outage", "Single-supplier dependency", "Concentrated logistics failure"]
+  },
+  {
+    "id": "tp-supplier-performance",
+    "domainId": "third-party-supply-chain",
+    "familyLabel": "Supplier Performance & Delivery Failure",
+    "description": "Service, quality, or delivery failure by an external supplier affecting enterprise commitments.",
+    "eventCount": 7,
+    "sampleEvents": ["Delayed material delivery", "Managed service non-performance", "Contractual SLA failure"]
+  },
+  {
+    "id": "tp-outsourced-control-failure",
+    "domainId": "third-party-supply-chain",
+    "familyLabel": "Outsourced Control Failure",
+    "description": "Weak controls inherited from vendors or outsourcers exposing compliance, cyber, or operational weaknesses.",
+    "eventCount": 5,
+    "sampleEvents": ["Vendor access control weakness", "Outsourced KYC failure", "Shared process control gap"]
+  },
+  {
+    "id": "fin-fraud-payments",
+    "domainId": "financial",
+    "familyLabel": "Fraud & Payment Loss",
+    "description": "Internal or external fraud, unauthorised payments, manipulation, and treasury control failure.",
+    "eventCount": 8,
+    "sampleEvents": ["Business email compromise", "Invoice fraud", "Manual journal manipulation"]
+  },
+  {
+    "id": "fin-liquidity-funding",
+    "domainId": "financial",
+    "familyLabel": "Liquidity & Funding Stress",
+    "description": "Cash shortfalls, collateral demands, delayed receipts, and financing pressure affecting continuity or strategy.",
+    "eventCount": 5,
+    "sampleEvents": ["Cashflow timing gap", "Funding line withdrawal", "Margin call stress"]
+  },
+  {
+    "id": "fin-reporting-controls",
+    "domainId": "financial",
+    "familyLabel": "Financial Reporting & Valuation Controls",
+    "description": "Misstatement, delayed close, valuation weakness, and reporting control breakdown affecting disclosures and decisions.",
+    "eventCount": 6,
+    "sampleEvents": ["Material misstatement", "Delayed financial close", "Weak valuation model governance"]
+  },
+  {
+    "id": "legal-contractual-breach",
+    "domainId": "legal",
+    "familyLabel": "Contractual Breach & Obligation Failure",
+    "description": "Missed contractual obligations, contested terms, or execution failures creating legal exposure.",
+    "eventCount": 6,
+    "sampleEvents": ["Service-level breach", "Termination right triggered", "Unenforceable clause dispute"]
+  },
+  {
+    "id": "legal-litigation-dispute",
+    "domainId": "legal",
+    "familyLabel": "Litigation & Dispute",
+    "description": "Claims, proceedings, arbitration, and defence cost arising from disputes with external or internal parties.",
+    "eventCount": 7,
+    "sampleEvents": ["Customer lawsuit", "Shareholder dispute", "Arbitration over delayed delivery"]
+  },
+  {
+    "id": "legal-ip-rights",
+    "domainId": "legal",
+    "familyLabel": "Intellectual Property & Rights",
+    "description": "Infringement, licensing disputes, rights misuse, and weak IP protection affecting commercial position.",
+    "eventCount": 5,
+    "sampleEvents": ["Patent infringement claim", "Trademark misuse", "Loss of proprietary know-how"]
+  },
+  {
+    "id": "comp-reporting-obligation",
+    "domainId": "compliance-regulatory",
+    "familyLabel": "Reporting & Disclosure Obligation",
+    "description": "Missed, inaccurate, or late reporting to regulators, exchanges, customers, or supervisory bodies.",
+    "eventCount": 6,
+    "sampleEvents": ["Late incident notification", "Inaccurate regulatory filing", "Failed suspicious activity reporting"]
+  },
+  {
+    "id": "comp-licensing-obligation",
+    "domainId": "compliance-regulatory",
+    "familyLabel": "Licensing & Supervisory Conditions",
+    "description": "Breach of licence terms, approvals, conditions, or supervisory expectations.",
+    "eventCount": 5,
+    "sampleEvents": ["Unlicensed activity", "Condition breach", "Supervisory remediation order"]
+  },
+  {
+    "id": "comp-policy-control-adherence",
+    "domainId": "compliance-regulatory",
+    "familyLabel": "Policy & Control Adherence",
+    "description": "Failure to operate required controls, policy exceptions, or weak evidence of compliance execution.",
+    "eventCount": 6,
+    "sampleEvents": ["Control attestation gap", "Policy breach escalation", "Testing evidence failure"]
+  },
+  {
+    "id": "ops-manual-error",
+    "domainId": "operational-process",
+    "familyLabel": "Manual Error & Process Execution",
+    "description": "Human error, mis-keying, skipped checks, and operational mistakes affecting service or control quality.",
+    "eventCount": 7,
+    "sampleEvents": ["Incorrect transaction processing", "Shipment routing error", "Manual reconciliation miss"]
+  },
+  {
+    "id": "ops-control-breakdown",
+    "domainId": "operational-process",
+    "familyLabel": "Operational Control Breakdown",
+    "description": "Segregation, review, approval, or workflow control failures within business processes.",
+    "eventCount": 6,
+    "sampleEvents": ["Approval bypass", "Maker-checker failure", "Exception handling backlog"]
+  },
+  {
+    "id": "ops-capacity-backlog",
+    "domainId": "operational-process",
+    "familyLabel": "Capacity, Backlog & Throughput",
+    "description": "Insufficient capacity, demand spikes, and backlog accumulation causing service or financial impact.",
+    "eventCount": 5,
+    "sampleEvents": ["Claims processing backlog", "Support queue overload", "Month-end capacity failure"]
+  },
+  {
+    "id": "people-misconduct",
+    "domainId": "people-workforce",
+    "familyLabel": "Conduct & Misconduct",
+    "description": "Ethics breaches, harassment, retaliation, fraud, or unsafe behaviour by employees or contractors.",
+    "eventCount": 6,
+    "sampleEvents": ["Policy misconduct case", "Harassment claim", "Conflict-of-interest concealment"]
+  },
+  {
+    "id": "people-key-person",
+    "domainId": "people-workforce",
+    "familyLabel": "Key Person & Succession Dependence",
+    "description": "Execution dependence on scarce individuals, weak succession, and knowledge concentration.",
+    "eventCount": 4,
+    "sampleEvents": ["Critical engineer departure", "Founder dependency", "Single approver bottleneck"]
+  },
+  {
+    "id": "people-workforce-capacity",
+    "domainId": "people-workforce",
+    "familyLabel": "Workforce Capacity & Capability",
+    "description": "Understaffing, capability gaps, poor training, and burnout affecting delivery or control performance.",
+    "eventCount": 5,
+    "sampleEvents": ["Regulatory skills gap", "Ops understaffing", "Training failure in critical process"]
+  },
+  {
+    "id": "strat-market-shift",
+    "domainId": "strategic-commercial",
+    "familyLabel": "Market Shift & Demand Change",
+    "description": "Customer demand shifts, market entry, pricing pressure, or disruptive change undermining plans.",
+    "eventCount": 6,
+    "sampleEvents": ["Demand contraction", "Price compression", "Competitor disruption"]
+  },
+  {
+    "id": "strat-product-execution",
+    "domainId": "strategic-commercial",
+    "familyLabel": "Product, Programme & Execution Strategy",
+    "description": "Failed strategic delivery, delayed launches, weak prioritisation, or flawed programme assumptions.",
+    "eventCount": 5,
+    "sampleEvents": ["Transformation delay", "Product launch miss", "M&A integration failure"]
+  },
+  {
+    "id": "strat-customer-concentration",
+    "domainId": "strategic-commercial",
+    "familyLabel": "Customer & Revenue Concentration",
+    "description": "Dependence on a small number of customers, channels, or counterparties for strategic performance.",
+    "eventCount": 4,
+    "sampleEvents": ["Top customer loss", "Single distributor dependency", "Channel concentration shock"]
+  },
+  {
+    "id": "esg-climate-physical",
+    "domainId": "esg-sustainability",
+    "familyLabel": "Climate Physical Risk",
+    "description": "Heat, flood, storms, and environmental events affecting assets, operations, or people.",
+    "eventCount": 5,
+    "sampleEvents": ["Facility flood", "Heat-driven outage", "Extreme weather supply disruption"]
+  },
+  {
+    "id": "esg-climate-transition",
+    "domainId": "esg-sustainability",
+    "familyLabel": "Climate Transition & Reporting",
+    "description": "Policy, market, disclosure, and decarbonisation pressures affecting operations or stakeholder expectations.",
+    "eventCount": 6,
+    "sampleEvents": ["Carbon cost increase", "Disclosure challenge", "Transition plan underperformance"]
+  },
+  {
+    "id": "esg-social-supply-chain",
+    "domainId": "esg-sustainability",
+    "familyLabel": "Social & Supply Chain Responsibility",
+    "description": "Labour, human rights, and sourcing issues in the enterprise or its supply chain.",
+    "eventCount": 5,
+    "sampleEvents": ["Supplier labour issue", "Community impact claim", "Modern slavery reporting failure"]
+  },
+  {
+    "id": "phys-site-security",
+    "domainId": "physical-security-safety",
+    "familyLabel": "Site Security & Intrusion",
+    "description": "Unauthorised access, sabotage, theft, or perimeter failures affecting people or assets.",
+    "eventCount": 5,
+    "sampleEvents": ["Facility intrusion", "Asset theft", "Sabotage of critical equipment"]
+  },
+  {
+    "id": "phys-workplace-safety",
+    "domainId": "physical-security-safety",
+    "familyLabel": "Workplace Safety Incident",
+    "description": "Injury, unsafe conditions, procedural failure, or emergency response weakness in the workplace.",
+    "eventCount": 6,
+    "sampleEvents": ["Recordable injury", "Unsafe contractor work", "Emergency evacuation failure"]
+  },
+  {
+    "id": "phys-critical-asset-protection",
+    "domainId": "physical-security-safety",
+    "familyLabel": "Critical Asset Protection",
+    "description": "Protection failure around facilities, equipment, physical stock, or safety-critical assets.",
+    "eventCount": 4,
+    "sampleEvents": ["Generator failure", "Warehouse security gap", "Loss of safety-critical inventory"]
+  },
+  {
+    "id": "bcm-recovery-readiness",
+    "domainId": "business-continuity-crisis",
+    "familyLabel": "Recovery Readiness & Continuity Planning",
+    "description": "Weak continuity plans, untested recovery procedures, and poor failover or alternate capacity readiness.",
+    "eventCount": 5,
+    "sampleEvents": ["Untested continuity plan", "Recovery site failure", "Critical dependency omitted"]
+  },
+  {
+    "id": "bcm-crisis-coordination",
+    "domainId": "business-continuity-crisis",
+    "familyLabel": "Crisis Coordination & Command",
+    "description": "Escalation confusion, response leadership weakness, and fragmented decision-making during major events.",
+    "eventCount": 4,
+    "sampleEvents": ["Delayed crisis activation", "Conflicting executive decisions", "Poor stakeholder coordination"]
+  },
+  {
+    "id": "bcm-dependency-resilience",
+    "domainId": "business-continuity-crisis",
+    "familyLabel": "Dependency Resilience",
+    "description": "Weak resilience across shared services, partners, locations, people, or technology dependencies.",
+    "eventCount": 5,
+    "sampleEvents": ["Shared service failure", "Location concentration issue", "Utilities disruption"]
+  },
+  {
+    "id": "rep-communications-failure",
+    "domainId": "reputation-stakeholder-trust",
+    "familyLabel": "Communications & Narrative Failure",
+    "description": "Poor public response, inconsistent messaging, or delayed disclosure worsening stakeholder reaction.",
+    "eventCount": 5,
+    "sampleEvents": ["Poor incident response narrative", "Executive misstatement", "Delayed customer communication"]
+  },
+  {
+    "id": "rep-customer-trust",
+    "domainId": "reputation-stakeholder-trust",
+    "familyLabel": "Customer & Stakeholder Trust Erosion",
+    "description": "Events or decisions that reduce trust, loyalty, satisfaction, or stakeholder willingness to engage.",
+    "eventCount": 4,
+    "sampleEvents": ["Customer attrition after incident", "Partner confidence loss", "Investor trust concern"]
+  },
+  {
+    "id": "rep-leadership-response",
+    "domainId": "reputation-stakeholder-trust",
+    "familyLabel": "Leadership Credibility & Response",
+    "description": "Weak leadership decision-making or visible governance failure under scrutiny.",
+    "eventCount": 4,
+    "sampleEvents": ["Board oversight criticism", "Leadership accountability failure", "Public confidence decline"]
+  }
+]

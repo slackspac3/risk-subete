@@ -229,6 +229,9 @@ function seedRisksFromScenarioDraft(narrative, { force = false } = {}) {
 function renderWizard1() {
   ensureDraftShape();
   const draft = AppState.draft;
+  const selectedDomain = typeof getSelectedRiskDomain === 'function' ? getSelectedRiskDomain(draft) : null;
+  const selectedDomainFamilies = selectedDomain && typeof getDomainTaxonomyEntries === 'function' ? getDomainTaxonomyEntries(selectedDomain.id).slice(0, 3) : [];
+  const selectedDomainSources = selectedDomain && typeof getDomainSourceEntries === 'function' ? getDomainSourceEntries(selectedDomain.id).slice(0, 3) : [];
   const settings = getEffectiveSettings();
   const buList = getBUList();
   const preferredBusinessUnitId = settings.userProfile?.businessUnitEntityId || AppState.currentUser?.businessUnitEntityId || '';
@@ -255,13 +258,27 @@ function renderWizard1() {
       <div class="wizard-layout container container--narrow">
         <div class="wizard-header">
           ${UI.renderStepper(1)}
-          <h2 class="wizard-step-title">AI-Assisted Risk &amp; Context Builder</h2>
-          <p class="form-help" style="margin-top:8px">Describe the scenario, let AI help only where useful, then carry forward only the risks that belong in this assessment.</p>
-          <p class="wizard-step-desc">Use the guided path first if you want the easiest route. Use the text or upload paths only when you already have source material.</p>
+          <h2 class="wizard-step-title">${escapeHtml(selectedDomain?.label || 'AI-Assisted Risk')} Intake &amp; Context Builder</h2>
+          <p class="form-help" style="margin-top:8px">${escapeHtml(selectedDomain?.assessmentPrompt || 'Describe the scenario, let AI help only where useful, then carry forward only the risks that belong in this assessment.')}</p>
+          <p class="wizard-step-desc">Use the guided path first if you want the easiest route. Use the text or upload paths only when you already have source material.${selectedDomain?.primaryBenchmarkLens ? ` Benchmark lens: ${escapeHtml(selectedDomain.primaryBenchmarkLens)}.` : ''}</p>
           <div class="form-help" data-draft-save-state style="margin-top:10px">Draft will save automatically</div>
         </div>
         <div class="wizard-body">
           ${renderStep1StartCard(recommendation)}
+          ${selectedDomain ? `<div class="card card--elevated anim-fade-in">
+            <div class="context-panel-title">Selected domain: ${escapeHtml(selectedDomain.label)}</div>
+            <p class="context-panel-copy" style="margin-top:var(--sp-2)">${escapeHtml(selectedDomain.description || '')}</p>
+            <div class="context-grid" style="margin-top:var(--sp-4)">
+              <div class="context-chip-panel">
+                <div class="context-panel-title">Starter taxonomy families</div>
+                <div class="citation-chips" style="margin-top:8px">${selectedDomainFamilies.length ? selectedDomainFamilies.map(entry => `<span class="badge badge--neutral">${escapeHtml(entry.familyLabel)}</span>`).join('') : '<span class="badge badge--neutral">To be expanded</span>'}</div>
+              </div>
+              <div class="context-chip-panel">
+                <div class="context-panel-title">Benchmark grounding</div>
+                <div class="citation-chips" style="margin-top:8px">${selectedDomainSources.length ? selectedDomainSources.map(entry => `<span class="badge badge--gold">${escapeHtml(entry.title)}</span>`).join('') : '<span class="badge badge--neutral">Seed library in progress</span>'}</div>
+              </div>
+            </div>
+          </div>` : ''}
           ${renderLoadedDryRunBanner(activeDryRun)}
           ${draft.learningNote ? `<div class="card card--elevated anim-fade-in"><div class="context-panel-title">Learnt from prior use</div><p class="context-panel-copy">${draft.learningNote}</p></div>` : ''}
           <div class="card card--elevated anim-fade-in">

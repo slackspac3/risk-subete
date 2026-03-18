@@ -1,0 +1,156 @@
+[
+  {
+    "id": "cyber-information-security",
+    "label": "Cyber & Information Security",
+    "shortLabel": "Cyber",
+    "sortOrder": 10,
+    "description": "Threats involving systems, identities, networks, data, and cyber resilience across digital operations.",
+    "assessmentPrompt": "Frame the event, attack path, affected assets, exposure conditions, and direct business impact.",
+    "primaryBenchmarkLens": "Incident and loss data",
+    "keyImpactLabels": ["Service disruption", "Data compromise", "Regulatory exposure", "Recovery cost"],
+    "defaultTaxonomyFamilyIds": ["cyber-identity-access", "cyber-data-protection", "cyber-resilience"]
+  },
+  {
+    "id": "technology-service-delivery",
+    "label": "Technology & Service Delivery",
+    "shortLabel": "IT",
+    "sortOrder": 20,
+    "description": "Outages, failed change, brittle architecture, dependency gaps, and service management issues affecting technology operations.",
+    "assessmentPrompt": "Focus on service criticality, failure mode, customer or operational interruption, and recovery complexity.",
+    "primaryBenchmarkLens": "Availability and reliability",
+    "keyImpactLabels": ["Downtime", "Customer impact", "SLA exposure", "Recovery effort"],
+    "defaultTaxonomyFamilyIds": ["it-major-incident", "it-change-release", "it-architecture-capacity"]
+  },
+  {
+    "id": "data-ai",
+    "label": "Data & AI",
+    "shortLabel": "Data & AI",
+    "sortOrder": 30,
+    "description": "Risks from model failure, poor data quality, privacy misuse, AI governance breakdown, and automated decision harm.",
+    "assessmentPrompt": "Describe the model or data process, failure conditions, affected stakeholders, and oversight weaknesses.",
+    "primaryBenchmarkLens": "Governance and model risk",
+    "keyImpactLabels": ["Decision harm", "Privacy breach", "Bias or fairness issue", "Model failure cost"],
+    "defaultTaxonomyFamilyIds": ["ai-model-governance", "ai-data-quality", "ai-privacy-use"]
+  },
+  {
+    "id": "third-party-supply-chain",
+    "label": "Third-Party & Supply Chain",
+    "shortLabel": "Third-Party",
+    "sortOrder": 40,
+    "description": "Dependency, concentration, vendor failure, sourcing weakness, and supplier misconduct affecting the enterprise.",
+    "assessmentPrompt": "Capture the dependency, concentration point, disruption trigger, and knock-on business impact.",
+    "primaryBenchmarkLens": "Dependency and concentration",
+    "keyImpactLabels": ["Vendor outage", "Contract breach", "Supply disruption", "Control inheritance gap"],
+    "defaultTaxonomyFamilyIds": ["tp-vendor-dependency", "tp-supplier-performance", "tp-outsourced-control-failure"]
+  },
+  {
+    "id": "financial",
+    "label": "Financial",
+    "shortLabel": "Financial",
+    "sortOrder": 50,
+    "description": "Liquidity, treasury, fraud, market, credit, valuation, and reporting exposures with direct monetary consequences.",
+    "assessmentPrompt": "State the financial exposure, trigger, timing sensitivity, control breakdown, and range of monetary impact.",
+    "primaryBenchmarkLens": "Loss, volatility, and control failure",
+    "keyImpactLabels": ["Cash loss", "Revenue impact", "Liquidity pressure", "Misstatement risk"],
+    "defaultTaxonomyFamilyIds": ["fin-fraud-payments", "fin-liquidity-funding", "fin-reporting-controls"]
+  },
+  {
+    "id": "legal",
+    "label": "Legal",
+    "shortLabel": "Legal",
+    "sortOrder": 60,
+    "description": "Contract, litigation, IP, dispute, and legal interpretation exposures that create rights, obligations, or disputes.",
+    "assessmentPrompt": "Define the legal trigger, obligation or breach, counterparties involved, and expected litigation or settlement path.",
+    "primaryBenchmarkLens": "Claims, disputes, and precedent",
+    "keyImpactLabels": ["Litigation cost", "Settlement exposure", "Contract loss", "Injunction or restriction"],
+    "defaultTaxonomyFamilyIds": ["legal-contractual-breach", "legal-litigation-dispute", "legal-ip-rights"]
+  },
+  {
+    "id": "compliance-regulatory",
+    "label": "Compliance & Regulatory",
+    "shortLabel": "Compliance",
+    "sortOrder": 70,
+    "description": "Breaches of laws, regulations, standards, policies, licensing obligations, or supervisory expectations.",
+    "assessmentPrompt": "Map the requirement, breach mechanism, oversight gap, timing, and enforcement consequences.",
+    "primaryBenchmarkLens": "Enforcement and supervisory action",
+    "keyImpactLabels": ["Fine or sanction", "License impact", "Remediation programme", "Reputational scrutiny"],
+    "defaultTaxonomyFamilyIds": ["comp-reporting-obligation", "comp-licensing-obligation", "comp-policy-control-adherence"]
+  },
+  {
+    "id": "operational-process",
+    "label": "Operational & Process",
+    "shortLabel": "Operational",
+    "sortOrder": 80,
+    "description": "Human error, control breakdown, poor execution, bottlenecks, and process design failures across the operating model.",
+    "assessmentPrompt": "Explain the process step, failure mode, volume, control dependency, and resulting business disruption.",
+    "primaryBenchmarkLens": "Operational loss and control failure",
+    "keyImpactLabels": ["Process failure", "Error cost", "Rework", "Throughput loss"],
+    "defaultTaxonomyFamilyIds": ["ops-manual-error", "ops-control-breakdown", "ops-capacity-backlog"]
+  },
+  {
+    "id": "people-workforce",
+    "label": "People & Workforce",
+    "shortLabel": "People",
+    "sortOrder": 90,
+    "description": "Capability gaps, misconduct, retention pressure, unsafe behaviour, and workforce fragility affecting execution.",
+    "assessmentPrompt": "Describe the workforce dependency, failure behaviour, management gap, and potential safety or delivery outcomes.",
+    "primaryBenchmarkLens": "Workforce and conduct",
+    "keyImpactLabels": ["Attrition", "Misconduct", "Capability gap", "Safety consequence"],
+    "defaultTaxonomyFamilyIds": ["people-misconduct", "people-key-person", "people-workforce-capacity"]
+  },
+  {
+    "id": "strategic-commercial",
+    "label": "Strategic & Commercial",
+    "shortLabel": "Strategic",
+    "sortOrder": 100,
+    "description": "Market positioning, strategic bets, pricing, product fit, concentration, and competitive response risks.",
+    "assessmentPrompt": "Frame the strategic assumption, dependency, external shift, and downside to revenue, margin, or execution.",
+    "primaryBenchmarkLens": "Market and performance",
+    "keyImpactLabels": ["Revenue shortfall", "Margin erosion", "Strategic delay", "Customer churn"],
+    "defaultTaxonomyFamilyIds": ["strat-market-shift", "strat-product-execution", "strat-customer-concentration"]
+  },
+  {
+    "id": "esg-sustainability",
+    "label": "ESG & Sustainability",
+    "shortLabel": "ESG",
+    "sortOrder": 110,
+    "description": "Climate, environmental, social, human rights, and sustainability-reporting risks driven by enterprise actions or dependencies.",
+    "assessmentPrompt": "Capture the environmental or social trigger, stakeholder impact, reporting implications, and remediation path.",
+    "primaryBenchmarkLens": "Disclosure, climate, and stakeholder pressure",
+    "keyImpactLabels": ["Environmental response", "Disclosure risk", "Stakeholder challenge", "Remediation cost"],
+    "defaultTaxonomyFamilyIds": ["esg-climate-physical", "esg-climate-transition", "esg-social-supply-chain"]
+  },
+  {
+    "id": "physical-security-safety",
+    "label": "Physical Security & Safety",
+    "shortLabel": "Physical",
+    "sortOrder": 120,
+    "description": "Facility breaches, sabotage, workplace safety incidents, asset theft, and physical resilience exposures.",
+    "assessmentPrompt": "Describe the site, physical threat, protective controls, affected people or assets, and escalation path.",
+    "primaryBenchmarkLens": "Safety events and resilience",
+    "keyImpactLabels": ["Injury", "Asset loss", "Site outage", "Emergency response"],
+    "defaultTaxonomyFamilyIds": ["phys-site-security", "phys-workplace-safety", "phys-critical-asset-protection"]
+  },
+  {
+    "id": "business-continuity-crisis",
+    "label": "Business Continuity & Crisis",
+    "shortLabel": "BCM",
+    "sortOrder": 130,
+    "description": "Enterprise resilience, crisis management, continuity planning, and response coordination under severe disruption.",
+    "assessmentPrompt": "Focus on disruption duration, dependency map, response readiness, alternate capacity, and leadership escalation.",
+    "primaryBenchmarkLens": "Resilience and recoverability",
+    "keyImpactLabels": ["Continuity gap", "Recovery delay", "Crisis response cost", "Leadership escalation"],
+    "defaultTaxonomyFamilyIds": ["bcm-recovery-readiness", "bcm-crisis-coordination", "bcm-dependency-resilience"]
+  },
+  {
+    "id": "reputation-stakeholder-trust",
+    "label": "Reputation & Stakeholder Trust",
+    "shortLabel": "Reputation",
+    "sortOrder": 140,
+    "description": "Trust erosion across customers, regulators, investors, employees, and partners following adverse events or poor responses.",
+    "assessmentPrompt": "Capture the trigger event, audience affected, narrative trajectory, and sensitivity of key stakeholder relationships.",
+    "primaryBenchmarkLens": "Brand, trust, and market reaction",
+    "keyImpactLabels": ["Brand damage", "Customer trust loss", "Investor concern", "Stakeholder scrutiny"],
+    "defaultTaxonomyFamilyIds": ["rep-communications-failure", "rep-customer-trust", "rep-leadership-response"]
+  }
+]

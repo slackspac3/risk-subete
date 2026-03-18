@@ -192,8 +192,7 @@ function renderUserDashboard() {
       </div>
     </main>`);
   document.getElementById('btn-dashboard-new-assessment')?.addEventListener('click', () => {
-    resetDraft();
-    Router.navigate('/wizard/1');
+    startNewAssessmentFlow();
   });
   document.getElementById('btn-dashboard-open-settings')?.addEventListener('click', () => Router.navigate('/settings'));
   document.getElementById('btn-dashboard-settings-secondary')?.addEventListener('click', () => Router.navigate('/settings'));

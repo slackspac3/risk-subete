@@ -1,0 +1,182 @@
+[
+  {
+    "id": "uae-cyber-guidance",
+    "title": "UAE Cybersecurity Council Guidance and Advisories",
+    "sourceType": "Regulatory guidance",
+    "scope": "local",
+    "regions": ["UAE"],
+    "domainIds": ["cyber-information-security", "technology-service-delivery", "business-continuity-crisis"],
+    "coverage": ["control expectations", "incident patterns", "resilience guidance"],
+    "qualityTier": "primary"
+  },
+  {
+    "id": "uae-central-bank-risk",
+    "title": "UAE Central Bank Risk Management and Outsourcing Guidance",
+    "sourceType": "Regulatory guidance",
+    "scope": "local",
+    "regions": ["UAE"],
+    "domainIds": ["financial", "third-party-supply-chain", "compliance-regulatory", "operational-process"],
+    "coverage": ["governance expectations", "outsourcing controls", "supervisory themes"],
+    "qualityTier": "primary"
+  },
+  {
+    "id": "adgm-difc-rulebooks",
+    "title": "ADGM and DIFC Rulebooks and Consultation Material",
+    "sourceType": "Regulatory and market source",
+    "scope": "local",
+    "regions": ["UAE"],
+    "domainIds": ["financial", "legal", "compliance-regulatory", "data-ai"],
+    "coverage": ["licensing obligations", "governance expectations", "market conduct"],
+    "qualityTier": "primary"
+  },
+  {
+    "id": "gcc-operational-resilience",
+    "title": "GCC Financial and Critical Infrastructure Resilience Publications",
+    "sourceType": "Regional benchmark set",
+    "scope": "regional",
+    "regions": ["GCC"],
+    "domainIds": ["business-continuity-crisis", "technology-service-delivery", "third-party-supply-chain"],
+    "coverage": ["resilience patterns", "continuity practices", "dependency stress"],
+    "qualityTier": "secondary"
+  },
+  {
+    "id": "mena-cyber-surveys",
+    "title": "MENA Cyber and Digital Trust Surveys",
+    "sourceType": "Regional survey",
+    "scope": "regional",
+    "regions": ["MENA"],
+    "domainIds": ["cyber-information-security", "data-ai", "reputation-stakeholder-trust"],
+    "coverage": ["incident frequency", "budget and maturity", "executive concerns"],
+    "qualityTier": "secondary"
+  },
+  {
+    "id": "gcc-esg-disclosures",
+    "title": "GCC ESG Disclosure and Sustainability Reporting Benchmarks",
+    "sourceType": "Regional benchmark set",
+    "scope": "regional",
+    "regions": ["GCC"],
+    "domainIds": ["esg-sustainability", "reputation-stakeholder-trust", "compliance-regulatory"],
+    "coverage": ["disclosure themes", "transition readiness", "stakeholder pressure"],
+    "qualityTier": "secondary"
+  },
+  {
+    "id": "iso-standards",
+    "title": "ISO Standards Library",
+    "sourceType": "Standards",
+    "scope": "global",
+    "regions": ["Global"],
+    "domainIds": ["cyber-information-security", "technology-service-delivery", "business-continuity-crisis", "operational-process", "esg-sustainability"],
+    "coverage": ["control baseline", "management systems", "best practice"],
+    "qualityTier": "primary"
+  },
+  {
+    "id": "nist-and-fair",
+    "title": "NIST Publications and FAIR Risk Framework Material",
+    "sourceType": "Standards and methodology",
+    "scope": "global",
+    "regions": ["Global"],
+    "domainIds": ["cyber-information-security", "technology-service-delivery", "operational-process", "business-continuity-crisis"],
+    "coverage": ["risk methodology", "control guidance", "scenario analysis"],
+    "qualityTier": "primary"
+  },
+  {
+    "id": "wef-global-risks",
+    "title": "World Economic Forum Global Risks Reports",
+    "sourceType": "Global survey and scenario source",
+    "scope": "global",
+    "regions": ["Global"],
+    "domainIds": ["strategic-commercial", "esg-sustainability", "business-continuity-crisis", "reputation-stakeholder-trust"],
+    "coverage": ["macro trends", "executive sentiment", "interconnected risk patterns"],
+    "qualityTier": "secondary"
+  },
+  {
+    "id": "insurer-cyber-reports",
+    "title": "Global Insurer and Broker Cyber Claims Reports",
+    "sourceType": "Claims benchmark",
+    "scope": "global",
+    "regions": ["Global"],
+    "domainIds": ["cyber-information-security", "third-party-supply-chain", "business-continuity-crisis"],
+    "coverage": ["loss severity", "incident trends", "control observations"],
+    "qualityTier": "secondary"
+  },
+  {
+    "id": "privacy-enforcement-tracker",
+    "title": "Global Privacy and Data Protection Enforcement Trackers",
+    "sourceType": "Enforcement data",
+    "scope": "global",
+    "regions": ["EU", "Global"],
+    "domainIds": ["data-ai", "cyber-information-security", "legal", "compliance-regulatory"],
+    "coverage": ["fines", "enforcement actions", "breach obligations"],
+    "qualityTier": "primary"
+  },
+  {
+    "id": "financial-fraud-surveys",
+    "title": "Global Fraud, Payments, and Treasury Control Surveys",
+    "sourceType": "Industry survey",
+    "scope": "global",
+    "regions": ["Global"],
+    "domainIds": ["financial", "operational-process", "people-workforce"],
+    "coverage": ["fraud patterns", "control maturity", "loss experience"],
+    "qualityTier": "secondary"
+  },
+  {
+    "id": "basel-operational-risk",
+    "title": "Basel Operational Risk and Resilience Publications",
+    "sourceType": "Supervisory guidance",
+    "scope": "global",
+    "regions": ["Global"],
+    "domainIds": ["financial", "operational-process", "business-continuity-crisis", "third-party-supply-chain"],
+    "coverage": ["loss taxonomy", "resilience expectations", "control themes"],
+    "qualityTier": "primary"
+  },
+  {
+    "id": "ifrs-governance-reporting",
+    "title": "IFRS and Governance Reporting References",
+    "sourceType": "Accounting and reporting standard",
+    "scope": "global",
+    "regions": ["Global"],
+    "domainIds": ["financial", "legal", "compliance-regulatory", "esg-sustainability"],
+    "coverage": ["disclosure obligations", "materiality", "reporting controls"],
+    "qualityTier": "primary"
+  },
+  {
+    "id": "supply-chain-surveys",
+    "title": "Global Supply Chain and Procurement Resilience Surveys",
+    "sourceType": "Industry survey",
+    "scope": "global",
+    "regions": ["Global"],
+    "domainIds": ["third-party-supply-chain", "operational-process", "strategic-commercial"],
+    "coverage": ["concentration risk", "supplier resilience", "procurement disruption"],
+    "qualityTier": "secondary"
+  },
+  {
+    "id": "ilo-social-risk",
+    "title": "ILO and Social Responsibility Reference Sources",
+    "sourceType": "International guidance",
+    "scope": "global",
+    "regions": ["Global"],
+    "domainIds": ["people-workforce", "esg-sustainability", "third-party-supply-chain"],
+    "coverage": ["labour practices", "social risk themes", "human rights indicators"],
+    "qualityTier": "primary"
+  },
+  {
+    "id": "osha-safety-benchmarks",
+    "title": "Occupational Safety Benchmark Sources",
+    "sourceType": "Safety data and guidance",
+    "scope": "global",
+    "regions": ["Global"],
+    "domainIds": ["physical-security-safety", "people-workforce", "operational-process"],
+    "coverage": ["injury rates", "safety controls", "incident typologies"],
+    "qualityTier": "primary"
+  },
+  {
+    "id": "reputation-trust-surveys",
+    "title": "Global Trust, Reputation, and Stakeholder Sentiment Surveys",
+    "sourceType": "Survey and sentiment benchmark",
+    "scope": "global",
+    "regions": ["Global"],
+    "domainIds": ["reputation-stakeholder-trust", "strategic-commercial", "esg-sustainability", "legal"],
+    "coverage": ["stakeholder expectations", "brand impact", "confidence erosion"],
+    "qualityTier": "secondary"
+  }
+]

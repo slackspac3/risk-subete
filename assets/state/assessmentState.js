@@ -187,6 +187,10 @@ function resetDraft() {
   AppState.draft = {
     id: 'a_' + Date.now(),
     templateId: null,
+    riskDomainId: DEFAULT_RISK_DOMAIN_ID,
+    riskDomainLabel: '',
+    riskDomainShortLabel: '',
+    domainConfig: null,
     buId: null, buName: null, contextNotes: '',
     narrative: '', structuredScenario: null,
     scenarioTitle: '', loadedDryRunId: '', llmAssisted: false,

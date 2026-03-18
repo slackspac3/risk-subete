@@ -1085,7 +1085,7 @@ function renderResults(id, isShared) {
       Router.navigate('/wizard/3');
     }, 200);
   });
-  document.getElementById('btn-new-assess').addEventListener('click', () => { resetDraft(); Router.navigate('/wizard/1'); });
+  document.getElementById('btn-new-assess').addEventListener('click', () => startNewAssessmentFlow());
   } catch (error) {
     console.error('renderResults failed:', error);
     setPage(`

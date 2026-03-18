@@ -95,6 +95,9 @@ const AppState = {
   buList: [],
   docList: [],
   benchmarkList: [],
+  riskDomainLibrary: [],
+  riskTaxonomyLibrary: [],
+  riskSourceLibrary: [],
   adminNewUserStatus: '',
   adminVisiblePasswords: {},
   settingsSectionState: {},
@@ -626,7 +629,7 @@ async function performLogout({ renderLoginScreen = false } = {}) {
   AppState.adminVisiblePasswords = {};
   activateAuthenticatedState();
   if (renderLoginScreen) renderLogin();
-  else Router.navigate('/login');
+  else Router.navigate('/');
 }
 
 function getUserStateApiUrl() {
@@ -1058,6 +1061,10 @@ function ensureDraftShape() {
   AppState.draft = {
     id: AppState.draft.id || 'a_' + Date.now(),
     templateId: AppState.draft.templateId || null,
+    riskDomainId: AppState.draft.riskDomainId || DEFAULT_RISK_DOMAIN_ID,
+    riskDomainLabel: AppState.draft.riskDomainLabel || '',
+    riskDomainShortLabel: AppState.draft.riskDomainShortLabel || '',
+    domainConfig: AppState.draft.domainConfig && typeof AppState.draft.domainConfig === 'object' ? AppState.draft.domainConfig : null,
     buId: AppState.draft.buId || null,
     buName: AppState.draft.buName || null,
     contextNotes: AppState.draft.contextNotes || '',
@@ -1104,6 +1111,12 @@ function ensureDraftShape() {
       urgency: AppState.draft.guidedInput?.urgency || 'medium'
     }
   };
+  if (typeof getRiskDomainById === 'function' && typeof applyRiskDomainSelection === 'function') {
+    const selectedDomain = getRiskDomainById(AppState.draft.riskDomainId || DEFAULT_RISK_DOMAIN_ID);
+    if (selectedDomain && (!AppState.draft.domainConfig || !AppState.draft.riskDomainLabel || !AppState.draft.riskDomainShortLabel)) {
+      applyRiskDomainSelection(selectedDomain.id, { save: false });
+    }
+  }
 }
 
 function getBUList() {
@@ -3332,202 +3345,158 @@ function renderAppBar() {
 
 // ─── LANDING ──────────────────────────────────────────────────
 function renderLanding() {
-  const assessments = getAssessments().slice(0, 5);
-  const learningStore = getLearningStore();
+  const currentUser = AuthService.getCurrentUser();
+  if (currentUser) {
+    if (userNeedsOrganisationSelection(currentUser)) {
+      renderLoginOrganisationSelection(currentUser);
+      return;
+    }
+    Router.navigate(getDefaultRouteForCurrentUser());
+    return;
+  }
+  const domains = typeof getRiskDomainLibrary === 'function'
+    ? getRiskDomainLibrary().slice().sort((a, b) => Number(a.sortOrder || 999) - Number(b.sortOrder || 999))
+    : [];
+  const taxonomyEntries = typeof getRiskTaxonomyLibrary === 'function' ? getRiskTaxonomyLibrary() : [];
+  const sourceEntries = typeof getRiskSourceLibrary === 'function' ? getRiskSourceLibrary() : [];
   setPage(`
     <main class="page">
-      <div class="container">
-
-        <!-- Hero -->
-        <section class="landing-hero">
-          <div class="landing-badge">🔐 Internal Tool — Start Here</div>
-          <h1>Risk Intelligence Platform</h1>
-          <p class="landing-subtitle">Use this guide to turn a plain-English risk idea, issue, or register into a quantified FAIR analysis. You do not need to know FAIR in advance; the platform guides you step by step.</p>
-          <div class="flex items-center gap-4" style="flex-wrap:wrap">
-            <button class="btn btn--primary btn--lg" id="btn-start-new">Start Guided Assessment</button>
-            <button class="btn btn--secondary" id="btn-show-templates">⚡ Start from a Template</button>
+      <div class="container container--wide">
+        <section class="landing-hero" style="padding:var(--sp-10);display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:var(--sp-8);align-items:stretch">
+          <div>
+            <div class="landing-badge">Enterprise Risk Intelligence</div>
+            <h1>One landing page. Login here. Start every risk journey from here.</h1>
+            <p class="landing-subtitle">Turn cyber, IT, financial, compliance, legal, ESG, operational, third-party, and strategic exposures into guided, benchmark-grounded risk analysis. The goal is a broader risk-everything platform, with AI grounded in taxonomy, surveys, and regional or global evidence.</p>
+            <div class="citation-chips" style="margin-top:var(--sp-5)">
+              <span class="badge badge--neutral">${domains.length} v1 domains</span>
+              <span class="badge badge--neutral">${taxonomyEntries.reduce((sum, item) => sum + Number(item.eventCount || 0), 0)} canonical events</span>
+              <span class="badge badge--neutral">${sourceEntries.length} source libraries</span>
+            </div>
+            <div class="context-grid" style="margin-top:var(--sp-6)">
+              <div class="context-chip-panel">
+                <div class="context-panel-title">What users do</div>
+                <p class="context-panel-copy">Sign in, choose a risk domain, follow the guided assessment, challenge AI assumptions, and review quantified outputs.</p>
+              </div>
+              <div class="context-chip-panel">
+                <div class="context-panel-title">What makes the AI useful</div>
+                <p class="context-panel-copy">It should pull from a real risk taxonomy, benchmark sources, regional context, and quality signals rather than generic prompting.</p>
+              </div>
+            </div>
           </div>
-          <div class="flex items-center gap-4 mt-4" style="flex-wrap:wrap">
-            <span style="font-size:.78rem;color:var(--text-muted)">First time using the tool?</span>
-            <button class="btn btn--ghost btn--sm" id="btn-how-it-works">Open quick guide →</button>
+          <div class="card card--elevated" style="padding:var(--sp-7);align-self:stretch">
+            <div class="banner banner--poc mb-5"><span class="banner-icon">⚠</span><span class="banner-text"><strong>PoC Security:</strong> Shared team credentials only. Replace with Microsoft Entra ID before production. [ENTRA-INTEGRATION]</span></div>
+            <h2 style="margin-bottom:var(--sp-2)">Sign In</h2>
+            <p style="margin-bottom:var(--sp-6);color:var(--text-muted)">Use your assigned account to enter the platform. After login, the user journey starts from the dashboard and then the domain selector for new assessments.</p>
+            <form id="login-form">
+              <div class="form-group mb-4">
+                <label class="form-label" for="login-user">Username</label>
+                <input class="form-input" id="login-user" type="text" placeholder="Enter username" autocomplete="username">
+              </div>
+              <div class="form-group mb-4">
+                <label class="form-label" for="login-pass">Password</label>
+                <input class="form-input" id="login-pass" type="password" placeholder="Enter password" autocomplete="current-password">
+                <span class="form-error hidden" id="login-err">Invalid username or password</span>
+              </div>
+              <button class="btn btn--primary w-full" id="btn-login" type="submit" style="justify-content:center">Sign In</button>
+            </form>
+            <div class="form-help" style="margin-top:var(--sp-4)">Ask the global admin for your username and password if you do not have one yet.</div>
           </div>
         </section>
 
-        <!-- How it works (collapsible) -->
-        <div id="how-it-works-panel" class="hidden" style="margin-bottom:var(--sp-8)">
-          <div class="card card--elevated anim-fade-in">
-            <h3 style="font-size:var(--text-lg);margin-bottom:var(--sp-5)">How it works</h3>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--sp-5)">
-              ${[
-                ['1','Describe the issue','Start with a simple risk statement such as “A supplier with privileged access is compromised” or upload a risk register for AI review.'],
-                ['2','Let the platform structure it','The AI builder enhances the wording, identifies candidate risks, and suggests which risks may be linked.'],
-                ['3','Check the assumptions','Review the FAIR inputs. If you are unsure, stay in Basic mode and use the AI-preloaded values as your starting point.'],
-                ['4','Run and interpret results','The simulation shows likely loss ranges, annual exposure, and whether the scenario breaches the configured tolerance threshold.']
-              ].map(([n,title,desc]) => `
-                <div style="display:flex;gap:var(--sp-4)">
-                  <div style="width:32px;height:32px;background:rgba(26,86,219,.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;color:var(--color-primary-300);flex-shrink:0">${n}</div>
-                  <div><div style="font-weight:600;font-size:.9rem;margin-bottom:4px">${title}</div><p style="font-size:.8rem;line-height:1.6">${desc}</p></div>
-                </div>`).join('')}
-            </div>
-            <div class="banner banner--info mt-6" style="font-size:.82rem">
-              <span class="banner-icon">ℹ</span>
-              <span class="banner-text"><strong>Beginner tip:</strong> if you are unsure what to enter, choose a template first or write the scenario in plain English. The tool will help translate it into FAIR-style inputs. Results are saved in your browser only.</span>
-            </div>
-          </div>
-        </div>
+        <section class="admin-overview-grid dashboard-at-a-glance" style="margin-top:var(--sp-8)">
+          ${UI.dashboardOverviewCard({
+            label: 'Risk domains',
+            value: domains.length,
+            foot: 'Broad v1 coverage for enterprise risk analysis.'
+          })}
+          ${UI.dashboardOverviewCard({
+            label: 'Taxonomy families',
+            value: taxonomyEntries.length,
+            foot: 'Shared structure for a proper risk register and retrieval layer.'
+          })}
+          ${UI.dashboardOverviewCard({
+            label: 'Benchmarks and sources',
+            value: sourceEntries.length,
+            foot: 'Seed library spanning local, regional, and global inputs.'
+          })}
+        </section>
 
-        <section style="margin-bottom:var(--sp-8)">
+        <section style="margin-top:var(--sp-8)">
           <div class="card card--elevated anim-fade-in">
             <div class="flex items-center justify-between mb-4" style="flex-wrap:wrap;gap:var(--sp-3)">
-              <h3 style="font-size:var(--text-xl)">Quick Start Guide</h3>
-              <span class="badge badge--neutral">For guided use</span>
+              <h3 style="font-size:var(--text-xl)">Supported Domains</h3>
+              <span class="badge badge--neutral">Assessment entry after sign-in</span>
             </div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--sp-4)">
-              ${[
-                ['What to prepare','A short risk statement, affected business unit, and any known business or regulatory impact.'],
-                ['When to use templates','Use a template when the scenario is similar to ransomware, BEC, insider threat, cloud exposure, or supply chain compromise.'],
-                ['When to upload a register','Upload a register when you want AI to extract multiple risks and let you assess several together.'],
-                ['How to read the result','Focus first on P90 per-event loss, annual exposure, and whether the scenario sits above or within tolerance.']
-              ].map(([title, desc]) => `
+              ${domains.map(domain => `
                 <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:var(--sp-4)">
-                  <div style="font-weight:600;color:var(--text-primary);margin-bottom:6px">${title}</div>
-                  <p style="font-size:.84rem;line-height:1.6">${desc}</p>
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                    <div style="font-weight:600;color:var(--text-primary)">${escapeHtml(domain.label)}</div>
+                    <span class="badge badge--gold">${escapeHtml(domain.shortLabel || domain.label)}</span>
+                  </div>
+                  <p style="font-size:.84rem;line-height:1.6;margin-top:8px">${escapeHtml(domain.description || '')}</p>
                 </div>
               `).join('')}
             </div>
           </div>
         </section>
 
-        <!-- Scenario Templates -->
-        <div id="templates-panel" class="hidden" style="margin-bottom:var(--sp-8)">
-          <div class="flex items-center justify-between mb-4">
-            <h3 style="font-size:var(--text-xl)">Scenario Templates</h3>
-            <button class="btn btn--ghost btn--sm" id="btn-hide-templates">✕ Close</button>
-          </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--sp-4)">
-            ${ScenarioTemplates.map(t => `
-              ${(() => {
-                const profile = learningStore.templates?.[t.id];
-                const learnedLabel = profile?.completed ? `<span class="badge badge--gold" style="font-size:.6rem">Learnt from ${profile.completed}</span>` : '';
-                return `
-              <button class="template-card" data-template-id="${t.id}" aria-label="Use template: ${t.label}">
-                <div style="display:flex;align-items:flex-start;gap:var(--sp-3);margin-bottom:var(--sp-3)">
-                  <span style="font-size:14px;line-height:1;font-weight:700;letter-spacing:.08em;min-width:42px;height:42px;display:flex;align-items:center;justify-content:center;border-radius:999px;background:rgba(26,86,219,.16);border:1px solid rgba(26,86,219,.28);color:var(--color-primary-300)">${t.icon}</span>
-                  <div style="flex:1;text-align:left">
-                    <div style="font-family:var(--font-display);font-size:.95rem;font-weight:600;color:var(--text-primary);margin-bottom:4px">${t.label}</div>
-                    <div style="display:flex;flex-wrap:wrap;gap:4px">${t.tags.map(tag=>`<span class="badge badge--neutral" style="font-size:.6rem">${tag}</span>`).join('')}${learnedLabel}</div>
-                  </div>
+        <section style="margin-top:var(--sp-8);margin-bottom:var(--sp-10)">
+          <div class="card card--elevated anim-fade-in">
+            <div class="flex items-center justify-between mb-4" style="flex-wrap:wrap;gap:var(--sp-3)">
+              <h3 style="font-size:var(--text-xl)">User Journey</h3>
+              <span class="badge badge--neutral">New default flow</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:var(--sp-5)">
+              ${[
+                ['1', 'Login at the landing page', 'The GitHub Pages root is now the entry point. Users authenticate here first.'],
+                ['2', 'Open dashboard', 'Returning users land on their dashboard with saved work, guidance, and next actions.'],
+                ['3', 'Choose a risk domain', 'New assessments start from the domain selector so prompts and benchmarks can adapt.'],
+                ['4', 'Run a guided assessment', 'The wizard captures the scenario, lets AI help where useful, and prepares quantified output.']
+              ].map(([n, title, desc]) => `
+                <div style="display:flex;gap:var(--sp-4)">
+                  <div style="width:32px;height:32px;background:rgba(26,86,219,.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:700;color:var(--color-primary-300);flex-shrink:0">${n}</div>
+                  <div><div style="font-weight:600;font-size:.9rem;margin-bottom:4px">${title}</div><p style="font-size:.8rem;line-height:1.6">${desc}</p></div>
                 </div>
-                <p style="font-size:.8rem;color:var(--text-secondary);line-height:1.6;text-align:left">${t.description}</p>
-                <div style="margin-top:var(--sp-3);text-align:right;font-size:.8rem;color:var(--color-primary-400);font-weight:600">Use this template →</div>
-              </button>`;
-              })()}
-            `).join('')}
+              `).join('')}
+            </div>
           </div>
-        </div>
-
-        <!-- Feature grid -->
-        <div class="landing-grid">
-          <div class="feature-card anim-fade-in anim-delay-1">
-            <div class="feature-icon">🤖</div>
-            <div class="feature-title">AI Risk Builder</div>
-            <p class="feature-desc">Paste a simple description of the risk. The platform helps convert it into a structured assessment.</p>
-          </div>
-          <div class="feature-card anim-fade-in anim-delay-2">
-            <div class="feature-icon">📊</div>
-            <div class="feature-title">Monte Carlo Simulation</div>
-            <p class="feature-desc">The model runs thousands of simulations so you can see a range of possible outcomes instead of a single guessed number.</p>
-          </div>
-          <div class="feature-card anim-fade-in anim-delay-3">
-            <div class="feature-icon">🎯</div>
-            <div class="feature-title">Tolerance Flagging</div>
-            <p class="feature-desc">The platform shows clear threshold signals so users know when a scenario is within appetite, approaching concern, or above tolerance.</p>
-          </div>
-          <div class="feature-card anim-fade-in anim-delay-4">
-            <div class="feature-icon">🔗</div>
-            <div class="feature-title">Linked Risk Scenarios</div>
-            <p class="feature-desc">Choose several related risks together when one issue can trigger another, such as a cyber event causing regulatory and operational impact.</p>
-          </div>
-        </div>
-
-        <!-- Recent assessments -->
-        ${assessments.length ? `
-        <section style="margin-top:var(--sp-12)">
-          <div class="flex items-center justify-between mb-4">
-            <h3 style="font-size:var(--text-xl)">Recent Assessments <span class="badge badge--neutral" style="margin-left:8px;font-size:.65rem">Browser only</span></h3>
-            <button class="btn btn--ghost btn--sm" id="btn-clear-all">Clear All</button>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:var(--sp-3)">
-            ${assessments.map(a => `
-              <div class="assessment-item" data-id="${a.id}" role="button" tabindex="0">
-                <div class="assessment-meta">
-                  <div class="assessment-title">${a.scenarioTitle || 'Untitled'}</div>
-                  <div class="assessment-detail">${a.buName || '—'} · ${new Date(parseInt((a.id||'0').replace('a_',''))).toLocaleDateString('en-AE')}</div>
-                </div>
-                ${a.results ? `<span class="badge ${a.results.toleranceBreached?'badge--danger':'badge--success'}">${a.results.toleranceBreached?'Above Tolerance':'Within Tolerance'}</span>` : '<span class="badge badge--neutral">Draft</span>'}
-                <span style="color:var(--text-muted);font-size:20px">→</span>
-              </div>`).join('')}
-          </div>
-        </section>` : ''}
-
+        </section>
       </div>
     </main>
+  `);
 
-    <style>
-      .template-card {
-        background: var(--bg-surface);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-xl);
-        padding: var(--sp-5);
-        cursor: pointer;
-        transition: all var(--transition-base);
-        text-align: left;
-        width: 100%;
+  const login = async () => {
+    const username = document.getElementById('login-user').value;
+    const pw = document.getElementById('login-pass').value;
+    const result = await AuthService.login(username, pw);
+    if (result.success) {
+      await loadSharedUserState(result.user.username);
+      activateAuthenticatedState();
+      UI.toast(`Logged in as ${result.user.displayName}.`, 'success');
+      if (userNeedsOrganisationSelection(AuthService.getCurrentUser())) {
+        renderLogin();
+      } else {
+        Router.navigate(getDefaultRouteForCurrentUser());
       }
-      .template-card:hover {
-        border-color: var(--color-primary-600);
-        background: var(--bg-overlay-hover);
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-md);
-      }
-    </style>`);
-
-  // Wiring
-  document.getElementById('btn-start-new').addEventListener('click', () => { resetDraft(); Router.navigate('/wizard/1'); });
-
-  document.getElementById('btn-how-it-works').addEventListener('click', () => {
-    const panel = document.getElementById('how-it-works-panel');
-    const isHidden = panel.classList.contains('hidden');
-    panel.classList.toggle('hidden', !isHidden);
-    document.getElementById('btn-how-it-works').textContent = isHidden ? 'Hide ↑' : 'How it works →';
-  });
-
-  document.getElementById('btn-show-templates').addEventListener('click', () => {
-    document.getElementById('templates-panel').classList.remove('hidden');
-    document.getElementById('templates-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-  document.getElementById('btn-hide-templates')?.addEventListener('click', () => {
-    document.getElementById('templates-panel').classList.add('hidden');
-  });
-
-  document.querySelectorAll('.template-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const tmpl = ScenarioTemplates.find(t => t.id === card.dataset.templateId);
-      if (tmpl) loadTemplate(tmpl);
-    });
-  });
-
-  document.getElementById('btn-clear-all')?.addEventListener('click', async () => {
-    if (await UI.confirm('Clear all saved assessments from this browser?')) {
-      localStorage.removeItem(buildUserStorageKey(ASSESSMENTS_STORAGE_PREFIX));
-      Router.resolve();
+      return;
     }
-  });
+    const loginMessage = /too many login attempts/i.test(String(result.error || ''))
+      ? 'Too many login attempts. Please wait and try again.'
+      : 'Invalid username or password';
+    document.getElementById('login-err').textContent = `⚠ ${loginMessage}`;
+    document.getElementById('login-err').classList.remove('hidden');
+    document.getElementById('login-user').classList.add('error');
+    document.getElementById('login-pass').classList.add('error');
+  };
 
-  document.querySelectorAll('.assessment-item').forEach(el => {
-    const open = () => Router.navigate('/results/' + el.dataset.id);
-    el.addEventListener('click', open);
-    el.addEventListener('keydown', e => { if (e.key === 'Enter') open(); });
+  document.getElementById('login-form').addEventListener('submit', event => {
+    event.preventDefault();
+    login();
+  });
+  document.getElementById('btn-login').addEventListener('click', event => {
+    event.preventDefault();
+    login();
   });
 }
 
@@ -3546,11 +3515,16 @@ function loadTemplate(tmpl) {
   Object.assign(AppState.draft, {
     ...learned.draft,
     templateId: tmpl.id,
+    riskDomainId: tmpl.riskDomainId || DEFAULT_RISK_DOMAIN_ID,
+    riskDomainLabel: '',
+    riskDomainShortLabel: '',
+    domainConfig: null,
     buId: preferredBU?.id || null,
     buName: preferredBU?.name || null,
     llmAssisted: false,
     learningNote: learned.note
   });
+  applyRiskDomainSelection(AppState.draft.riskDomainId, { save: false });
   saveDraft();
   Router.navigate('/wizard/1');
   UI.toast(learned.note ? `Template loaded with learned defaults: "${tmpl.label}".` : `Template loaded: "${tmpl.label}". Review inputs and run the simulation.`, 'info', 4500);
@@ -3890,62 +3864,7 @@ function renderLogin() {
     Router.navigate(getDefaultRouteForCurrentUser());
     return;
   }
-  setPage(`
-    <main class="page">
-      <div class="container container--narrow" style="padding:var(--sp-16) var(--sp-6);max-width:640px">
-        <div class="banner banner--poc mb-6"><span class="banner-icon">⚠</span><span class="banner-text"><strong>PoC Security:</strong> Shared team credentials only. Replace with Microsoft Entra ID before production. [ENTRA-INTEGRATION]</span></div>
-        <div class="card card--elevated">
-          <h2 style="margin-bottom:var(--sp-2)">Sign In</h2>
-          <p style="margin-bottom:var(--sp-6);color:var(--text-muted)">Each user keeps their own draft state, saved assessments, and assigned BU/function context. Ask the global admin for your username and password.</p>
-          <form id="login-form">
-            <div class="form-group mb-4">
-              <label class="form-label" for="login-user">Username</label>
-              <input class="form-input" id="login-user" type="text" placeholder="Enter username" autocomplete="username">
-            </div>
-            <div class="form-group mb-4">
-              <label class="form-label" for="login-pass">Password</label>
-              <input class="form-input" id="login-pass" type="password" placeholder="Enter password" autocomplete="current-password">
-              <span class="form-error hidden" id="login-err">⚠ Invalid username or password</span>
-            </div>
-            <button class="btn btn--primary w-full" id="btn-login" type="submit" style="justify-content:center">Sign In</button>
-          </form>
-        </div>
-      </div>
-    </main>`);
-
-  const login = async () => {
-    const username = document.getElementById('login-user').value;
-    const pw = document.getElementById('login-pass').value;
-    const result = await AuthService.login(username, pw);
-    if (result.success) {
-      await loadSharedUserState(result.user.username);
-      activateAuthenticatedState();
-      UI.toast(`Logged in as ${result.user.displayName}.`, 'success');
-      if (userNeedsOrganisationSelection(AuthService.getCurrentUser())) {
-        renderLogin();
-      } else {
-        Router.navigate(getDefaultRouteForCurrentUser());
-      }
-    }
-    else {
-      const loginMessage = /too many login attempts/i.test(String(result.error || ''))
-        ? 'Too many login attempts. Please wait and try again.'
-        : 'Invalid username or password';
-      document.getElementById('login-err').textContent = `⚠ ${loginMessage}`;
-      document.getElementById('login-err').classList.remove('hidden');
-      document.getElementById('login-user').classList.add('error');
-      document.getElementById('login-pass').classList.add('error');
-    }
-  };
-
-  document.getElementById('login-form').addEventListener('submit', event => {
-    event.preventDefault();
-    login();
-  });
-  document.getElementById('btn-login').addEventListener('click', event => {
-    event.preventDefault();
-    login();
-  });
+  renderLanding();
 }
 
 function requireAdmin() {
@@ -5095,9 +5014,17 @@ async function init() {
     AppState.buList  = await loadJSON('./data/bu.json');
     AppState.docList = await loadJSON('./data/docs.json');
     AppState.benchmarkList = await loadJSON('./data/benchmarks.json');
+    AppState.riskDomainLibrary = await loadJSON('./data/risk-domains.json');
+    AppState.riskTaxonomyLibrary = await loadJSON('./data/risk-taxonomy.json');
+    AppState.riskSourceLibrary = await loadJSON('./data/risk-sources.json');
   } catch(e) {
     console.error('Failed to load JSON data:', e);
-    AppState.buList = []; AppState.docList = []; AppState.benchmarkList = [];
+    AppState.buList = [];
+    AppState.docList = [];
+    AppState.benchmarkList = [];
+    AppState.riskDomainLibrary = [];
+    AppState.riskTaxonomyLibrary = [];
+    AppState.riskSourceLibrary = [];
   }
   RAGService.init(getDocList(), getBUList());
   BenchmarkService.init(AppState.benchmarkList);
@@ -5105,17 +5032,12 @@ async function init() {
 
   Router
     .on('/login', renderLogin)
-    .on('/', () => {
-      if (!AuthService.isAuthenticated()) {
-        Router.navigate('/login');
-        return;
-      }
-      Router.navigate('/dashboard');
-    })
+    .on('/', renderLanding)
     .on('/dashboard', renderUserDashboard)
-    .on('/wizard/1', withAuth(renderWizard1))
-    .on('/wizard/2', withAuth(renderWizard2))
-    .on('/wizard/3', withAuth(renderWizard3))
+    .on('/assess/select-domain', withAuth(renderRiskDomainSelection))
+    .on('/wizard/1', withAuth(() => { if (!ensureRiskDomainSelection()) return; renderWizard1(); }))
+    .on('/wizard/2', withAuth(() => { if (!ensureRiskDomainSelection()) return; renderWizard2(); }))
+    .on('/wizard/3', withAuth(() => { if (!ensureRiskDomainSelection()) return; renderWizard3(); }))
     .on('/wizard/4', withAuth(renderWizard4))
     .on('/results/:id', withAuth(params => renderResults(params.id)))
     .on('/settings', renderUserSettings)
