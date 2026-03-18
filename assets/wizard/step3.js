@@ -199,6 +199,13 @@ function attachCitationHandlers() {
 }
 
 // ─── WIZARD 3 ─────────────────────────────────────────────────
+function renderEstimateModeNote(isAdv) {
+  if (isAdv) {
+    return `<div class="card card--elevated anim-fade-in"><div class="context-panel-title">Advanced mode</div><p class="context-panel-copy" style="margin-top:var(--sp-2)">Use this only if you want to enter direct exposure, secondary follow-on loss, or simulation tuning values. The main estimate path stays the same.</p></div>`;
+  }
+  return `<div class="card card--elevated anim-fade-in"><div class="context-panel-title">Basic mode</div><p class="context-panel-copy" style="margin-top:var(--sp-2)">This is the recommended path for most users. Estimate frequency, attacker strength, control strength, and cost ranges only. Switch to Advanced only if you need extra modelling controls.</p></div>`;
+}
+
 function renderWizard3() {
   const draft = AppState.draft;
   const p = draft.fairParams || {};
@@ -221,8 +228,8 @@ function renderWizard3() {
           <div class="flex items-center justify-between">
             <div>
               <h2 class="wizard-step-title">Estimate the Scenario in Plain Language</h2>
-              <p class="form-help" style="margin-top:8px">Review the starting numbers, sense-check them against what you know, and adjust anything that feels too low, too high, or too uncertain.</p>
-              <p class="wizard-step-desc">Answer a few practical questions about how often this could happen, how exposed you are, and what the impact could cost. ${draft.llmAssisted?'<span style="color:var(--color-success-400)">✓ Pre-loaded from AI assist</span>':''}</p>
+              <p class="form-help" style="margin-top:8px">Review the starting numbers, sense-check them against what you know, and adjust only the values you want to challenge.</p>
+              <p class="wizard-step-desc">Start in Basic mode for the normal estimation path. Switch to Advanced only if you need direct exposure, follow-on loss, or simulation tuning. ${draft.llmAssisted?'<span style="color:var(--color-success-400)">✓ Pre-loaded from AI assist</span>':''}</p>
               <div class="form-help" data-draft-save-state style="margin-top:10px">Draft will save automatically</div>
             </div>
             <div class="mode-toggle">
@@ -239,9 +246,10 @@ function renderWizard3() {
           ${renderBenchmarkRationaleBlock(draft.benchmarkBasis, draft.inputRationale, draft.benchmarkReferences)}
           ${renderInputProvenanceBlock(draft.inputProvenance)}
           ${renderEstimateActionCard(draft, recommendedPresetKey)}
+          ${renderEstimateModeNote(isAdv)}
           ${renderEstimateExplainerCard(draft, bu, isAdv, cur)}
           <details class="wizard-disclosure card card--elevated anim-fade-in">
-            <summary>Show quick guidance and example starting points</summary>
+            <summary>Show examples and optional help</summary>
             <div class="wizard-disclosure-body">
               ${UI.contextInfoGrid({
                 title: 'How to complete this step',
@@ -249,7 +257,7 @@ function renderWizard3() {
                 panels: [
                   UI.contextInfoPanel({ title: '1. Start with the AI values', copy: 'If the AI suggestions look broadly right, adjust only the values you have evidence for.' }),
                   UI.contextInfoPanel({ title: '2. Think in ranges, not exact numbers', copy: 'Use a low, expected, and severe case. You do not need one perfect number.' }),
-                  UI.contextInfoPanel({ title: '3. Stay in Basic unless needed', copy: 'Advanced mode is for direct probability inputs, correlations, and simulation tuning.' })
+                  UI.contextInfoPanel({ title: '3. Use Advanced only when needed', copy: 'Advanced mode is only for direct exposure, follow-on impact, and simulation tuning. Most users should stay in Basic.' })
                 ]
               })}
               ${renderRangeCalibrationCard(sym)}
@@ -266,7 +274,7 @@ function renderWizard3() {
 
           ${UI.wizardInputSection({
             title: 'How exposed are you if it happens? <span data-tooltip="This estimates how likely the event is to succeed given attacker capability and current controls." style="cursor:help;color:var(--color-accent-300);font-size:.8rem">ⓘ</span>',
-            description: 'In Basic mode, answer this through attacker strength and control strength. In Advanced mode, you can enter vulnerability directly.',
+            description: isAdv ? 'Advanced mode lets you enter exposure directly if you need it. Otherwise you can still use attacker strength and control strength.' : 'Basic mode uses two simpler questions: how capable the threat is and how strong your current controls are.',
             className: 'card anim-fade-in anim-delay-1',
             body: `${isAdv?`<div class="flex items-center gap-3 mb-4"><label class="toggle"><input type="checkbox" id="vuln-direct-toggle" ${p.vulnDirect?'checked':''}><div class="toggle-track"></div></label><span class="toggle-label">Enter exposure directly</span></div>
             <div id="vuln-direct-section" ${!p.vulnDirect?'class="hidden"':''}>
@@ -318,10 +326,10 @@ function renderWizard3() {
             </div>`
           })}
 
-          <details class="wizard-disclosure card anim-fade-in anim-delay-3" ${p.secondaryEnabled ? 'open' : ''}>
-            <summary>Extra downstream impact <span class="badge badge--neutral">Optional</span></summary>
+          ${isAdv ? `<details class="wizard-disclosure card anim-fade-in anim-delay-3" ${p.secondaryEnabled ? 'open' : ''}>
+            <summary>Follow-on impact <span class="badge badge--neutral">Advanced</span></summary>
             <div class="wizard-disclosure-body">
-              <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:var(--sp-4)">Use this only if the main event could trigger another follow-on loss, such as a lawsuit, major partner claim, or wider business consequence.</p>
+              <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:var(--sp-4)">Use this only if the main event could trigger a second loss, such as a lawsuit, large partner claim, or wider business consequence.</p>
               <div class="flex items-center justify-between mb-4">
                 <div class="form-help">Include a follow-on impact in the simulation</div>
                 <label class="toggle"><input type="checkbox" id="secondary-toggle" ${p.secondaryEnabled?'checked':''}><div class="toggle-track"></div></label>
@@ -335,8 +343,8 @@ function renderWizard3() {
             </div>
           </details>
 
-          ${isAdv ? `<details class="wizard-disclosure card anim-fade-in">
-            <summary>Advanced simulation settings</summary>
+          <details class="wizard-disclosure card anim-fade-in">
+            <summary>Simulation tuning <span class="badge badge--neutral">Advanced</span></summary>
             <div class="wizard-disclosure-body">
               <div class="grid-2">
                 <div class="form-group">
