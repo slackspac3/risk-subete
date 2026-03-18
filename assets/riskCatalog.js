@@ -104,9 +104,9 @@ function renderRiskDomainSelection() {
         <section class="card card--elevated dashboard-hero">
           <div class="dashboard-hero-grid">
             <div class="dashboard-hero-main">
-              <div class="landing-badge">Risk Domain Selection</div>
+              <div class="landing-badge">Risk すべて Platform</div>
               <h2 style="margin-top:var(--sp-4)">Choose the risk you want to analyse.</h2>
-              <p style="margin-top:10px;color:rgba(255,255,255,.78);max-width:760px">The platform is being rebuilt around a shared risk taxonomy, benchmark library, and AI evidence layer. Start by choosing the domain so the guided assessment can adapt its language, risk register context, and benchmark grounding.</p>
+              <p style="margin-top:10px;color:rgba(255,255,255,.78);max-width:760px"><strong>Subete</strong> means <strong>everything</strong> in Japanese. Start by choosing the domain so the guided assessment can adapt its language, taxonomy, benchmark grounding, and AI evidence to the risk you want to analyse.</p>
               <div class="citation-chips" style="margin-top:var(--sp-5)">
                 <span class="badge badge--neutral">${totalFamilies} taxonomy families</span>
                 <span class="badge badge--neutral">${totalEvents} canonical risk events</span>

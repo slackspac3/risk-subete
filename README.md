@@ -1,4 +1,6 @@
-# Risk Intelligence Platform
+# Risk すべて Platform
+
+Subete means "everything" in Japanese. The product slogan is: one platform for every risk.
 
 Browser-based cyber and technology risk quantification platform with AI-assisted context building, FAIR-style scenario analysis, executive reporting, and role-based administration.
 

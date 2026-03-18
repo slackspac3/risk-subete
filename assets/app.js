@@ -3316,7 +3316,7 @@ function renderAppBar() {
   const bar = document.getElementById('app-bar');
   bar.innerHTML = `
     <div class="bar-inner">
-      <a href="${homeHref}" class="bar-logo">Risk <span>Intelligence</span> Platform</a>
+      <a href="${homeHref}" class="bar-logo">Risk <span>すべて</span> Platform</a>
       <nav class="flex items-center gap-3">
         <a href="${homeHref}" class="bar-nav-link">${currentUser?.role === 'admin' ? 'Global Admin' : currentUser ? 'Dashboard' : 'Home'}</a>
       </nav>
@@ -3364,9 +3364,9 @@ function renderLanding() {
       <div class="container container--wide">
         <section class="landing-hero" style="padding:var(--sp-10);display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:var(--sp-8);align-items:stretch">
           <div>
-            <div class="landing-badge">Enterprise Risk Intelligence</div>
+            <div class="landing-badge">Risk すべて Platform</div>
             <h1>One landing page. Login here. Start every risk journey from here.</h1>
-            <p class="landing-subtitle">Turn cyber, IT, financial, compliance, legal, ESG, operational, third-party, and strategic exposures into guided, benchmark-grounded risk analysis. The goal is a broader risk-everything platform, with AI grounded in taxonomy, surveys, and regional or global evidence.</p>
+            <p class="landing-subtitle"><strong>Subete</strong> means <strong>everything</strong> in Japanese. The slogan is simple: <strong>one platform for every risk</strong>. Turn cyber, IT, financial, compliance, legal, ESG, operational, third-party, and strategic exposures into guided, benchmark-grounded risk analysis.</p>
             <div class="citation-chips" style="margin-top:var(--sp-5)">
               <span class="badge badge--neutral">${domains.length} v1 domains</span>
               <span class="badge badge--neutral">${taxonomyEntries.reduce((sum, item) => sum + Number(item.eventCount || 0), 0)} canonical events</span>
