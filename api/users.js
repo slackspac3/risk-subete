@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { appendAuditEvent } = require('./_audit');
+const { appendAuditEvent, verifySessionToken: verifyAuditSessionToken } = require('./_audit');
 
 const DEFAULT_ACCOUNTS = [];
 
@@ -60,7 +60,7 @@ function isAdminSecretValid(req) {
 }
 
 function isAdminSessionValid(req) {
-  const payload = verifySessionToken(req.headers['x-session-token']);
+  const payload = verifyAuditSessionToken(req.headers['x-session-token']);
   return !!payload && payload.role === 'admin';
 }
 

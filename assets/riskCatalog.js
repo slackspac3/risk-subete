@@ -1,6 +1,69 @@
 'use strict';
 
 const DEFAULT_RISK_DOMAIN_ID = 'cyber-information-security';
+const DEFAULT_RISK_CATALOG_API_URL = resolveRiskCatalogApiUrl('/api/risk-catalog');
+
+function resolveRiskCatalogApiUrl(path) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  if (origin && origin.includes('vercel.app')) return `${origin}${path}`;
+  return `https://risk-calculator-eight.vercel.app${path}`;
+}
+
+function getRiskCatalogApiUrl() {
+  return DEFAULT_RISK_CATALOG_API_URL;
+}
+
+async function requestRiskCatalog(method = 'GET', payload, { includeAdminSecret = false } = {}) {
+  const headers = {
+    'Content-Type': 'application/json'
+  };
+  if (includeAdminSecret && typeof AuthService?.getAdminApiSecret === 'function' && AuthService.getAdminApiSecret()) {
+    headers['x-admin-secret'] = AuthService.getAdminApiSecret();
+  }
+  if (typeof AuthService?.getApiSessionToken === 'function' && AuthService.getApiSessionToken()) {
+    headers['x-session-token'] = AuthService.getApiSessionToken();
+  }
+  const res = await fetch(getRiskCatalogApiUrl(), {
+    method,
+    headers,
+    body: payload ? JSON.stringify(payload) : undefined
+  });
+  const text = await res.text();
+  let parsed = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {}
+  if (!res.ok) {
+    throw new Error(parsed?.detail || parsed?.error || text || `Risk catalog request failed with HTTP ${res.status}`);
+  }
+  return parsed || {};
+}
+
+async function loadManagedRiskCatalog() {
+  const data = await requestRiskCatalog('GET');
+  if (data?.catalog) {
+    AppState.riskDomainLibrary = Array.isArray(data.catalog.domains) ? data.catalog.domains : [];
+    AppState.riskTaxonomyLibrary = Array.isArray(data.catalog.taxonomy) ? data.catalog.taxonomy : [];
+    AppState.riskSourceLibrary = Array.isArray(data.catalog.sources) ? data.catalog.sources : [];
+  }
+  return data;
+}
+
+async function saveManagedRiskCatalog(catalog, audit = null) {
+  const payload = { catalog };
+  if (audit) payload.audit = audit;
+  return requestRiskCatalog('PUT', payload, { includeAdminSecret: true });
+}
+
+async function patchManagedRiskCatalog(action, collection, itemOrId) {
+  const payload = {
+    action,
+    collection
+  };
+  if (action === 'delete-item') payload.id = itemOrId;
+  else payload.item = itemOrId;
+  return requestRiskCatalog('PATCH', payload, { includeAdminSecret: true });
+}
 
 function getRiskDomainLibrary() {
   return Array.isArray(AppState?.riskDomainLibrary) ? AppState.riskDomainLibrary : [];
@@ -182,6 +245,11 @@ function renderRiskDomainSelection() {
 
 Object.assign(window, {
   DEFAULT_RISK_DOMAIN_ID,
+  getRiskCatalogApiUrl,
+  requestRiskCatalog,
+  loadManagedRiskCatalog,
+  saveManagedRiskCatalog,
+  patchManagedRiskCatalog,
   getRiskDomainLibrary,
   getRiskTaxonomyLibrary,
   getRiskSourceLibrary,

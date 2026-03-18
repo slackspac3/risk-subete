@@ -5017,6 +5017,11 @@ async function init() {
     AppState.riskDomainLibrary = await loadJSON('./data/risk-domains.json');
     AppState.riskTaxonomyLibrary = await loadJSON('./data/risk-taxonomy.json');
     AppState.riskSourceLibrary = await loadJSON('./data/risk-sources.json');
+    try {
+      await loadManagedRiskCatalog();
+    } catch (catalogError) {
+      console.warn('loadManagedRiskCatalog fallback:', catalogError.message);
+    }
   } catch(e) {
     console.error('Failed to load JSON data:', e);
     AppState.buList = [];
