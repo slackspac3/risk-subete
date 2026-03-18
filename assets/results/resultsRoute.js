@@ -823,11 +823,16 @@ function renderResults(id, isShared) {
             <div style="font-size:var(--text-sm);color:var(--text-muted);margin-top:4px">${assessment.buName || '—'} · ${assessment.geography || '—'} · ${completedLabel}</div>
           </div>
           <div class="flex items-center gap-3" style="flex-wrap:wrap">
-            <button class="btn btn--secondary btn--sm" id="btn-share-results">Share</button>
-            <button class="btn btn--secondary btn--sm" id="btn-export-json">↓ JSON</button>
-            <button class="btn btn--secondary btn--sm" id="btn-export-pptx">↓ PPTX Spec</button>
             <button class="btn btn--secondary btn--sm" id="btn-create-treatment-case">Compare a Better Outcome</button>
             <button class="btn btn--primary btn--sm" id="btn-export-pdf">↓ PDF Report</button>
+            <details class="results-actions-disclosure">
+              <summary class="btn btn--ghost btn--sm">More actions</summary>
+              <div class="results-actions-disclosure-menu">
+                <button class="btn btn--secondary btn--sm" id="btn-share-results">Share</button>
+                <button class="btn btn--secondary btn--sm" id="btn-export-json">↓ JSON</button>
+                <button class="btn btn--secondary btn--sm" id="btn-export-pptx">↓ PPTX Spec</button>
+              </div>
+            </details>
           </div>
         </div>
 
@@ -866,13 +871,52 @@ function renderResults(id, isShared) {
   });
   if (activeTab === 'technical') drawTechnicalCharts();
   else attachCitationHandlers();
-  document.getElementById('btn-share-results').addEventListener('click', () => ShareService.copyShareLink(assessment));
-  document.getElementById('btn-export-json').addEventListener('click', () => { ExportService.exportJSON(assessment); UI.toast('JSON exported.','success'); });
+  document.getElementById('btn-share-results')?.addEventListener('click', event => {
+    const button = event.currentTarget;
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Copying…';
+    try {
+      ShareService.copyShareLink(assessment);
+    } finally {
+      window.setTimeout(() => {
+        button.disabled = false;
+        button.textContent = original;
+      }, 600);
+    }
+  });
+  document.getElementById('btn-export-json')?.addEventListener('click', event => {
+    const button = event.currentTarget;
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Exporting…';
+    try {
+      ExportService.exportJSON(assessment); UI.toast('JSON exported.','success');
+    } finally {
+      window.setTimeout(() => {
+        button.disabled = false;
+        button.textContent = original;
+      }, 600);
+    }
+  });
   document.getElementById('results-compare-select')?.addEventListener('change', (event) => {
     AppState.resultsComparisonId = event.target.value || '';
     renderResults(id, isShared || assessment._shared);
   });
-  document.getElementById('btn-export-pdf').addEventListener('click', () => ExportService.exportPDF(assessment, AppState.currency, AppState.fxRate));
+  document.getElementById('btn-export-pdf').addEventListener('click', event => {
+    const button = event.currentTarget;
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Preparing PDF…';
+    try {
+      ExportService.exportPDF(assessment, AppState.currency, AppState.fxRate);
+    } finally {
+      window.setTimeout(() => {
+        button.disabled = false;
+        button.textContent = original;
+      }, 800);
+    }
+  });
   const challengeButton = document.getElementById('btn-challenge-assessment');
   if (challengeButton) challengeButton.addEventListener('click', async () => {
     const status = document.getElementById('assessment-challenge-status');
@@ -905,11 +949,32 @@ function renderResults(id, isShared) {
       challengeButton.disabled = false;
     }
   });
-  document.getElementById('btn-export-pptx').addEventListener('click', () => { ExportService.exportPPTXSpec(assessment, AppState.currency, AppState.fxRate); UI.toast('PPTX spec exported as JSON. See README.','info',5000); });
-  document.getElementById('btn-create-treatment-case').addEventListener('click', () => {
+  document.getElementById('btn-export-pptx')?.addEventListener('click', event => {
+    const button = event.currentTarget;
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Exporting…';
+    try {
+      ExportService.exportPPTXSpec(assessment, AppState.currency, AppState.fxRate); UI.toast('PPTX spec exported as JSON. See README.','info',5000);
+    } finally {
+      window.setTimeout(() => {
+        button.disabled = false;
+        button.textContent = original;
+      }, 600);
+    }
+  });
+  document.getElementById('btn-create-treatment-case').addEventListener('click', event => {
+    const button = event.currentTarget;
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Preparing…';
     createTreatmentDraftFromAssessment(assessment);
     UI.toast('Improvement test created. Adjust the assumptions and rerun to compare against the original.', 'success');
-    Router.navigate('/wizard/3');
+    window.setTimeout(() => {
+      button.disabled = false;
+      button.textContent = original;
+      Router.navigate('/wizard/3');
+    }, 200);
   });
   document.getElementById('btn-new-assess').addEventListener('click', () => { resetDraft(); Router.navigate('/wizard/1'); });
   } catch (error) {

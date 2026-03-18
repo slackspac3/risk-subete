@@ -75,7 +75,7 @@ function renderUserDashboard() {
               <h2 style="margin-top:var(--sp-4)">Welcome back, ${user?.displayName || 'there'}.</h2>
               <p style="margin-top:10px;color:rgba(255,255,255,.74);max-width:680px">This is your main working space. Start a new assessment, resume unfinished work, or review completed results from here.</p>
               <div class="dashboard-hero-actions flex items-center gap-3 mt-6" style="flex-wrap:wrap">
-                <button class="btn btn--primary btn--lg" id="btn-dashboard-new-assessment">Start Guided Assessment</button>
+                <button class="btn btn--primary btn--lg" id="btn-dashboard-new-assessment" aria-label="Start a New Risk Assessment">Start Guided Assessment</button>
                 <button class="btn btn--secondary" id="btn-dashboard-continue-draft" ${hasDraft ? '' : 'disabled'}>Resume Draft</button>
                 <button class="btn btn--ghost" id="btn-dashboard-open-settings">${capability.experience.primaryActionLabel}</button>
               </div>

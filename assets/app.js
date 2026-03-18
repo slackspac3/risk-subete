@@ -104,7 +104,10 @@ const AppState = {
   userStateSyncTimer: null,
   userStateSyncRevision: 0,
   auditLogCache: { loaded: false, loading: false, entries: [], summary: null, error: '' },
-  clientRuntimeErrors: []
+  clientRuntimeErrors: [],
+  draftLastSavedAt: 0,
+  draftDirty: false,
+  draftSaveTimer: null
 };
 
 
@@ -280,7 +283,72 @@ function handleGlobalDesktopShortcut(event) {
     if (focusAdminUserSearch()) {
       event.preventDefault();
     }
+    return;
   }
+
+  if (key === '/') {
+    event.preventDefault();
+    openShortcutHelpModal();
+  }
+}
+
+
+function formatDraftSaveState() {
+  if (AppState.draftDirty) return 'Changes not saved yet';
+  if (!AppState.draftLastSavedAt) return 'Draft will save automatically';
+  const elapsedMs = Math.max(0, Date.now() - AppState.draftLastSavedAt);
+  if (elapsedMs < 15000) return 'Saved just now';
+  const seconds = Math.round(elapsedMs / 1000);
+  if (seconds < 60) return `Saved ${seconds} seconds ago`;
+  const minutes = Math.round(seconds / 60);
+  return `Saved ${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+}
+
+function updateWizardSaveState() {
+  const text = formatDraftSaveState();
+  document.querySelectorAll('[data-draft-save-state]').forEach(node => {
+    node.textContent = text;
+    node.dataset.state = AppState.draftDirty ? 'dirty' : 'saved';
+  });
+}
+
+function markDraftDirty() {
+  AppState.draftDirty = true;
+  updateWizardSaveState();
+}
+
+function scheduleDraftAutosave(delay = 700) {
+  if (AppState.draftSaveTimer) window.clearTimeout(AppState.draftSaveTimer);
+  AppState.draftSaveTimer = window.setTimeout(() => {
+    AppState.draftSaveTimer = null;
+    saveDraft();
+  }, delay);
+}
+
+function openShortcutHelpModal() {
+  UI.modal({
+    title: 'Desktop shortcuts',
+    body: `<div style="display:grid;gap:var(--sp-3)">
+      <div class="context-panel-copy">These shortcuts are desktop-only and are ignored while you are typing in a field.</div>
+      <div class="grid-2">
+        <div class="card" style="padding:var(--sp-4);background:var(--bg-canvas)"><strong>Alt/Option + N</strong><div class="form-help" style="margin-top:6px">Start a new assessment</div></div>
+        <div class="card" style="padding:var(--sp-4);background:var(--bg-canvas)"><strong>Alt/Option + R</strong><div class="form-help" style="margin-top:6px">Resume your current draft</div></div>
+        <div class="card" style="padding:var(--sp-4);background:var(--bg-canvas)"><strong>Alt/Option + S</strong><div class="form-help" style="margin-top:6px">Open personal settings</div></div>
+        <div class="card" style="padding:var(--sp-4);background:var(--bg-canvas)"><strong>Alt/Option + 1 / 2</strong><div class="form-help" style="margin-top:6px">Switch results tabs</div></div>
+        <div class="card" style="padding:var(--sp-4);background:var(--bg-canvas)"><strong>Alt/Option + F</strong><div class="form-help" style="margin-top:6px">Focus admin user search</div></div>
+        <div class="card" style="padding:var(--sp-4);background:var(--bg-canvas)"><strong>Alt/Option + /</strong><div class="form-help" style="margin-top:6px">Open this shortcuts guide</div></div>
+      </div>
+    </div>`
+  });
+}
+
+if (typeof window !== 'undefined' && !window.__rqBeforeUnloadInstalled) {
+  window.__rqBeforeUnloadInstalled = true;
+  window.addEventListener('beforeunload', event => {
+    if (!AppState.draftDirty) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
 }
 
 if (typeof document !== 'undefined' && !document.__rqDesktopShortcutsInstalled) {
@@ -3241,6 +3309,7 @@ function renderAppBar() {
       <div class="bar-spacer"></div>
       ${currentUser ? `
         <a href="${settingsHref}" class="bar-nav-link bar-nav-link--admin">${currentUser.role === 'admin' ? 'Global Admin' : 'Personal Settings'}</a>
+        <button type="button" class="btn btn--ghost btn--sm" id="btn-open-shortcuts">Shortcuts</button>
         <span class="bar-nav-link" style="pointer-events:none">${currentUser.displayName}</span>
         <button type="button" class="btn btn--ghost btn--sm" id="btn-sign-out">Sign Out</button>
       ` : `<a href="#/login" class="bar-nav-link bar-nav-link--admin">Sign In</a>`}
@@ -3252,6 +3321,9 @@ function renderAppBar() {
     </div>`;
   document.getElementById('cur-usd').addEventListener('click', () => { AppState.currency='USD'; renderAppBar(); Router.resolve(); });
   document.getElementById('cur-aed').addEventListener('click', () => { AppState.currency='AED'; renderAppBar(); Router.resolve(); });
+  document.getElementById('btn-open-shortcuts')?.addEventListener('click', () => {
+    openShortcutHelpModal();
+  });
   document.getElementById('btn-sign-out')?.addEventListener('click', () => {
     performLogout();
   });

@@ -434,6 +434,7 @@ test('admin can update user access and the request carries the expected role ass
     await row.locator('.account-bu-select').selectOption('bu-g42', { force: true });
     await row.locator('.account-department-select').selectOption('dept-sec', { force: true });
     await page.locator('.btn-apply-user-access[data-username="alex.trafton"]').evaluate(button => button.click());
+    await page.getByRole('button', { name: /^confirm$/i }).click();
     await expect(page.getByText(/updated access for alex trafton\./i)).toBeVisible();
     expect(patchPayload).toBeTruthy();
     expect(patchPayload.action).toBe('admin-update');

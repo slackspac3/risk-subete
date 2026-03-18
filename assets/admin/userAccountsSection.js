@@ -143,6 +143,24 @@ const AdminUserAccountsSection = (() => {
     departmentEl.disabled = !buId || (!departments.length && role !== 'bu_admin');
   }
 
+
+  function _selectedLabel(selectEl) {
+    return selectEl?.options?.[selectEl.selectedIndex]?.textContent?.trim() || '';
+  }
+
+  function _describeAccessChange(currentAccount, nextAssignment, row) {
+    const roleLabel = nextAssignment.role === 'bu_admin' ? 'BU admin' : nextAssignment.role === 'function_admin' ? 'Function admin' : 'Standard user';
+    const buLabel = _selectedLabel(row?.querySelector('.account-bu-select')) || 'No business unit selected';
+    const departmentLabel = nextAssignment.role === 'bu_admin'
+      ? 'No fixed function ownership'
+      : (_selectedLabel(row?.querySelector('.account-department-select')) || 'No function selected');
+    const changed = [];
+    if ((currentAccount.role || 'user') !== nextAssignment.role) changed.push(`Role: ${currentAccount.role || 'user'} → ${nextAssignment.role}`);
+    if ((currentAccount.businessUnitEntityId || '') !== (nextAssignment.businessUnitEntityId || '')) changed.push('Business unit scope will change.');
+    if (((currentAccount.role === 'bu_admin' ? '' : currentAccount.departmentEntityId) || '') !== ((nextAssignment.role === 'bu_admin' ? '' : nextAssignment.departmentEntityId) || '')) changed.push('Function ownership will change.');
+    return { roleLabel, buLabel, departmentLabel, changed };
+  }
+
   function _renderManagedAccountDepartmentOptions(row, companyStructure) {
     if (!row) return;
     const role = row.querySelector('.account-role-select')?.value || 'user';
@@ -177,13 +195,21 @@ const AdminUserAccountsSection = (() => {
     button.textContent = 'Applying…';
     const currentSettings = getAdminSettings();
     const currentAccount = getManagedAccountsForAdmin(currentSettings).find(account => account.username === username) || { username, role: 'user', businessUnitEntityId: '', departmentEntityId: '' };
-    const nextSettings = applyManagedAccountAssignmentToSettings(currentAccount, { role, businessUnitEntityId, departmentEntityId: role === 'bu_admin' ? '' : departmentEntityId }, currentSettings);
+    const nextAssignment = { role, businessUnitEntityId, departmentEntityId: role === 'bu_admin' ? '' : departmentEntityId };
+    const nextSettings = applyManagedAccountAssignmentToSettings(currentAccount, nextAssignment, currentSettings);
+    const changeSummary = _describeAccessChange(currentAccount, nextAssignment, row);
+    if (changeSummary.changed.length) {
+      const confirmed = await UI.confirm(`Apply access for ${displayName}?
+
+Role: ${changeSummary.roleLabel}
+Business unit: ${changeSummary.buLabel}
+Function: ${changeSummary.departmentLabel}
+
+${changeSummary.changed.join(' ')}`);
+      if (!confirmed) return false;
+    }
     try {
-      await AuthService.adminUpdateManagedAccount(username, {
-        role,
-        businessUnitEntityId,
-        departmentEntityId: role === 'bu_admin' ? '' : departmentEntityId
-      });
+      await AuthService.adminUpdateManagedAccount(username, nextAssignment);
       saveAdminSettings(nextSettings);
     } catch (error) {
       AppState.adminNewUserStatus = 'User access could not be updated. Check the assigned role and scope, then try again.';
@@ -384,6 +410,15 @@ const AdminUserAccountsSection = (() => {
         UI.toast(AppState.adminNewUserStatus, 'warning');
         return;
       }
+      const roleLabel = role === 'bu_admin' ? 'BU admin' : role === 'function_admin' ? 'Function admin' : 'Standard user';
+      const buLabel = document.getElementById('admin-new-user-bu')?.selectedOptions?.[0]?.textContent?.trim() || 'No business unit selected';
+      const departmentLabel = role === 'bu_admin' ? 'No fixed function ownership' : (document.getElementById('admin-new-user-department')?.selectedOptions?.[0]?.textContent?.trim() || 'No function selected');
+      const confirmed = await UI.confirm(`Create ${displayName}?
+
+Role: ${roleLabel}
+Business unit: ${buLabel}
+Function: ${departmentLabel}`);
+      if (!confirmed) return;
       button.disabled = true;
       button.textContent = 'Creating…';
       resultEl.textContent = 'Creating shared user account…';

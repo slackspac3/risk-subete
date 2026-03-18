@@ -164,6 +164,12 @@ function saveDraft() {
   try { sessionStorage.setItem(buildUserStorageKey(DRAFT_STORAGE_PREFIX), JSON.stringify(AppState.draft)); } catch {}
   const cache = ensureUserStateCache();
   cache.draft = { ...AppState.draft };
+  AppState.draftLastSavedAt = Date.now();
+  AppState.draftDirty = false;
+  if (typeof updateWizardSaveState === 'function') updateWizardSaveState();
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('rq:draft-saved', { detail: { at: AppState.draftLastSavedAt } }));
+  }
   queueSharedUserStateSync();
 }
 function loadDraft() {

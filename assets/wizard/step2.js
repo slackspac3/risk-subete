@@ -9,6 +9,7 @@ function renderWizard2() {
           <h2 class="wizard-step-title">Refine the Scenario</h2>
           <p class="form-help" style="margin-top:8px">Use this step to turn the selected risk into one clear assessment scope. The AI assist should help draft the scenario and suggest starting FAIR inputs.</p>
           <p class="wizard-step-desc">Review the AI-built context, refine the narrative, and confirm how the selected risks should be quantified together.</p>
+          <div class="form-help" data-draft-save-state style="margin-top:10px">Draft will save automatically</div>
         </div>
         <div class="wizard-body">
           ${UI.contextInfoGrid({
@@ -67,6 +68,7 @@ function renderWizard2() {
               <span id="llm-btn-text">🤖 LLM Assist — Draft Scenario &amp; Suggest FAIR Inputs</span>
             </button>
             <p style="text-align:center;font-size:.75rem;color:var(--text-muted);margin-top:8px">Retrieves relevant internal docs and uses AI to suggest FAIR inputs with citations.</p>
+            <div class="form-help" id="wizard2-ai-status" style="text-align:center;margin-top:8px">Use AI assist only if you want a structured starting point. You can continue manually at any time.</div>
           </div>
           <div id="llm-output-area"></div>
         </div>
@@ -77,12 +79,29 @@ function renderWizard2() {
       </div>
     </main>`);
 
-  document.getElementById('btn-back-2').addEventListener('click', () => Router.navigate('/wizard/1'));
+  document.getElementById('btn-back-2').addEventListener('click', () => { saveDraft(); Router.navigate('/wizard/1'); });
   document.getElementById('narrative').addEventListener('input', function() {
     AppState.draft.enhancedNarrative = this.value;
     if (!AppState.draft.narrative) AppState.draft.narrative = this.value;
+    markDraftDirty();
+    scheduleDraftAutosave();
+  });
+  document.getElementById('asset-service')?.addEventListener('input', function() {
+    const next = { ...(AppState.draft.structuredScenario || {}) };
+    next.assetService = this.value;
+    AppState.draft.structuredScenario = next;
+    markDraftDirty();
+    scheduleDraftAutosave();
+  });
+  document.getElementById('threat-type')?.addEventListener('change', function() {
+    const next = { ...(AppState.draft.structuredScenario || {}) };
+    next.attackType = this.value;
+    AppState.draft.structuredScenario = next;
+    markDraftDirty();
+    scheduleDraftAutosave();
   });
   document.getElementById('btn-llm-assist').addEventListener('click', runLLMAssist);
+  updateWizardSaveState();
   document.getElementById('btn-next-2').addEventListener('click', () => {
     const n = document.getElementById('narrative').value.trim();
     if (!n) { UI.toast('Please enter a risk narrative.', 'warning'); return; }
@@ -93,6 +112,23 @@ function renderWizard2() {
   attachCitationHandlers();
 }
 
+
+function renderWizard2AiChangeSummary(result, previousNarrative) {
+  const changed = [];
+  if (result?.scenarioTitle) changed.push(`Gave the scenario a clearer working title: <strong>${escapeHtml(result.scenarioTitle)}</strong>.`);
+  const structuredCount = ['threatCommunity', 'attackType', 'assetService'].filter(key => String(result?.structuredScenario?.[key] || '').trim()).length;
+  if (structuredCount) changed.push(`Filled ${structuredCount} structured scenario field${structuredCount === 1 ? '' : 's'} to make the scope easier to quantify.`);
+  const hasInputs = !!result?.suggestedInputs;
+  if (hasInputs) changed.push('Pre-loaded the FAIR starting ranges for the next step so you can challenge them instead of entering everything from scratch.');
+  const citationCount = Array.isArray(result?.citations) ? result.citations.length : 0;
+  if (citationCount) changed.push(`Attached ${citationCount} supporting reference${citationCount === 1 ? '' : 's'} for grounding and challenge.`);
+  const summaryItems = changed.length ? changed : ['Prepared a structured starting point without changing your saved scenario wording.'];
+  const wordingNote = String(previousNarrative || '').trim()
+    ? '<div class="form-help" style="margin-top:10px">Your own narrative remains editable below. Keep it, edit it, or rerun AI assist if the structure still feels off.</div>'
+    : '';
+  return `<div class="card card--elevated mt-4 anim-fade-in"><div class="context-panel-title">What AI changed</div><ol style="margin:12px 0 0 18px;display:flex;flex-direction:column;gap:8px">${summaryItems.map(item => `<li style="color:var(--text-secondary)">${item}</li>`).join('')}</ol>${wordingNote}</div>`;
+}
+
 async function runLLMAssist() {
   const narrative = document.getElementById('narrative').value.trim();
   if (!narrative) { UI.toast('Please enter a narrative first.', 'warning'); return; }
@@ -100,8 +136,11 @@ async function runLLMAssist() {
   const btn = document.getElementById('btn-llm-assist');
   const btnText = document.getElementById('llm-btn-text');
   const output = document.getElementById('llm-output-area');
+  const status = document.getElementById('wizard2-ai-status');
+  const previousNarrative = AppState.draft.enhancedNarrative || AppState.draft.narrative || narrative;
   btn.disabled = true; btn.classList.add('loading');
   btnText.textContent = '⏳ Retrieving docs and generating inputs…';
+  if (status) status.textContent = 'AI assist is building a structured draft and loading starting values for the next step.';
   output.innerHTML = `<div class="card mt-4">${UI.skeletonBlock(20)}<div style="margin-top:12px">${UI.skeletonBlock(14,4)}</div><div style="margin-top:8px">${UI.skeletonBlock(14,4)}</div></div>`;
   try {
     const bu = getBUList().find(b => b.id === AppState.draft.buId);
@@ -178,7 +217,7 @@ async function runLLMAssist() {
       };
     }
     saveDraft();
-    output.innerHTML = `<div class="card card--glow mt-4 anim-fade-in">
+    output.innerHTML = `${renderWizard2AiChangeSummary(result, previousNarrative)}<div class="card card--glow mt-4 anim-fade-in">
       <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-4)">
         <span style="font-size:24px">✅</span>
         <div>
@@ -196,10 +235,16 @@ async function runLLMAssist() {
       benchmarkBasis: AppState.draft.benchmarkBasis,
       inputProvenance: AppState.draft.inputProvenance,
       citations: AppState.draft.citations
-    })}<details class="card mt-4 anim-fade-in"><summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);font-size:.82rem;font-weight:600;color:var(--text-primary)"><span>Show benchmark and evidence detail</span><span class="badge badge--neutral">Optional</span></summary><div style="display:flex;flex-direction:column;gap:var(--sp-4);margin-top:var(--sp-4)">${renderBenchmarkRationaleBlock(AppState.draft.benchmarkBasis, AppState.draft.inputRationale, AppState.draft.benchmarkReferences)}${renderInputProvenanceBlock(AppState.draft.inputProvenance)}${renderCitationBlock(AppState.draft.citations)}${renderEvidenceQualityBlock(AppState.draft.confidenceLabel, AppState.draft.evidenceQuality, AppState.draft.evidenceSummary, AppState.draft.missingInformation, 'Detailed evidence view', { primaryGrounding: AppState.draft.primaryGrounding, supportingReferences: AppState.draft.supportingReferences, inferredAssumptions: AppState.draft.inferredAssumptions })}</div></details>`;
+    })}<div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap"><button class="btn btn--primary" id="btn-wizard2-ai-continue" type="button">Continue to Loss Estimation</button><button class="btn btn--ghost" id="btn-wizard2-ai-retry" type="button">Run AI Assist Again</button></div><details class="card mt-4 anim-fade-in"><summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);font-size:.82rem;font-weight:600;color:var(--text-primary)"><span>Show benchmark and evidence detail</span><span class="badge badge--neutral">Optional</span></summary><div style="display:flex;flex-direction:column;gap:var(--sp-4);margin-top:var(--sp-4)">${renderBenchmarkRationaleBlock(AppState.draft.benchmarkBasis, AppState.draft.inputRationale, AppState.draft.benchmarkReferences)}${renderInputProvenanceBlock(AppState.draft.inputProvenance)}${renderCitationBlock(AppState.draft.citations)}${renderEvidenceQualityBlock(AppState.draft.confidenceLabel, AppState.draft.evidenceQuality, AppState.draft.evidenceSummary, AppState.draft.missingInformation, 'Detailed evidence view', { primaryGrounding: AppState.draft.primaryGrounding, supportingReferences: AppState.draft.supportingReferences, inferredAssumptions: AppState.draft.inferredAssumptions })}</div></details>`;
+    if (status) status.textContent = 'AI draft ready. Review the changes below, then continue when you are comfortable with the scenario.';
     attachCitationHandlers();
+    document.getElementById('btn-wizard2-ai-retry')?.addEventListener('click', runLLMAssist);
+    document.getElementById('btn-wizard2-ai-continue')?.addEventListener('click', () => document.getElementById('btn-next-2')?.click());
   } catch(e) {
-    output.innerHTML = `<div class="banner banner--danger mt-4"><span class="banner-icon">⚠</span><span class="banner-text">LLM Assist failed. Try again in a moment.</span></div>`;
+    if (status) status.textContent = 'AI assist is unavailable right now. You can continue manually with your own wording.';
+    output.innerHTML = `<div class="banner banner--danger mt-4"><span class="banner-icon">⚠</span><span class="banner-text">LLM Assist is unavailable right now.</span></div><div class="flex items-center gap-3 mt-4" style="flex-wrap:wrap"><button class="btn btn--secondary" id="btn-wizard2-ai-retry" type="button">Try again</button><button class="btn btn--ghost" id="btn-wizard2-continue-manual" type="button">Continue without AI</button></div>`;
+    document.getElementById('btn-wizard2-ai-retry')?.addEventListener('click', runLLMAssist);
+    document.getElementById('btn-wizard2-continue-manual')?.addEventListener('click', () => document.getElementById('btn-next-2')?.click());
   }
   btn.disabled = false; btn.classList.remove('loading');
   btnText.innerHTML = '🤖 LLM Assist — Draft Scenario &amp; Suggest FAIR Inputs';

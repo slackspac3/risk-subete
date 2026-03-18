@@ -2258,3 +2258,50 @@ canvas { display: block; width: 100%; }
 .text-xs { font-size: var(--text-xs); }
 .font-mono { font-family: var(--font-mono); }
 .font-semibold { font-weight: var(--font-semibold); }
+
+
+[data-draft-save-state] {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255,255,255,0.05);
+}
+
+[data-draft-save-state][data-state="dirty"] {
+  border-color: rgba(245, 158, 11, 0.35);
+  color: var(--text-primary);
+}
+
+[data-draft-save-state][data-state="saved"] {
+  border-color: rgba(16, 185, 129, 0.28);
+}
+
+.results-actions-disclosure {
+  position: relative;
+}
+
+.results-actions-disclosure summary {
+  list-style: none;
+}
+
+.results-actions-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.results-actions-disclosure-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 180px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+  z-index: 10;
+}

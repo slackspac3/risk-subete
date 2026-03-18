@@ -223,6 +223,7 @@ function renderWizard3() {
               <h2 class="wizard-step-title">Estimate the Scenario in Plain Language</h2>
               <p class="form-help" style="margin-top:8px">Review the starting numbers, sense-check them against what you know, and adjust anything that feels too low, too high, or too uncertain.</p>
               <p class="wizard-step-desc">Answer a few practical questions about how often this could happen, how exposed you are, and what the impact could cost. ${draft.llmAssisted?'<span style="color:var(--color-success-400)">✓ Pre-loaded from AI assist</span>':''}</p>
+              <div class="form-help" data-draft-save-state style="margin-top:10px">Draft will save automatically</div>
             </div>
             <div class="mode-toggle">
               <button class="${!isAdv?'active':''}" id="mode-basic">Basic</button>
@@ -334,7 +335,7 @@ function renderWizard3() {
             </div>
           </details>
 
-          ${isAdv ? `<details class="wizard-disclosure card anim-fade-in" open>
+          ${isAdv ? `<details class="wizard-disclosure card anim-fade-in">
             <summary>Advanced simulation settings</summary>
             <div class="wizard-disclosure-body">
               <div class="grid-2">
@@ -376,16 +377,32 @@ function renderWizard3() {
 
   document.getElementById('mode-basic')?.addEventListener('click', () => { AppState.mode='basic'; renderWizard3(); });
   document.getElementById('mode-advanced')?.addEventListener('click', () => { AppState.mode='advanced'; renderWizard3(); });
+  updateWizardSaveState();
   document.getElementById('secondary-toggle').addEventListener('change', function() {
     document.getElementById('secondary-inputs').classList.toggle('hidden', !this.checked);
     AppState.draft.fairParams.secondaryEnabled = this.checked;
+    markDraftDirty();
+    scheduleDraftAutosave();
   });
   document.getElementById('vuln-direct-toggle')?.addEventListener('change', function() {
     document.getElementById('vuln-direct-section')?.classList.toggle('hidden', !this.checked);
     document.getElementById('vuln-derived-section')?.classList.toggle('hidden', this.checked);
     AppState.draft.fairParams.vulnDirect = this.checked;
+    markDraftDirty();
+    scheduleDraftAutosave();
   });
   attachFormattedMoneyInputs();
+  document.querySelectorAll('.fair-input, #adv-dist, #adv-iter, #adv-seed, #corr-bi-ir, #corr-rl-rc, #treatment-improvement-request').forEach(input => {
+    const eventName = input.tagName === 'SELECT' ? 'change' : 'input';
+    input.addEventListener(eventName, () => {
+      collectFairParams();
+      if (input.id === 'treatment-improvement-request') {
+        AppState.draft.treatmentImprovementRequest = input.value;
+      }
+      markDraftDirty();
+      scheduleDraftAutosave();
+    });
+  });
   function applySuggestedTreatmentInputs(suggestedInputs = {}) {
     const p = AppState.draft.fairParams || (AppState.draft.fairParams = {});
     const applyRange = (prefix, range) => {
@@ -462,12 +479,12 @@ ${request}`, 5);
       renderWizard3();
       UI.toast('The better-outcome case has been adjusted. Review the numbers before rerunning.', 'success');
     } catch (error) {
-      if (statusEl) statusEl.textContent = 'AI assist failed. Try again in a moment.';
+      if (statusEl) statusEl.textContent = 'AI assist failed. Keep your current values or try again in a moment.';
       UI.toast('AI assist failed. Try again in a moment.', 'danger');
       if (btn) { btn.disabled = false; btn.textContent = 'AI Assist This Better Outcome'; }
     }
   });
-  document.getElementById('btn-back-3').addEventListener('click', () => Router.navigate('/wizard/2'));
+  document.getElementById('btn-back-3').addEventListener('click', () => { saveDraft(); Router.navigate('/wizard/2'); });
   document.getElementById('btn-next-3').addEventListener('click', () => {
     collectFairParams();
     if (!validateFairParams()) return;
